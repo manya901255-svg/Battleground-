@@ -127,7 +127,13 @@ data class GameSettingsEntity(
     val bgmVolume: Float = 0.55f,
     val hudLayoutJson: String = "",
     val hudLayoutPreset: Int = 1,
-    val selectedWeather: String = "CLEAR"
+    val selectedWeather: String = "CLEAR",
+    val resolutionScale: Float = 0.90f,
+    val shadowQuality: Int = 2,
+    val textureQuality: Int = 1,
+    val antiAliasing: Boolean = true,
+    val viewDistance: Int = 285,
+    val effectsQuality: Int = 2
 )
 
 @Dao
@@ -199,7 +205,7 @@ interface VortexDao {
         GameSettingsEntity::class,
         MissionEntity::class
     ],
-    version = 7,
+    version = 8,
     exportSchema = false
 )
 abstract class VortexDatabase : RoomDatabase() {

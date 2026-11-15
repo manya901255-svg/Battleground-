@@ -339,6 +339,7 @@ fun MainApp(
                     hudOpacity = settings?.hudOpacity ?: 0.90f,
                     hudLayoutJson = settings?.hudLayoutJson ?: "",
                     graphicsQuality = settings?.graphicsQuality ?: "High",
+                    graphicsConfig = com.example.game.graphics.GraphicsConfig.fromSettings(settings),
                     leftHandFireEnabled = settings?.leftHandFireEnabled ?: true,
                     onUpdateGraphicsQuality = { q ->
                         scope.launch { repository.updateGraphicsQuality(q) }

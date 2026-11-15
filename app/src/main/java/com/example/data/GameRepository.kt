@@ -343,7 +343,19 @@ class GameRepository(private val dao: VortexDao) {
 
     suspend fun updateGraphicsQuality(quality: String) {
         val current = dao.getSettings().firstOrNull() ?: GameSettingsEntity()
-        dao.insertSettings(current.copy(graphicsQuality = quality))
+        val presetCfg = com.example.game.graphics.GraphicsConfig.fromPreset(quality)
+        dao.insertSettings(
+            current.copy(
+                graphicsQuality = presetCfg.presetName,
+                resolutionScale = presetCfg.resolutionScale,
+                shadowQuality = presetCfg.shadowQuality,
+                textureQuality = presetCfg.textureQuality,
+                antiAliasing = presetCfg.antiAliasing,
+                viewDistance = presetCfg.viewDistance,
+                effectsQuality = presetCfg.effectsQuality,
+                targetFps = presetCfg.targetFps
+            )
+        )
     }
 
     suspend fun grantTestCurrency(bp: Int, credits: Int) {

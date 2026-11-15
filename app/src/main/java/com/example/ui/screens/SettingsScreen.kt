@@ -7,11 +7,14 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -72,8 +75,14 @@ fun SettingsScreen(
     val settingsState by repository.settings.collectAsState(initial = null)
     val scope = rememberCoroutineScope()
 
-    var graphics by remember(settingsState) { mutableStateOf(settingsState?.graphicsQuality ?: "Ultra HD") }
+    var graphics by remember(settingsState) { mutableStateOf(settingsState?.graphicsQuality ?: "High") }
     var fps by remember(settingsState) { mutableIntStateOf(settingsState?.targetFps ?: 60) }
+    var resolutionScale by remember(settingsState) { mutableFloatStateOf(settingsState?.resolutionScale ?: 0.90f) }
+    var shadowQuality by remember(settingsState) { mutableIntStateOf(settingsState?.shadowQuality ?: 2) }
+    var textureQuality by remember(settingsState) { mutableIntStateOf(settingsState?.textureQuality ?: 1) }
+    var antiAliasing by remember(settingsState) { mutableStateOf(settingsState?.antiAliasing ?: true) }
+    var viewDistance by remember(settingsState) { mutableIntStateOf(settingsState?.viewDistance ?: 285) }
+    var effectsQuality by remember(settingsState) { mutableIntStateOf(settingsState?.effectsQuality ?: 2) }
     var aimAssist by remember(settingsState) { mutableStateOf(settingsState?.aimAssistEnabled ?: true) }
     var autoPickup by remember(settingsState) { mutableStateOf(settingsState?.autoPickupEnabled ?: true) }
     var gyro by remember(settingsState) { mutableStateOf(settingsState?.gyroscopeEnabled ?: false) }
@@ -92,6 +101,12 @@ fun SettingsScreen(
                 (settingsState ?: GameSettingsEntity()).copy(
                     graphicsQuality = graphics,
                     targetFps = fps,
+                    resolutionScale = resolutionScale,
+                    shadowQuality = shadowQuality,
+                    textureQuality = textureQuality,
+                    antiAliasing = antiAliasing,
+                    viewDistance = viewDistance,
+                    effectsQuality = effectsQuality,
                     aimAssistEnabled = aimAssist,
                     autoPickupEnabled = autoPickup,
                     gyroscopeEnabled = gyro,
@@ -112,6 +127,7 @@ fun SettingsScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(TacticalDarkBg)
+            .windowInsetsPadding(WindowInsets.safeDrawing)
             .padding(16.dp)
             .verticalScroll(rememberScrollState())
             .testTag("settings_screen")
@@ -148,14 +164,14 @@ fun SettingsScreen(
         Spacer(modifier = Modifier.height(16.dp))
 
         // GRAPHICS & FPS
-        SettingSectionTitle("GRAPHICS & DISPLAY")
+        SettingSectionTitle("GRAPHICS & DISPLAY ENGINE")
         Card(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(12.dp),
             colors = CardDefaults.cardColors(containerColor = TacticalSurface)
         ) {
             Column(modifier = Modifier.padding(14.dp)) {
-                Text("GRAPHICS QUALITY", color = TextSecondary, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                Text("GRAPHICS PRESET", color = TextSecondary, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                 Spacer(modifier = Modifier.height(8.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     listOf("Low", "Medium", "High", "Ultra").forEach { q ->
@@ -170,10 +186,19 @@ fun SettingsScreen(
                                 .clip(RoundedCornerShape(8.dp))
                                 .background(if (isSelected) CyberOrange else Color.White.copy(alpha = 0.08f))
                                 .clickable {
-                                    graphics = q
+                                    val cfg = com.example.game.graphics.GraphicsConfig.fromPreset(q)
+                                    graphics = cfg.presetName
+                                    resolutionScale = cfg.resolutionScale
+                                    shadowQuality = cfg.shadowQuality
+                                    textureQuality = cfg.textureQuality
+                                    antiAliasing = cfg.antiAliasing
+                                    viewDistance = cfg.viewDistance
+                                    effectsQuality = cfg.effectsQuality
+                                    fps = cfg.targetFps
                                     saveSettings()
                                 }
-                                .padding(vertical = 8.dp),
+                                .padding(vertical = 8.dp)
+                                .testTag("graphics_preset_${q.lowercase()}"),
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
@@ -190,7 +215,7 @@ fun SettingsScreen(
                 Text("TARGET FRAME RATE", color = TextSecondary, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                 Spacer(modifier = Modifier.height(8.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    listOf(30, 60, 90).forEach { f ->
+                    listOf(30, 60, 90, 120).forEach { f ->
                         val isSelected = fps == f
                         Box(
                             modifier = Modifier
@@ -201,7 +226,8 @@ fun SettingsScreen(
                                     fps = f
                                     saveSettings()
                                 }
-                                .padding(vertical = 8.dp),
+                                .padding(vertical = 8.dp)
+                                .testTag("fps_option_$f"),
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
@@ -212,6 +238,116 @@ fun SettingsScreen(
                             )
                         }
                     }
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text("Resolution Scale", color = TextPrimary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                    Text("${(resolutionScale * 100).toInt()}%", color = CyberOrange, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                }
+                Slider(
+                    value = resolutionScale,
+                    onValueChange = {
+                        resolutionScale = it
+                        saveSettings()
+                    },
+                    valueRange = 0.60f..1.00f,
+                    colors = SliderDefaults.colors(thumbColor = CyberOrange, activeTrackColor = CyberOrange),
+                    modifier = Modifier.testTag("resolution_scale_slider")
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+                Text("SHADOW QUALITY", color = TextSecondary, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                Spacer(modifier = Modifier.height(6.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf(0 to "Off", 1 to "Blob", 2 to "Soft").forEach { (lvl, label) ->
+                        val active = shadowQuality == lvl
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(if (active) CyberOrange else Color.White.copy(alpha = 0.08f))
+                                .clickable {
+                                    shadowQuality = lvl
+                                    saveSettings()
+                                }
+                                .padding(vertical = 7.dp)
+                                .testTag("shadow_quality_$lvl"),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(label, color = if (active) Color.Black else TextPrimary, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+                Text("TEXTURE DETAIL (PBR ATLAS)", color = TextSecondary, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                Spacer(modifier = Modifier.height(6.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf(0 to "Low", 1 to "Medium", 2 to "High").forEach { (lvl, label) ->
+                        val active = textureQuality == lvl
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(if (active) CyberOrange else Color.White.copy(alpha = 0.08f))
+                                .clickable {
+                                    textureQuality = lvl
+                                    saveSettings()
+                                }
+                                .padding(vertical = 7.dp)
+                                .testTag("texture_quality_$lvl"),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(label, color = if (active) Color.Black else TextPrimary, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text("View Distance LOD", color = TextPrimary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                    Text("${viewDistance}m", color = HazardYellow, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                }
+                Slider(
+                    value = viewDistance.toFloat(),
+                    onValueChange = {
+                        viewDistance = it.toInt()
+                        saveSettings()
+                    },
+                    valueRange = 140f..380f,
+                    colors = SliderDefaults.colors(thumbColor = HazardYellow, activeTrackColor = HazardYellow),
+                    modifier = Modifier.testTag("view_distance_slider")
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+                Text("VFX & FOLIAGE QUALITY", color = TextSecondary, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                Spacer(modifier = Modifier.height(6.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf(0 to "Low", 1 to "Medium", 2 to "Ultra").forEach { (lvl, label) ->
+                        val active = effectsQuality == lvl
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(if (active) CyberOrange else Color.White.copy(alpha = 0.08f))
+                                .clickable {
+                                    effectsQuality = lvl
+                                    saveSettings()
+                                }
+                                .padding(vertical = 7.dp)
+                                .testTag("effects_quality_$lvl"),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(label, color = if (active) Color.Black else TextPrimary, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+                ToggleSettingRow("Anti-Aliasing & Trilinear Filtering", "Smooths foliage edges and texture mip transitions", antiAliasing) {
+                    antiAliasing = it
+                    saveSettings()
                 }
             }
         }

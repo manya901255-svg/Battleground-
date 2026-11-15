@@ -88,6 +88,7 @@ fun BattleScreen(
     hudOpacity: Float = 0.92f,
     hudLayoutJson: String = "",
     graphicsQuality: String = "High",
+    graphicsConfig: com.example.game.graphics.GraphicsConfig = com.example.game.graphics.GraphicsConfig.fromPreset(graphicsQuality),
     leftHandFireEnabled: Boolean = true,
     onUpdateGraphicsQuality: (String) -> Unit = {},
     onExitToLobby: () -> Unit
@@ -103,13 +104,16 @@ fun BattleScreen(
     var isMicOn by remember { mutableStateOf(true) }
     var isSpeakerOn by remember { mutableStateOf(true) }
     var activeGraphics by remember(graphicsQuality) { mutableStateOf(graphicsQuality) }
+    var activeConfig by remember(graphicsConfig) { mutableStateOf(graphicsConfig) }
+    var surfaceViewRef by remember { mutableStateOf<Battle3DSurfaceView?>(null) }
     val customSlots = remember(hudLayoutJson) { HudLayoutCodec.parse(hudLayoutJson) }
 
     val renderer = remember(engine) {
-        Battle3DRenderer(engine = engine, graphicsQuality = activeGraphics)
+        Battle3DRenderer(engine = engine, graphicsQuality = activeGraphics, initialConfig = activeConfig)
     }
-    LaunchedEffect(activeGraphics) {
-        renderer.graphicsQuality = activeGraphics
+    LaunchedEffect(activeConfig) {
+        renderer.graphicsConfig = activeConfig
+        surfaceViewRef?.applyResolutionScale(activeConfig.resolutionScale)
     }
 
     val damagePaint = remember {
@@ -127,7 +131,9 @@ fun BattleScreen(
     ) {
         // 1. REAL-TIME 3D THIRD-PERSON OVER-THE-SHOULDER OPENGL VIEWPORT
         AndroidView(
-            factory = { ctx -> Battle3DSurfaceView(ctx, renderer) },
+            factory = { ctx ->
+                Battle3DSurfaceView(ctx, renderer).also { surfaceViewRef = it }
+            },
             modifier = Modifier.fillMaxSize()
         )
 
@@ -795,6 +801,7 @@ fun BattleScreen(
             currentGraphics = activeGraphics,
             onSelectGraphics = { q ->
                 activeGraphics = q
+                activeConfig = com.example.game.graphics.GraphicsConfig.fromPreset(q)
                 onUpdateGraphicsQuality(q)
             },
             onExitMatch = {

@@ -1,6 +1,7 @@
 package com.example.game.engine
 
 import com.example.game.audio.SoundSynthesizer
+import com.example.game.graphics.TerrainHeightfield
 import com.example.game.map.MapCatalog
 import com.example.game.map.MapConfig
 import com.example.game.model.AirdropCrate
@@ -525,6 +526,7 @@ class BattleRoyaleEngine(
 
         if (newAlt <= 0f) {
             userPlayer.z = 0f
+            userPlayer.landingRecoverySec = 0.35f
             soundSynthesizer?.playFootstep()
             safeZoneCoordinator.start()
             _engineState.value = state.copy(
@@ -552,6 +554,17 @@ class BattleRoyaleEngine(
             if (userPlayer.z <= 0.5f) {
                 userPlayer.vz = 230f
                 userPlayer.stance = PlayerStance.JUMPING
+                // Detect low obstacle / crate nearby for vault animation
+                val rad = Math.toRadians(userPlayer.angle.toDouble())
+                val aheadX = userPlayer.x + cos(rad).toFloat() * 48f
+                val aheadY = userPlayer.y + sin(rad).toFloat() * 48f
+                val nearVaultCover = mapConfig.obstacles.any { o ->
+                    val dx = aheadX - o.x; val dy = aheadY - o.y
+                    o.type != com.example.game.map.ObstacleType.TREE && (dx * dx + dy * dy) < (o.radius + 26f) * (o.radius + 26f)
+                }
+                if (nearVaultCover) {
+                    userPlayer.climbVaultTimerSec = 0.45f
+                }
                 soundSynthesizer?.playJump()
             }
         }
@@ -895,17 +908,42 @@ class BattleRoyaleEngine(
     private fun updateUserPlayer(deltaSec: Float) {
         if (!userPlayer.isAlive) return
 
+        if (userPlayer.landingRecoverySec > 0f) {
+            userPlayer.landingRecoverySec = (userPlayer.landingRecoverySec - deltaSec).coerceAtLeast(0f)
+        }
+        if (userPlayer.climbVaultTimerSec > 0f) {
+            userPlayer.climbVaultTimerSec = (userPlayer.climbVaultTimerSec - deltaSec).coerceAtLeast(0f)
+        }
+        if (userPlayer.emoteAnimSec > 0f) {
+            userPlayer.emoteAnimSec = (userPlayer.emoteAnimSec - deltaSec).coerceAtLeast(0f)
+        }
+
         // Vertical Jump & Gravity Physics
         if (userPlayer.z > 0f || userPlayer.vz > 0f) {
             userPlayer.z += userPlayer.vz * deltaSec
             userPlayer.vz -= 620f * deltaSec
             if (userPlayer.z <= 0f) {
                 userPlayer.z = 0f
+                if (userPlayer.vz < -110f) {
+                    userPlayer.landingRecoverySec = 0.35f
+                    soundSynthesizer?.playFootstep()
+                }
                 userPlayer.vz = 0f
                 if (userPlayer.stance == PlayerStance.JUMPING) {
                     userPlayer.stance = PlayerStance.STAND
                 }
             }
+        }
+
+        // Water Swimming Detection (bridges safely bypass river swimming)
+        val inWater = userPlayer.vehicleId == null &&
+            userPlayer.z <= 1.0f &&
+            TerrainHeightfield.isInWaterNotOnBridge(mapConfig, userPlayer.x, userPlayer.y)
+        userPlayer.isInWater = inWater
+        if (inWater && userPlayer.stance != PlayerStance.SWIMMING) {
+            userPlayer.stance = PlayerStance.SWIMMING
+        } else if (!inWater && userPlayer.stance == PlayerStance.SWIMMING) {
+            userPlayer.stance = PlayerStance.STAND
         }
 
         // Driving Vehicle
@@ -1805,6 +1843,7 @@ class BattleRoyaleEngine(
 
     fun triggerEmote(emote: EmotePreset) {
         soundSynthesizer?.playUiClick()
+        userPlayer.emoteAnimSec = 2.8f
         activeEmoteLabel = "${emote.badge} ${emote.label}"
         emoteBannerTimerSec = 2.8f
         radioBannerTimerSec = 2.8f

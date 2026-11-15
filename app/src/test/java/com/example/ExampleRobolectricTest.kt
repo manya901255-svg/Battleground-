@@ -422,4 +422,74 @@ class ExampleRobolectricTest {
         val claimedCount = repository.claimAllEligibleMissions()
         assertTrue(claimedCount >= 1)
     }
+
+    @Test
+    fun `test graphics config presets and room v8 granular settings persistence`() = kotlinx.coroutines.runBlocking {
+        val low = com.example.game.graphics.GraphicsConfig.fromPreset("Low")
+        val ultra = com.example.game.graphics.GraphicsConfig.fromPreset("Ultra")
+        assertTrue(low.resolutionScale < ultra.resolutionScale)
+        assertEquals(0, low.shadowQuality)
+        assertEquals(2, ultra.shadowQuality)
+        assertEquals(128, low.textureResolutionPx)
+        assertEquals(512, ultra.textureResolutionPx)
+        assertFalse(low.antiAliasing)
+        assertTrue(ultra.antiAliasing)
+
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val repository = com.example.data.GameRepository.create(context)
+        repository.initializeDefaultDataIfEmpty()
+        repository.updateGraphicsQuality("Ultra")
+
+        val saved = repository.settings.first()
+        assertNotNull(saved)
+        assertEquals(1.00f, saved!!.resolutionScale, 0.01f)
+        assertEquals(2, saved.textureQuality)
+        assertEquals(365, saved.viewDistance)
+        assertEquals(90, saved.targetFps)
+    }
+
+    @Test
+    fun `test procedural sculpted meshes, heightfield bridges, camera collision, and vfx pooling`() {
+        val meshes = com.example.game.graphics.MeshLibrary()
+        assertTrue(meshes.humanHead.vertexCount > 200)
+        assertTrue(meshes.humanHair.vertexCount > 100)
+        assertTrue(meshes.chestTorso.vertexCount > 100)
+        assertTrue(meshes.limbCapsule.vertexCount > 80)
+        assertTrue(meshes.wheelCylinder.vertexCount > 100)
+        assertTrue(meshes.foliageCone.vertexCount > 40)
+        assertTrue(meshes.boulderRock.vertexCount > 150)
+
+        val kavala = MapCatalog.getKavalaIsland()
+        val terrainMesh = meshes.buildTerrainMeshForMap(kavala, gridRes = 24)
+        assertTrue(terrainMesh.vertexCount == 24 * 24 * 6)
+
+        // Bridges span the Kavala river and elevate above water level
+        val bridges = com.example.game.graphics.TerrainHeightfield.bridgesForMap(kavala)
+        assertTrue(bridges.isNotEmpty())
+        val firstBridge = bridges.first()
+        assertTrue(com.example.game.graphics.TerrainHeightfield.isOnBridge(kavala, firstBridge.centerX, 3350f))
+        assertFalse(com.example.game.graphics.TerrainHeightfield.isInWaterNotOnBridge(kavala, firstBridge.centerX, 3350f))
+        assertTrue(com.example.game.graphics.TerrainHeightfield.groundHeightGl(kavala, firstBridge.centerX, 3350f) > 0.7f)
+
+        // River outside bridge triggers swimming detection
+        assertTrue(com.example.game.graphics.TerrainHeightfield.isInWaterNotOnBridge(kavala, 1200f, 3350f))
+
+        // Camera collision pulls camera inward when blocked by a Building
+        val b = kavala.buildings.first()
+        val pivotX = (b.x - 10f) * com.example.game.graphics.TerrainHeightfield.WORLD_SCALE
+        val pivotZ = (b.y + b.height * 0.5f) * com.example.game.graphics.TerrainHeightfield.WORLD_SCALE
+        val insideWallX = (b.x + b.width * 0.5f) * com.example.game.graphics.TerrainHeightfield.WORLD_SCALE
+        val resolved = com.example.game.graphics.TerrainHeightfield.resolveCameraCollision(
+            kavala, pivotX, 2.0f, pivotZ, insideWallX, 2.0f, pivotZ
+        )
+        assertTrue(resolved.x < insideWallX)
+
+        // VFX Object Pool caps active slots properly and spawns burst particles
+        val vfx = com.example.game.graphics.VfxParticleSystem(320)
+        vfx.activeLimit = 72
+        vfx.spawnExplosionBurst(250f, 0f, 250f, 15f)
+        assertTrue(vfx.activeCount() in 1..72)
+        vfx.update(0.1f, com.example.game.model.WeatherType.SUNSET_STORM, "kavala_island", 250f, 2f, 250f)
+        assertTrue(vfx.activeCount() > 0)
+    }
 }
