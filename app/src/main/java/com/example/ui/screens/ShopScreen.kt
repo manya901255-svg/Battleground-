@@ -1,37 +1,43 @@
 package com.example.ui.screens
 
-import androidx.compose.animation.AnimatedVisibility
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.CardGiftcard
-import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.ReceiptLong
 import androidx.compose.material.icons.filled.ShoppingBag
+import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
@@ -54,7 +60,9 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.example.data.GameRepository
 import com.example.data.InventoryItemEntity
-import com.example.ui.theme.AirdropGold
+import com.example.data.cloud.CloudGameRepository
+import com.example.data.cloud.CloudTransaction
+import com.example.data.cloud.CloudUserProfile
 import com.example.ui.theme.CyberOrange
 import com.example.ui.theme.ElectricBlueSafe
 import com.example.ui.theme.HazardYellow
@@ -72,21 +80,86 @@ import kotlinx.coroutines.launch
 @Composable
 fun ShopScreen(
     repository: GameRepository,
+    cloudRepository: CloudGameRepository? = null,
+    cloudTransactions: List<CloudTransaction> = emptyList(),
+    cloudProfile: CloudUserProfile? = null,
     onBack: () -> Unit
 ) {
+    BackHandler { onBack() }
+
     val profile by repository.userProfile.collectAsState(initial = null)
     val ownedInventory by repository.inventory.collectAsState(initial = emptyList())
     val ownedIds = remember(ownedInventory) { ownedInventory.map { it.id }.toSet() }
     val scope = rememberCoroutineScope()
+
     var selectedTab by remember { mutableIntStateOf(0) }
-    var openedCrateItem by remember { mutableStateOf<InventoryItemEntity?>(null) }
-    var showOddsDialog by remember { mutableStateOf(false) }
+    var previewItem by remember { mutableStateOf<InventoryItemEntity?>(null) }
     var shopBannerMsg by remember { mutableStateOf<String?>(null) }
+    var isProcessing by remember { mutableStateOf(false) }
+
+    val displayBp = cloudProfile?.bpCoins ?: profile?.bpCoins?.toLong() ?: 0L
+    val displayVc = cloudProfile?.vortexCredits ?: profile?.vortexCredits?.toLong() ?: 0L
+
+    val directBundles = remember {
+        listOf(
+            InventoryItemEntity("skin_m416_glacier", "M416 - Glacier Frost", "WEAPON_SKIN", "m416", "MYTHIC", priceCredits = 1200),
+            InventoryItemEntity("outfit_cyber_assassin", "Cyber Assassin Cyberwear", "OUTFIT", "player", "LEGENDARY", priceCredits = 850),
+            InventoryItemEntity("para_matrix", "Matrix Neon Parachute", "PARACHUTE", "parachute", "EPIC", priceBp = 6500),
+            InventoryItemEntity("vehicle_buggy_neon", "Offroad Buggy - Neon Beast", "VEHICLE", "buggy", "LEGENDARY", priceCredits = 950),
+            InventoryItemEntity("skin_pan_gold", "Golden Pan Supreme", "WEAPON_SKIN", "pan", "EPIC", priceBp = 8000),
+            InventoryItemEntity("outfit_desert_spec", "Desert Spec-Ops Camo", "OUTFIT", "player", "RARE", priceBp = 4500),
+            InventoryItemEntity("skin_awm_nova", "AWM - Solar Flare Direct Pack", "WEAPON_SKIN", "awm", "LEGENDARY", priceBp = 9200),
+            InventoryItemEntity("helmet_titan_gold", "Titan Command Visor L3", "HELMET", "helmet", "EPIC", priceBp = 5400)
+        )
+    }
+
+    fun executeDirectPurchase(item: InventoryItemEntity) {
+        if (isProcessing) return
+        if (ownedIds.contains(item.id)) {
+            shopBannerMsg = "${item.name} is already in your armory."
+            return
+        }
+        val useCredits = item.priceCredits > 0
+        scope.launch {
+            isProcessing = true
+            val cloudResult = if (cloudRepository != null && cloudProfile != null) {
+                cloudRepository.purchaseDirectBundle(
+                    itemId = item.id,
+                    itemName = item.name,
+                    type = item.type,
+                    targetItemId = item.targetItemId,
+                    rarity = item.rarity,
+                    priceBp = item.priceBp.toLong(),
+                    priceCredits = item.priceCredits.toLong()
+                )
+            } else null
+
+            if (cloudResult != null) {
+                cloudResult.onSuccess { msg ->
+                    repository.purchaseShopItem(item, useCredits = useCredits)
+                    shopBannerMsg = msg
+                    previewItem = null
+                }.onFailure { err ->
+                    shopBannerMsg = err.message ?: "Purchase failed."
+                }
+            } else {
+                val ok = repository.purchaseShopItem(item, useCredits = useCredits)
+                shopBannerMsg = if (ok) {
+                    previewItem = null
+                    "Purchased ${item.name}!"
+                } else {
+                    "Insufficient funds for ${item.name}"
+                }
+            }
+            isProcessing = false
+        }
+    }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(TacticalDarkBg)
+            .windowInsetsPadding(WindowInsets.safeDrawing)
             .padding(16.dp)
             .testTag("shop_screen")
     ) {
@@ -102,163 +175,163 @@ fun ShopScreen(
                 }
                 Spacer(modifier = Modifier.width(8.dp))
                 Column {
-                    Text("SUPPLY ARMORY & SHOP", color = CyberOrange, fontWeight = FontWeight.Black, fontSize = 16.sp)
-                    Text("COSMETICS & CRATES", color = TextSecondary, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    Text("DIRECT ARMORY STORE", color = CyberOrange, fontWeight = FontWeight.Black, fontSize = 16.sp)
+                    Text("FIXED-PRICE BUNDLES & SERVER TRANSACTION LEDGER", color = TextSecondary, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                 }
             }
 
-            // Wallet Display
             Row(verticalAlignment = Alignment.CenterVertically) {
                 if (shopBannerMsg != null) {
                     Text(shopBannerMsg!!, color = HealthGreen, fontWeight = FontWeight.Bold, fontSize = 11.sp)
                     Spacer(modifier = Modifier.width(12.dp))
                 }
-                Text("BP: ${profile?.bpCoins ?: 0}", color = HazardYellow, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                Text("BP: $displayBp", color = HazardYellow, fontWeight = FontWeight.Bold, fontSize = 12.sp)
                 Spacer(modifier = Modifier.width(12.dp))
-                Text("VC: ${profile?.vortexCredits ?: 0}", color = ElectricBlueSafe, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                Text("VC: $displayVc", color = ElectricBlueSafe, fontWeight = FontWeight.Bold, fontSize = 12.sp)
             }
         }
 
-        Spacer(modifier = Modifier.height(12.dp))
+        Spacer(modifier = Modifier.height(10.dp))
 
-        // Tabs: Crates vs Direct Shop
         TabRow(
             selectedTabIndex = selectedTab,
             containerColor = TacticalSurface,
             contentColor = CyberOrange
         ) {
-            Tab(selected = selectedTab == 0, onClick = { selectedTab = 0 }, text = { Text("MYTHIC CRATES", fontWeight = FontWeight.Bold) })
-            Tab(selected = selectedTab == 1, onClick = { selectedTab = 1 }, text = { Text("DIRECT COSMETICS", fontWeight = FontWeight.Bold) })
+            Tab(
+                selected = selectedTab == 0,
+                onClick = { selectedTab = 0 },
+                modifier = Modifier.testTag("shop_tab_bundles"),
+                text = { Text("DIRECT BUNDLES & COSMETICS", fontWeight = FontWeight.Bold) }
+            )
+            Tab(
+                selected = selectedTab == 1,
+                onClick = { selectedTab = 1 },
+                modifier = Modifier.testTag("shop_tab_history"),
+                text = { Text("TRANSACTION HISTORY (${cloudTransactions.size})", fontWeight = FontWeight.Bold) }
+            )
         }
 
-        Spacer(modifier = Modifier.height(14.dp))
+        Spacer(modifier = Modifier.height(12.dp))
 
         if (selectedTab == 0) {
-            // Crates Showcase
-            Column(modifier = Modifier.fillMaxSize()) {
-                // Info banner on transparent odds
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(TacticalSurface)
-                        .clickable { showOddsDialog = true }
-                        .padding(horizontal = 12.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(Icons.Default.Info, contentDescription = "Odds", tint = HazardYellow, modifier = Modifier.size(18.dp))
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Verified Drop Probabilities: Mythic 0.5% • Legendary 3.5% • Epic 16%", color = TextSecondary, fontSize = 11.sp)
-                }
-
-                Spacer(modifier = Modifier.height(14.dp))
-
-                // Crate Cards
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    CrateCard(
-                        title = "Vortex Weapon Crate",
-                        subtitle = "Features Glacier M416 & Dragonfire AKM",
-                        price = "1,000 BP",
-                        color = CyberOrange,
-                        modifier = Modifier.weight(1f),
-                        onOpen = {
-                            scope.launch {
-                                val item = repository.openLootCrate(useCredits = false)
-                                if (item != null) {
-                                    openedCrateItem = item
-                                    shopBannerMsg = "Unboxed ${item.name}!"
-                                } else {
-                                    shopBannerMsg = "Need 1,000 BP Coins!"
-                                }
-                            }
-                        }
-                    )
-                    CrateCard(
-                        title = "Apex Special Forces",
-                        subtitle = "Features Cybernetic Assassin Suit & L3 Visor",
-                        price = "120 VC",
-                        color = ElectricBlueSafe,
-                        modifier = Modifier.weight(1f),
-                        onOpen = {
-                            scope.launch {
-                                val item = repository.openLootCrate(useCredits = true)
-                                if (item != null) {
-                                    openedCrateItem = item
-                                    shopBannerMsg = "Unboxed ${item.name}!"
-                                } else {
-                                    shopBannerMsg = "Need 120 Vortex Credits!"
-                                }
-                            }
-                        }
-                    )
-                }
-            }
-        } else {
-            // Direct Cosmetic Purchases
-            val shopCatalog = listOf(
-                InventoryItemEntity("skin_m416_glacier", "M416 - Glacier Frost", "WEAPON_SKIN", "m416", "MYTHIC", priceCredits = 1200),
-                InventoryItemEntity("outfit_cyber_assassin", "Cyber Assassin Cyberwear", "OUTFIT", "player", "LEGENDARY", priceCredits = 850),
-                InventoryItemEntity("para_matrix", "Matrix Neon Parachute", "PARACHUTE", "parachute", "EPIC", priceBp = 6500),
-                InventoryItemEntity("vehicle_buggy_neon", "Offroad Buggy - Neon Beast", "VEHICLE", "buggy", "LEGENDARY", priceCredits = 950),
-                InventoryItemEntity("skin_pan_gold", "Golden Pan Supreme", "WEAPON_SKIN", "pan", "EPIC", priceBp = 8000),
-                InventoryItemEntity("outfit_desert_spec", "Desert Spec-Ops Camo", "OUTFIT", "player", "RARE", priceBp = 4500)
-            )
-
             LazyVerticalGrid(
                 columns = GridCells.Fixed(2),
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
                 modifier = Modifier.fillMaxSize()
             ) {
-                items(shopCatalog) { item ->
+                items(directBundles, key = { it.id }) { item ->
                     val isOwned = ownedIds.contains(item.id)
+                    val rarityColor = when (item.rarity) {
+                        "MYTHIC" -> RarityMythic
+                        "LEGENDARY" -> RarityLegendary
+                        "EPIC" -> RarityEpic
+                        else -> ElectricBlueSafe
+                    }
                     Card(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier.fillMaxWidth().testTag("shop_item_${item.id}"),
                         shape = RoundedCornerShape(12.dp),
-                        colors = CardDefaults.cardColors(containerColor = TacticalSurface)
+                        colors = CardDefaults.cardColors(containerColor = TacticalSurface),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, rarityColor.copy(alpha = 0.4f))
                     ) {
                         Column(modifier = Modifier.padding(12.dp)) {
-                            Text(
-                                item.rarity,
-                                color = when (item.rarity) {
-                                    "MYTHIC" -> RarityMythic
-                                    "LEGENDARY" -> RarityLegendary
-                                    "EPIC" -> RarityEpic
-                                    else -> ElectricBlueSafe
-                                },
-                                fontSize = 9.sp,
-                                fontWeight = FontWeight.Black
-                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(item.rarity, color = rarityColor, fontSize = 9.sp, fontWeight = FontWeight.Black)
+                                if (isOwned) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(Icons.Default.CheckCircle, contentDescription = "Owned", tint = HealthGreen, modifier = Modifier.size(13.dp))
+                                        Spacer(modifier = Modifier.width(3.dp))
+                                        Text("OWNED", color = HealthGreen, fontSize = 9.sp, fontWeight = FontWeight.Black)
+                                    }
+                                }
+                            }
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(item.name, color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 12.sp, maxLines = 1)
-                            Text(item.type, color = TextSecondary, fontSize = 10.sp)
+                            Text("${item.type} • Guaranteed Direct Unlock", color = TextSecondary, fontSize = 10.sp)
 
                             Spacer(modifier = Modifier.height(10.dp))
 
                             val cost = if (item.priceCredits > 0) "${item.priceCredits} VC" else "${item.priceBp} BP"
-                            Button(
-                                enabled = !isOwned,
-                                onClick = {
-                                    scope.launch {
-                                        val ok = repository.purchaseShopItem(item, useCredits = item.priceCredits > 0)
-                                        shopBannerMsg = if (ok) "Purchased ${item.name}!" else "Insufficient funds for ${item.name}"
-                                    }
-                                },
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = if (item.priceCredits > 0) ElectricBlueSafe else CyberOrange,
-                                    disabledContainerColor = Color.DarkGray
-                                ),
-                                modifier = Modifier.fillMaxWidth().height(32.dp)
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                OutlinedButton(
+                                    onClick = { previewItem = item },
+                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp),
+                                    modifier = Modifier.height(34.dp).testTag("inspect_${item.id}")
+                                ) {
+                                    Icon(Icons.Default.Visibility, contentDescription = "Inspect", tint = TextPrimary, modifier = Modifier.size(14.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("INSPECT", color = TextPrimary, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                                }
+                                Button(
+                                    enabled = !isOwned && !isProcessing,
+                                    onClick = { executeDirectPurchase(item) },
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = if (item.priceCredits > 0) ElectricBlueSafe else CyberOrange,
+                                        disabledContainerColor = TacticalSurfaceVariant
+                                    ),
+                                    modifier = Modifier.weight(1f).height(34.dp).testTag("buy_${item.id}")
+                                ) {
+                                    Text(
+                                        text = if (isOwned) "OWNED ✓" else cost,
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Black,
+                                        color = if (isOwned) HealthGreen else Color.Black
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        } else {
+            if (cloudTransactions.isEmpty()) {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(Icons.Default.ReceiptLong, contentDescription = "Ledger", tint = TextSecondary, modifier = Modifier.size(38.dp))
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text("No cloud transactions recorded yet.", color = TextSecondary, fontSize = 12.sp)
+                    }
+                }
+            } else {
+                LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items(cloudTransactions, key = { it.id }) { tx ->
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(10.dp),
+                            colors = CardDefaults.cardColors(containerColor = TacticalSurface)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(12.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text(
-                                    text = if (isOwned) "OWNED ✓" else cost,
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = if (isOwned) HealthGreen else Color.Black
-                                )
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(tx.itemName.ifBlank { tx.txType }, color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                    Text("${tx.txType} • ${tx.status}", color = ElectricBlueSafe, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                }
+                                Column(horizontalAlignment = Alignment.End) {
+                                    if (tx.bpDelta != 0L) {
+                                        Text(
+                                            text = if (tx.bpDelta > 0) "+${tx.bpDelta} BP" else "${tx.bpDelta} BP",
+                                            color = if (tx.bpDelta > 0) HealthGreen else HazardYellow,
+                                            fontWeight = FontWeight.Black,
+                                            fontSize = 11.sp
+                                        )
+                                    }
+                                    if (tx.creditsDelta != 0L) {
+                                        Text(
+                                            text = if (tx.creditsDelta > 0) "+${tx.creditsDelta} VC" else "${tx.creditsDelta} VC",
+                                            color = ElectricBlueSafe,
+                                            fontWeight = FontWeight.Black,
+                                            fontSize = 11.sp
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
@@ -267,111 +340,65 @@ fun ShopScreen(
         }
     }
 
-    // Crate Reveal Dialog
-    if (openedCrateItem != null) {
-        Dialog(onDismissRequest = { openedCrateItem = null }) {
+    // Item Inspection & Confirmation Modal
+    val itemToPreview = previewItem
+    if (itemToPreview != null) {
+        val isOwned = ownedIds.contains(itemToPreview.id)
+        val priceLabel = if (itemToPreview.priceCredits > 0) "${itemToPreview.priceCredits} Vortex Credits" else "${itemToPreview.priceBp} BP Coins"
+        Dialog(onDismissRequest = { previewItem = null }) {
             Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                shape = RoundedCornerShape(20.dp),
+                modifier = Modifier.fillMaxWidth().testTag("shop_preview_dialog"),
+                shape = RoundedCornerShape(16.dp),
                 colors = CardDefaults.cardColors(containerColor = TacticalDarkBg),
                 border = androidx.compose.foundation.BorderStroke(2.dp, CyberOrange)
             ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(24.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Text("CRATE UNBOXED!", color = HazardYellow, fontSize = 18.sp, fontWeight = FontWeight.Black)
-                    Spacer(modifier = Modifier.height(14.dp))
+                Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.ShoppingBag, contentDescription = "Bundle", tint = CyberOrange, modifier = Modifier.size(20.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("BUNDLE INSPECTION", color = CyberOrange, fontWeight = FontWeight.Black, fontSize = 14.sp)
+                        }
+                        IconButton(onClick = { previewItem = null }) {
+                            Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.White)
+                        }
+                    }
 
+                    Text(itemToPreview.name, color = TextPrimary, fontWeight = FontWeight.Black, fontSize = 16.sp)
+                    Text("Category: ${itemToPreview.type} • Rarity: ${itemToPreview.rarity}", color = ElectricBlueSafe, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                     Box(
                         modifier = Modifier
-                            .size(70.dp)
-                            .clip(androidx.compose.foundation.shape.CircleShape)
-                            .background(CyberOrange.copy(alpha = 0.25f)),
-                        contentAlignment = Alignment.Center
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(TacticalSurface)
+                            .padding(12.dp)
                     ) {
-                        Icon(Icons.Default.CardGiftcard, contentDescription = "Item", tint = CyberOrange, modifier = Modifier.size(36.dp))
+                        Text(
+                            "Fixed-price direct cosmetic unlock for slot '${itemToPreview.targetItemId}'. Equip immediately inside Armory after unlocking. Zero randomized drops.",
+                            color = TextSecondary,
+                            fontSize = 11.sp
+                        )
                     }
 
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Text(openedCrateItem!!.name, color = TextPrimary, fontWeight = FontWeight.ExtraBold, fontSize = 16.sp)
-                    Text(openedCrateItem!!.rarity, color = AirdropGold, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                    Text("Price: $priceLabel", color = HazardYellow, fontWeight = FontWeight.Black, fontSize = 13.sp)
 
-                    Spacer(modifier = Modifier.height(20.dp))
                     Button(
-                        onClick = { openedCrateItem = null },
+                        enabled = !isOwned && !isProcessing,
+                        onClick = { executeDirectPurchase(itemToPreview) },
                         colors = ButtonDefaults.buttonColors(containerColor = CyberOrange),
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth().testTag("confirm_bundle_purchase")
                     ) {
-                        Text("COLLECT TO INVENTORY", color = Color.Black, fontWeight = FontWeight.Bold)
+                        Text(
+                            if (isOwned) "ALREADY OWNED ✓" else "CONFIRM DIRECT PURCHASE",
+                            color = Color.Black,
+                            fontWeight = FontWeight.Black
+                        )
                     }
                 }
-            }
-        }
-    }
-
-    // Transparent Odds Dialog
-    if (showOddsDialog) {
-        Dialog(onDismissRequest = { showOddsDialog = false }) {
-            Card(
-                modifier = Modifier.fillMaxWidth().padding(16.dp),
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = TacticalDarkBg)
-            ) {
-                Column(modifier = Modifier.padding(20.dp)) {
-                    Text("OFFICIAL CRATE PROBABILITIES", color = CyberOrange, fontWeight = FontWeight.Black, fontSize = 14.sp)
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Text("• Mythic Items (Glacier / Apex): 0.5%", color = RarityMythic, fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                    Text("• Legendary Items (Dragonfire / Visors): 3.5%", color = RarityLegendary, fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                    Text("• Epic Items (Golden Pan / Special Camo): 16.0%", color = RarityEpic, fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                    Text("• Rare & Common Items: 80.0%", color = ElectricBlueSafe, fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Button(onClick = { showOddsDialog = false }, modifier = Modifier.fillMaxWidth()) {
-                        Text("GOT IT")
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun CrateCard(
-    title: String,
-    subtitle: String,
-    price: String,
-    color: Color,
-    modifier: Modifier = Modifier,
-    onOpen: () -> Unit
-) {
-    Card(
-        modifier = modifier.height(180.dp),
-        shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.cardColors(containerColor = TacticalSurface),
-        border = androidx.compose.foundation.BorderStroke(1.5.dp, color)
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(14.dp),
-            verticalArrangement = Arrangement.SpaceBetween,
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Icon(Icons.Default.CardGiftcard, contentDescription = "Crate", tint = color, modifier = Modifier.size(36.dp))
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(title, color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                Text(subtitle, color = TextSecondary, fontSize = 9.sp, maxLines = 1)
-            }
-            Button(
-                onClick = onOpen,
-                colors = ButtonDefaults.buttonColors(containerColor = color),
-                modifier = Modifier.fillMaxWidth().height(34.dp)
-            ) {
-                Text("OPEN ($price)", color = Color.Black, fontWeight = FontWeight.ExtraBold, fontSize = 10.sp)
             }
         }
     }

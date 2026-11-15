@@ -1750,9 +1750,14 @@ fun FullTacticalMapDialog(
 @Composable
 fun BackpackInventoryDialog(
     user: Player,
+    usedUnits: Int = 0,
+    maxUnits: Int = 180,
     onUseConsumable: (ConsumableType) -> Unit,
+    onDropConsumable: (ConsumableType) -> Unit = {},
+    onDropWeaponSlot: (Int) -> Unit = {},
     onDismiss: () -> Unit
 ) {
+    val capRatio = if (maxUnits > 0) (usedUnits.toFloat() / maxUnits.toFloat()).coerceIn(0f, 1f) else 0f
     Dialog(onDismissRequest = onDismiss) {
         Card(
             modifier = Modifier
@@ -1767,27 +1772,53 @@ fun BackpackInventoryDialog(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("TACTICAL BACKPACK (LV.${user.backpackLevel})", color = CyberOrange, fontWeight = FontWeight.Bold)
+                    Column {
+                        Text("TACTICAL BACKPACK (LV.${user.backpackLevel})", color = CyberOrange, fontWeight = FontWeight.Bold)
+                        Text("Capacity: $usedUnits / $maxUnits units", color = TextSecondary, fontSize = 10.sp)
+                    }
                     IconButton(onClick = onDismiss) {
                         Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.White)
                     }
                 }
 
+                LinearProgressIndicator(
+                    progress = { capRatio },
+                    modifier = Modifier.fillMaxWidth().height(5.dp).clip(RoundedCornerShape(3.dp)),
+                    color = if (capRatio > 0.85f) RedZoneBombardment else ElectricBlueSafe,
+                    trackColor = TacticalSurface
+                )
+
                 Spacer(modifier = Modifier.height(8.dp))
                 Text("EQUIPPED WEAPONS", color = TextSecondary, fontSize = 11.sp, fontWeight = FontWeight.Bold)
 
-                listOf(user.primaryWeapon1, user.primaryWeapon2).filterNotNull().forEach { w ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 4.dp)
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(TacticalSurface)
-                            .padding(8.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text(w.name, color = TextPrimary, fontWeight = FontWeight.Bold)
-                        Text("${w.currentAmmo} / ${w.totalCapacity} (${w.ammoType.displayName})", color = HazardYellow)
+                listOf(1 to user.primaryWeapon1, 2 to user.primaryWeapon2).forEach { (slot, w) ->
+                    if (w != null) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(TacticalSurface)
+                                .padding(8.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(w.name, color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                Text("${w.currentAmmo} / ${w.totalCapacity} (${w.ammoType.displayName})", color = HazardYellow, fontSize = 10.sp)
+                            }
+                            Text(
+                                text = "DROP",
+                                color = RedZoneBombardment,
+                                fontWeight = FontWeight.Black,
+                                fontSize = 11.sp,
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(4.dp))
+                                    .clickable { onDropWeaponSlot(slot) }
+                                    .padding(horizontal = 8.dp, vertical = 4.dp)
+                                    .testTag("drop_weapon_slot_$slot")
+                            )
+                        }
                     }
                 }
 
@@ -1803,13 +1834,27 @@ fun BackpackInventoryDialog(
                                 .padding(vertical = 3.dp)
                                 .clip(RoundedCornerShape(8.dp))
                                 .background(TacticalSurface)
-                                .clickable { onUseConsumable(c) }
                                 .padding(horizontal = 10.dp, vertical = 6.dp),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text("${c.displayName} x$count", color = HealthGreen, fontWeight = FontWeight.SemiBold)
-                            Text("USE", color = CyberOrange, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            Text("${c.displayName} x$count", color = HealthGreen, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                Text(
+                                    text = "DROP",
+                                    color = RedZoneBombardment,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 11.sp,
+                                    modifier = Modifier.clickable { onDropConsumable(c) }
+                                )
+                                Text(
+                                    text = "USE",
+                                    color = CyberOrange,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 12.sp,
+                                    modifier = Modifier.clickable { onUseConsumable(c) }
+                                )
+                            }
                         }
                     }
                 }
@@ -1823,6 +1868,7 @@ fun MatchSettlementDialog(
     placement: Int,
     totalPlayers: Int = 100,
     kills: Int,
+    assists: Int = 0,
     damage: Float,
     durationSec: Int,
     onReturnToLobby: () -> Unit
@@ -1864,6 +1910,7 @@ fun MatchSettlementDialog(
                     horizontalArrangement = Arrangement.SpaceEvenly
                 ) {
                     StatBox("KILLS", "$kills")
+                    StatBox("ASSISTS", "$assists")
                     StatBox("DAMAGE", "${damage.roundToInt()}")
                     val m = durationSec / 60
                     val s = durationSec % 60

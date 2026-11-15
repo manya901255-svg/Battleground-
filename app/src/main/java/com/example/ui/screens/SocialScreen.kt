@@ -1,5 +1,6 @@
 package com.example.ui.screens
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -16,16 +17,12 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -39,15 +36,13 @@ import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.Flag
-import androidx.compose.material.icons.filled.GpsFixed
 import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Pets
+import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Shield
-import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.ThumbUp
 import androidx.compose.material.icons.filled.Whatshot
 import androidx.compose.material3.Button
@@ -99,19 +94,29 @@ import com.example.data.GameRepository
 import com.example.data.MatchHistoryEntity
 import com.example.data.MissionEntity
 import com.example.data.UserProfileEntity
+import com.example.data.cloud.CloudGameRepository
+import com.example.data.cloud.CloudGuild
+import com.example.data.cloud.CloudGuildMessage
+import com.example.data.cloud.CloudLeaderboardEntry
+import com.example.data.cloud.CloudMatchRecord
+import com.example.data.cloud.CloudMatchRoom
+import com.example.data.cloud.CloudUserProfile
 import com.example.game.model.CharacterPreset
 import com.example.game.model.PetPreset
-import com.example.ui.theme.AirdropGold
 import com.example.ui.theme.CyberOrange
 import com.example.ui.theme.ElectricBlueSafe
 import com.example.ui.theme.HazardYellow
 import com.example.ui.theme.HealthGreen
+import com.example.ui.theme.RedZoneBombardment
 import com.example.ui.theme.TacticalDarkBg
 import com.example.ui.theme.TacticalSurface
 import com.example.ui.theme.TacticalSurfaceVariant
 import com.example.ui.theme.TextPrimary
 import com.example.ui.theme.TextSecondary
-import com.example.ui.theme.RedZoneBombardment
+import com.google.firebase.Firebase
+import com.google.firebase.auth.auth
+import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import java.util.Locale
 import kotlin.random.Random
@@ -133,37 +138,77 @@ private data class SquadChatMessage(
 @Composable
 fun SocialScreen(
     repository: GameRepository,
+    cloudRepository: CloudGameRepository? = null,
+    cloudProfile: CloudUserProfile? = null,
     onBack: () -> Unit
 ) {
+    BackHandler { onBack() }
+
     val history by repository.matchHistory.collectAsState(initial = emptyList())
     val profile by repository.userProfile.collectAsState(initial = null)
     val missions by repository.missions.collectAsState(initial = emptyList())
     val scope = rememberCoroutineScope()
+    val currentUid = remember { runCatching { Firebase.auth.currentUser?.uid }.getOrNull() }
+
+    val leaderboardFlow = remember(cloudRepository) {
+        cloudRepository?.observeLeaderboard()?.catch { emit(emptyList()) } ?: flowOf(emptyList())
+    }
+    val guildsFlow = remember(cloudRepository) {
+        cloudRepository?.observeGuilds()?.catch { emit(emptyList()) } ?: flowOf(emptyList())
+    }
+    val publicRoomsFlow = remember(cloudRepository) {
+        cloudRepository?.observePublicMatchRooms()?.catch { emit(emptyList()) } ?: flowOf(emptyList())
+    }
+    val cloudMatchesFlow = remember(cloudRepository, currentUid) {
+        if (cloudRepository != null && !currentUid.isNullOrBlank()) {
+            cloudRepository.observeMatches(currentUid).catch { emit(emptyList()) }
+        } else {
+            flowOf(emptyList())
+        }
+    }
+
+    val cloudLeaderboard by leaderboardFlow.collectAsState(initial = emptyList())
+    val cloudGuilds by guildsFlow.collectAsState(initial = emptyList())
+    val publicRooms by publicRoomsFlow.collectAsState(initial = emptyList())
+    val cloudMatches by cloudMatchesFlow.collectAsState(initial = emptyList())
+
+    val activeGuild = remember(cloudGuilds, cloudProfile?.guildId, currentUid) {
+        cloudGuilds.firstOrNull { g ->
+            g.id == cloudProfile?.guildId || (currentUid != null && currentUid in g.memberUids)
+        }
+    }
+
+    val guildMessagesFlow = remember(cloudRepository, activeGuild?.id) {
+        if (cloudRepository != null && activeGuild != null) {
+            cloudRepository.observeGuildMessages(activeGuild.id).catch { emit(emptyList()) }
+        } else {
+            flowOf(emptyList())
+        }
+    }
+    val guildMessages by guildMessagesFlow.collectAsState(initial = emptyList())
 
     var selectedTab by remember { mutableIntStateOf(0) }
     var statusBanner by remember { mutableStateOf<String?>(null) }
 
-    // Squad / Friend interactive states
     val allFriends = remember {
         listOf(
-            FriendEntry("f1", "Viper_42", "In Lobby • Squad Ready", true, "Ace"),
-            FriendEntry("f2", "Shadow_X", "In Classic Match • Alive: 14", true, "Crown I"),
-            FriendEntry("f3", "CyberGhost", "Online • Team Deathmatch", true, "Diamond II"),
-            FriendEntry("f4", "AlphaStrike", "Last online 2 hours ago", false, "Crown IV"),
-            FriendEntry("f5", "ApexQueen", "Offline", false, "Ace Master")
+            FriendEntry("f1", "Viper_42", "In Lobby • Squad Ready", true, "Heroic"),
+            FriendEntry("f2", "Shadow_X", "In Classic Match • Alive: 14", true, "Diamond I"),
+            FriendEntry("f3", "CyberGhost", "Online • Clash Squad", true, "Platinum II"),
+            FriendEntry("f4", "AlphaStrike", "Last online 2 hours ago", false, "Diamond II"),
+            FriendEntry("f5", "ApexQueen", "Offline", false, "Grandmaster")
         )
     }
     val invitedFriends = remember { mutableStateMapOf<String, Boolean>() }
     val blockedFriendIds = remember { mutableStateListOf<String>() }
     val reportedFriendIds = remember { mutableStateListOf<String>() }
 
-    // Private Room state
     var showPrivateRoomDialog by remember { mutableStateOf(false) }
     var privateRoomCode by remember { mutableStateOf(generateRoomCode()) }
     var privateRoomMode by remember { mutableStateOf("SQUAD (100P)") }
     var privateRoomMap by remember { mutableStateOf("Kavala Island") }
+    var isTournamentRegistered by remember { mutableStateOf(false) }
 
-    // Squad Chat state
     val chatMessages = remember {
         mutableStateListOf(
             SquadChatMessage("Viper_42", "Ready for Classic BR hot drop at Military Base?", false),
@@ -174,11 +219,7 @@ fun SocialScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(
-                Brush.verticalGradient(
-                    colors = listOf(TacticalSurface, TacticalDarkBg)
-                )
-            )
+            .background(Brush.verticalGradient(colors = listOf(TacticalSurface, TacticalDarkBg)))
             .windowInsetsPadding(WindowInsets.safeDrawing)
             .padding(horizontal = 16.dp, vertical = 10.dp)
             .testTag("social_screen")
@@ -195,8 +236,8 @@ fun SocialScreen(
                 }
                 Spacer(modifier = Modifier.width(6.dp))
                 Column {
-                    Text("OPERATIVE PROFILE & SOCIAL", color = CyberOrange, fontWeight = FontWeight.Black, fontSize = 16.sp)
-                    Text("CAREER STATS, SQUAD INVITES & PRIVATE ROOMS", color = TextSecondary, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    Text("OPERATIVE SOCIAL & ESPORTS", color = CyberOrange, fontWeight = FontWeight.Black, fontSize = 16.sp)
+                    Text("CAREER RANK, GUILDS, MATCH ROOMS & TOURNAMENTS", color = TextSecondary, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                 }
             }
 
@@ -209,7 +250,7 @@ fun SocialScreen(
                             .border(1.dp, ElectricBlueSafe, RoundedCornerShape(6.dp))
                             .padding(horizontal = 10.dp, vertical = 5.dp)
                     ) {
-                        Text(statusBanner!!, color = ElectricBlueSafe, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                        Text(statusBanner!!, color = ElectricBlueSafe, fontSize = 10.sp, fontWeight = FontWeight.Bold, maxLines = 1)
                     }
                 }
 
@@ -228,7 +269,6 @@ fun SocialScreen(
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        // Tabs
         TabRow(
             selectedTabIndex = selectedTab,
             containerColor = TacticalSurface,
@@ -240,7 +280,7 @@ fun SocialScreen(
                 )
             }
         ) {
-            val tabTitles = listOf("PROFILE", "FRIENDS & SQUAD", "CLAN", "LEADERBOARD", "HISTORY")
+            val tabTitles = listOf("PROFILE", "SQUAD", "GUILD", "ROOMS & TOURNEY", "RANKING", "HISTORY")
             tabTitles.forEachIndexed { index, title ->
                 Tab(
                     selected = selectedTab == index,
@@ -249,7 +289,7 @@ fun SocialScreen(
                     text = {
                         Text(
                             title,
-                            fontSize = 10.sp,
+                            fontSize = 9.sp,
                             fontWeight = FontWeight.Bold,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
@@ -264,16 +304,19 @@ fun SocialScreen(
         when (selectedTab) {
             0 -> ProfileTabContent(
                 profile = profile,
+                cloudProfile = cloudProfile,
                 achievements = missions.filter { it.category == "ACHIEVEMENT" },
                 onSaveUsername = { newName ->
                     scope.launch {
                         repository.updateUsername(newName)
+                        cloudRepository?.updateProfileBasics(newName, profile?.signatureBio ?: "Battle in Style!")
                         statusBanner = "Operative callsign updated to $newName"
                     }
                 },
                 onSaveBio = { newBio ->
                     scope.launch {
                         repository.updateSignatureBio(newBio)
+                        cloudRepository?.updateProfileBasics(profile?.username ?: "Operative", newBio)
                         statusBanner = "Signature bio updated!"
                     }
                 },
@@ -283,9 +326,7 @@ fun SocialScreen(
                         statusBanner = "Profile liked!"
                     }
                 },
-                onCopyUid = { uid ->
-                    statusBanner = "Copied UID: $uid"
-                },
+                onCopyUid = { uid -> statusBanner = "Copied UID: $uid" },
                 onClaimAchievement = { missionId ->
                     scope.launch {
                         val ok = repository.claimMissionReward(missionId)
@@ -303,22 +344,19 @@ fun SocialScreen(
                 onToggleInvite = { friend ->
                     val nowInvited = !(invitedFriends[friend.id] ?: false)
                     invitedFriends[friend.id] = nowInvited
-                    statusBanner = if (nowInvited) {
-                        "Squad invite dispatched to ${friend.name}"
-                    } else {
-                        "Cancelled invite to ${friend.name}"
-                    }
+                    statusBanner = if (nowInvited) "Squad invite sent to ${friend.name}" else "Cancelled invite to ${friend.name}"
                 },
                 onReportFriend = { friend ->
                     if (friend.id !in reportedFriendIds) {
                         reportedFriendIds.add(friend.id)
                     }
+                    scope.launch {
+                        cloudRepository?.submitPlayerReport(friend.name, "Unsportsmanlike / Fair Play review")
+                    }
                     statusBanner = "Reported ${friend.name} to Fair Play Enforcement"
                 },
                 onBlockFriend = { friend ->
-                    if (friend.id !in blockedFriendIds) {
-                        blockedFriendIds.add(friend.id)
-                    }
+                    if (friend.id !in blockedFriendIds) blockedFriendIds.add(friend.id)
                     invitedFriends.remove(friend.id)
                     statusBanner = "Blocked ${friend.name}"
                 },
@@ -336,16 +374,89 @@ fun SocialScreen(
                 }
             )
 
-            2 -> ClanTabContent(
+            2 -> GuildTabContent(
                 profile = profile,
-                onCheckIn = {
-                    statusBanner = "Clan daily check-in logged! +50 Clan Activity"
+                guilds = cloudGuilds,
+                activeGuild = activeGuild,
+                guildMessages = guildMessages,
+                currentUid = currentUid,
+                onCreateGuild = { name, tag, desc ->
+                    scope.launch {
+                        if (cloudRepository != null) {
+                            cloudRepository.createGuild(name, tag, desc)
+                                .onSuccess { statusBanner = "Created Guild [$tag] $name!" }
+                                .onFailure { statusBanner = it.message ?: "Could not create guild" }
+                        } else {
+                            statusBanner = "Sign in with Google to create persistent Guilds."
+                        }
+                    }
+                },
+                onJoinGuild = { guild ->
+                    scope.launch {
+                        cloudRepository?.joinGuild(guild)
+                            ?.onSuccess { statusBanner = "Joined [${guild.tag}] ${guild.name}!" }
+                            ?.onFailure { statusBanner = it.message }
+                    }
+                },
+                onLeaveGuild = { guild ->
+                    scope.launch {
+                        cloudRepository?.leaveGuild(guild)
+                            ?.onSuccess { statusBanner = "Left ${guild.name}" }
+                    }
+                },
+                onSendGuildMessage = { guild, text ->
+                    scope.launch {
+                        val sender = cloudProfile?.username ?: profile?.username ?: "Operative"
+                        cloudRepository?.sendGuildMessage(guild, sender, text)
+                    }
                 }
             )
 
-            3 -> LeaderboardTabContent(profile = profile)
+            3 -> RoomsAndTournamentTabContent(
+                publicRooms = publicRooms,
+                currentUid = currentUid,
+                isTournamentRegistered = isTournamentRegistered,
+                onCreatePublicRoom = { title, mode, map ->
+                    scope.launch {
+                        if (cloudRepository != null) {
+                            cloudRepository.createMatchRoom(
+                                title = title,
+                                gameMode = mode,
+                                mapId = map,
+                                teamSize = 4,
+                                maxPlayers = 100,
+                                isPrivate = false,
+                                weather = "CLEAR"
+                            ).onSuccess { statusBanner = "Public Room created & listed live!" }
+                                .onFailure { statusBanner = it.message }
+                        } else {
+                            statusBanner = "Sign in to publish cloud rooms."
+                        }
+                    }
+                },
+                onJoinRoom = { room ->
+                    scope.launch {
+                        cloudRepository?.joinMatchRoom(room)
+                            ?.onSuccess { statusBanner = "Joined Room #${room.roomCode} (${room.title})" }
+                            ?.onFailure { statusBanner = it.message }
+                    }
+                },
+                onRegisterTournament = {
+                    isTournamentRegistered = true
+                    statusBanner = "Registered for Season 54 Vortex Cup Qualifier!"
+                }
+            )
 
-            4 -> HistoryTabContent(history = history)
+            4 -> LeaderboardTabContent(
+                profile = profile,
+                cloudProfile = cloudProfile,
+                cloudLeaderboard = cloudLeaderboard
+            )
+
+            5 -> HistoryTabContent(
+                localHistory = history,
+                cloudMatches = cloudMatches
+            )
         }
     }
 
@@ -360,6 +471,17 @@ fun SocialScreen(
             onDismiss = { showPrivateRoomDialog = false },
             onConfirmCreate = {
                 showPrivateRoomDialog = false
+                scope.launch {
+                    cloudRepository?.createMatchRoom(
+                        title = "Private Lobby #$privateRoomCode",
+                        gameMode = privateRoomMode,
+                        mapId = privateRoomMap,
+                        teamSize = if (privateRoomMode.startsWith("SOLO")) 1 else if (privateRoomMode.startsWith("DUO")) 2 else 4,
+                        maxPlayers = 100,
+                        isPrivate = true,
+                        weather = "CLEAR"
+                    )
+                }
                 statusBanner = "Private Room #$privateRoomCode active ($privateRoomMode • $privateRoomMap)"
             }
         )
@@ -369,6 +491,7 @@ fun SocialScreen(
 @Composable
 private fun ProfileTabContent(
     profile: UserProfileEntity?,
+    cloudProfile: CloudUserProfile?,
     achievements: List<MissionEntity>,
     onSaveUsername: (String) -> Unit,
     onSaveBio: (String) -> Unit,
@@ -383,68 +506,40 @@ private fun ProfileTabContent(
     var isEditingBio by remember { mutableStateOf(false) }
     var bioDraft by remember(p.signatureBio) { mutableStateOf(p.signatureBio) }
 
+    val effectiveRp = cloudProfile?.rankPoints?.toInt() ?: p.rankPoints
+    val effectiveTier = cloudProfile?.rankTier ?: p.rankTier
     val pet = remember(p.selectedPetId) { PetPreset.fromId(p.selectedPetId) }
     val preset = remember(p.selectedCharacterId) { CharacterPreset.fromId(p.selectedCharacterId) }
     val petGlow = Color(pet.glowRgb.first, pet.glowRgb.second, pet.glowRgb.third)
-    val uidString = "19105274${p.id}9"
+    val uidString = cloudProfile?.userId?.take(10)?.uppercase() ?: "19105274${p.id}9"
 
     Row(
         modifier = Modifier.fillMaxSize(),
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        // LEFT HALF: Free Fire MAX-Style Cyber Pedestal Stage + Operative + Pet Companion + UID Card
+        // LEFT: Stage Pedestal
         Box(
             modifier = Modifier
                 .weight(0.95f)
                 .fillMaxHeight()
                 .clip(RoundedCornerShape(14.dp))
-                .background(
-                    Brush.verticalGradient(
-                        listOf(Color(0xFF211238), Color(0xFF130D22), Color(0xFF0A0A12))
-                    )
-                )
+                .background(Brush.verticalGradient(listOf(Color(0xFF211238), Color(0xFF130D22), Color(0xFF0A0A12))))
                 .border(1.5.dp, HazardYellow.copy(alpha = 0.55f), RoundedCornerShape(14.dp))
         ) {
-            // Cyber spotlight beams & hexagonal stage base
             Canvas(modifier = Modifier.fillMaxSize()) {
-                drawLine(
-                    color = Color(0xFF9C27B0).copy(alpha = 0.28f),
-                    start = Offset(size.width * 0.15f, 0f),
-                    end = Offset(size.width * 0.45f, size.height * 0.85f),
-                    strokeWidth = 28f
-                )
-                drawLine(
-                    color = HazardYellow.copy(alpha = 0.18f),
-                    start = Offset(size.width * 0.85f, 0f),
-                    end = Offset(size.width * 0.52f, size.height * 0.85f),
-                    strokeWidth = 22f
-                )
-                // Stage pedestal ring
-                drawOval(
-                    color = Color.Black.copy(alpha = 0.82f),
-                    topLeft = Offset(size.width * 0.16f, size.height * 0.78f),
-                    size = Size(size.width * 0.68f, size.height * 0.16f)
-                )
-                drawOval(
-                    color = HazardYellow.copy(alpha = 0.6f),
-                    topLeft = Offset(size.width * 0.18f, size.height * 0.79f),
-                    size = Size(size.width * 0.64f, size.height * 0.14f),
-                    style = Stroke(width = 3f)
-                )
+                drawLine(Color(0xFF9C27B0).copy(alpha = 0.28f), Offset(size.width * 0.15f, 0f), Offset(size.width * 0.45f, size.height * 0.85f), 28f)
+                drawLine(HazardYellow.copy(alpha = 0.18f), Offset(size.width * 0.85f, 0f), Offset(size.width * 0.52f, size.height * 0.85f), 22f)
+                drawOval(Color.Black.copy(alpha = 0.82f), Offset(size.width * 0.16f, size.height * 0.78f), Size(size.width * 0.68f, size.height * 0.16f))
+                drawOval(HazardYellow.copy(alpha = 0.6f), Offset(size.width * 0.18f, size.height * 0.79f), Size(size.width * 0.64f, size.height * 0.14f), style = Stroke(3f))
             }
 
-            // Standing Full-Body Operative
             Image(
                 painter = painterResource(id = R.drawable.vortex_hero_soldier_1794458613075),
                 contentDescription = preset.displayName,
                 contentScale = ContentScale.Fit,
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .fillMaxHeight(0.88f)
-                    .padding(bottom = 18.dp)
+                modifier = Modifier.align(Alignment.BottomCenter).fillMaxHeight(0.88f).padding(bottom = 18.dp)
             )
 
-            // Companion Battle Pet Card beside Operative (matching screenshot Pet stand)
             Column(
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
@@ -470,7 +565,6 @@ private fun ProfileTabContent(
                 Text("Lv.${p.petLevel}", color = petGlow, fontSize = 8.sp, fontWeight = FontWeight.Bold)
             }
 
-            // Bottom-left QR-style UID Identity Badge
             Column(
                 modifier = Modifier
                     .align(Alignment.BottomStart)
@@ -489,17 +583,12 @@ private fun ProfileTabContent(
                     val cell = size.width / 5f
                     val pattern = listOf(1,1,1,0,1, 1,0,1,1,0, 1,1,0,1,1, 0,1,1,0,1, 1,0,1,1,1)
                     pattern.forEachIndexed { idx, v ->
-                        if (v == 1) {
-                            val r = idx / 5
-                            val c = idx % 5
-                            drawRect(Color.Black, Offset(c * cell, r * cell), Size(cell - 1f, cell - 1f))
-                        }
+                        if (v == 1) drawRect(Color.Black, Offset((idx % 5) * cell, (idx / 5) * cell), Size(cell - 1f, cell - 1f))
                     }
                 }
                 Text("UID: $uidString", color = Color.Black, fontSize = 6.sp, fontWeight = FontWeight.Black)
             }
 
-            // Operative Preset Pill top-left
             Box(
                 modifier = Modifier
                     .align(Alignment.TopStart)
@@ -513,14 +602,11 @@ private fun ProfileTabContent(
             }
         }
 
-        // RIGHT HALF: Free Fire MAX Gold/Slate Esports Inspection Card + Achievements
+        // RIGHT: Profile Banner, Rank Progression & Achievements
         Column(
-            modifier = Modifier
-                .weight(1.25f)
-                .fillMaxHeight(),
+            modifier = Modifier.weight(1.25f).fillMaxHeight(),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            // Gold Header Banner (Rank Crest, Name, UID, Level, Likes)
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -531,11 +617,7 @@ private fun ProfileTabContent(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(
-                            Brush.horizontalGradient(
-                                listOf(Color(0xFFE59A1A), Color(0xFF282E42))
-                            )
-                        )
+                        .background(Brush.horizontalGradient(listOf(Color(0xFFE59A1A), Color(0xFF282E42))))
                         .padding(10.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
@@ -592,11 +674,10 @@ private fun ProfileTabContent(
                                     }
                                 }
                             }
-                            Text("English • Global • ${p.rankTier}", color = Color.White.copy(alpha = 0.88f), fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                            Text("Season 54 • Global • $effectiveTier ($effectiveRp RP)", color = Color.White.copy(alpha = 0.9f), fontSize = 9.sp, fontWeight = FontWeight.Bold)
                         }
                     }
 
-                    // Level & Likes & Copy UID
                     Column(horizontalAlignment = Alignment.End) {
                         Row(
                             modifier = Modifier
@@ -626,28 +707,30 @@ private fun ProfileTabContent(
                     }
                 }
 
-                // BATTLE ROYALE Season Strip (S54 + Heroic Emblem + Pet Lv + Signature Bio)
                 Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text("BATTLE ROYALE • ${p.seasonId}", color = ElectricBlueSafe, fontWeight = FontWeight.Black, fontSize = 10.sp)
-                        Text("HEROIC EMBLEM • ${p.rankPoints} RP", color = HazardYellow, fontWeight = FontWeight.Black, fontSize = 10.sp)
+                    // Bronze -> Grandmaster Rank Progression Track
+                    val rankFrac = ((effectiveRp - 1000).coerceAtLeast(0).toFloat() / 5500f).coerceIn(0f, 1f)
+                    Column {
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text("RANK LADDER: BRONZE → GRANDMASTER", color = ElectricBlueSafe, fontWeight = FontWeight.Black, fontSize = 9.sp)
+                            Text("$effectiveRp / 6500 RP", color = HazardYellow, fontWeight = FontWeight.Black, fontSize = 9.sp)
+                        }
+                        Spacer(modifier = Modifier.height(4.dp))
+                        LinearProgressIndicator(
+                            progress = { rankFrac },
+                            modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)),
+                            color = HazardYellow,
+                            trackColor = Color.DarkGray
+                        )
                     }
 
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         ProfileStatTile("MATCHES", "${p.matchesPlayed}", Icons.Default.History, Modifier.weight(1f))
                         ProfileStatTile("WINS", "${p.wins}", Icons.Default.EmojiEvents, Modifier.weight(1f))
                         ProfileStatTile("K/D RATIO", String.format(Locale.US, "%.2f", p.kdRatio), Icons.Default.Whatshot, Modifier.weight(1f))
                         ProfileStatTile("PET", "${pet.displayName} Lv.${p.petLevel}", Icons.Default.Pets, Modifier.weight(1f))
                     }
 
-                    // Editable Player Bio / Signature ("Battle in Style!")
                     if (isEditingBio) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             OutlinedTextField(
@@ -690,11 +773,8 @@ private fun ProfileTabContent(
                 }
             }
 
-            // Career Honor & Achievements
             Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f),
+                modifier = Modifier.fillMaxWidth().weight(1f),
                 shape = RoundedCornerShape(12.dp),
                 colors = CardDefaults.cardColors(containerColor = TacticalSurface)
             ) {
@@ -704,36 +784,32 @@ private fun ProfileTabContent(
                         Text("${p.bpCoins} BP • ${p.vortexCredits} VC", color = HazardYellow, fontWeight = FontWeight.Bold, fontSize = 10.sp)
                     }
                     Spacer(modifier = Modifier.height(6.dp))
-                    if (achievements.isEmpty()) {
-                        Text("Play matches to track career milestones.", color = TextSecondary, fontSize = 11.sp)
-                    } else {
-                        LazyColumn(verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                            items(achievements) { ach ->
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clip(RoundedCornerShape(8.dp))
-                                        .background(TacticalSurfaceVariant)
-                                        .padding(horizontal = 10.dp, vertical = 6.dp),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text(ach.title, color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 11.sp)
-                                        Text("${ach.currentProgress} / ${ach.targetCount} • +${ach.rewardCredits} VC", color = TextSecondary, fontSize = 9.sp)
+                    LazyColumn(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                        items(achievements) { ach ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(TacticalSurfaceVariant)
+                                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(ach.title, color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                                    Text("${ach.currentProgress} / ${ach.targetCount} • +${ach.rewardCredits} VC", color = TextSecondary, fontSize = 9.sp)
+                                }
+                                when {
+                                    ach.isClaimed -> Text("CLAIMED", color = HealthGreen, fontWeight = FontWeight.Black, fontSize = 10.sp)
+                                    ach.isCompleted -> Button(
+                                        onClick = { onClaimAchievement(ach.id) },
+                                        colors = ButtonDefaults.buttonColors(containerColor = CyberOrange),
+                                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp),
+                                        modifier = Modifier.height(28.dp)
+                                    ) {
+                                        Text("CLAIM", color = Color.Black, fontWeight = FontWeight.Black, fontSize = 9.sp)
                                     }
-                                    when {
-                                        ach.isClaimed -> Text("CLAIMED", color = HealthGreen, fontWeight = FontWeight.Black, fontSize = 10.sp)
-                                        ach.isCompleted -> Button(
-                                            onClick = { onClaimAchievement(ach.id) },
-                                            colors = ButtonDefaults.buttonColors(containerColor = CyberOrange),
-                                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp),
-                                            modifier = Modifier.height(28.dp)
-                                        ) {
-                                            Text("CLAIM", color = Color.Black, fontWeight = FontWeight.Black, fontSize = 9.sp)
-                                        }
-                                        else -> Text("IN PROGRESS", color = TextSecondary, fontSize = 9.sp, fontWeight = FontWeight.Bold)
-                                    }
+                                    else -> Text("IN PROGRESS", color = TextSecondary, fontSize = 9.sp, fontWeight = FontWeight.Bold)
                                 }
                             }
                         }
@@ -751,12 +827,7 @@ private fun ProfileStatTile(label: String, value: String, icon: ImageVector, mod
         shape = RoundedCornerShape(8.dp),
         colors = CardDefaults.cardColors(containerColor = TacticalSurfaceVariant)
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(7.dp),
-            verticalArrangement = Arrangement.spacedBy(2.dp)
-        ) {
+        Column(modifier = Modifier.fillMaxWidth().padding(7.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
                 Icon(icon, contentDescription = label, tint = CyberOrange, modifier = Modifier.size(11.dp))
                 Text(label, color = TextSecondary, fontSize = 8.sp, fontWeight = FontWeight.Bold, maxLines = 1)
@@ -780,17 +851,8 @@ private fun FriendsAndSquadTabContent(
 ) {
     var chatDraft by remember { mutableStateOf("") }
 
-    Row(
-        modifier = Modifier.fillMaxSize(),
-        horizontalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        // Left: Friends & Invites
-        LazyColumn(
-            modifier = Modifier
-                .weight(1.15f)
-                .fillMaxHeight(),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
+    Row(modifier = Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        LazyColumn(modifier = Modifier.weight(1.15f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(friends, key = { it.id }) { friend ->
                 val isInvited = invitedFriends[friend.id] == true
                 val isReported = friend.id in reportedIds
@@ -800,19 +862,12 @@ private fun FriendsAndSquadTabContent(
                     colors = CardDefaults.cardColors(containerColor = TacticalSurface)
                 ) {
                     Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-                            Box(
-                                modifier = Modifier
-                                    .size(10.dp)
-                                    .clip(CircleShape)
-                                    .background(if (friend.isOnline) HealthGreen else Color.Gray)
-                            )
+                            Box(modifier = Modifier.size(10.dp).clip(CircleShape).background(if (friend.isOnline) HealthGreen else Color.Gray))
                             Spacer(modifier = Modifier.width(10.dp))
                             Column {
                                 Text("${friend.name} • ${friend.rank}", color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 12.sp)
@@ -823,47 +878,24 @@ private fun FriendsAndSquadTabContent(
                             if (friend.isOnline) {
                                 Button(
                                     onClick = { onToggleInvite(friend) },
-                                    colors = ButtonDefaults.buttonColors(
-                                        containerColor = if (isInvited) HealthGreen else CyberOrange
-                                    ),
+                                    colors = ButtonDefaults.buttonColors(containerColor = if (isInvited) HealthGreen else CyberOrange),
                                     contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-                                    modifier = Modifier
-                                        .height(32.dp)
-                                        .testTag("invite_friend_${friend.id}")
+                                    modifier = Modifier.height(32.dp).testTag("invite_friend_${friend.id}")
                                 ) {
-                                    Text(
-                                        if (isInvited) "INVITED ✓" else "INVITE",
-                                        color = Color.Black,
-                                        fontSize = 9.sp,
-                                        fontWeight = FontWeight.Black
-                                    )
+                                    Text(if (isInvited) "INVITED ✓" else "INVITE", color = Color.Black, fontSize = 9.sp, fontWeight = FontWeight.Black)
                                 }
                             }
                             IconButton(
                                 onClick = { onReportFriend(friend) },
-                                modifier = Modifier
-                                    .size(32.dp)
-                                    .testTag("report_friend_${friend.id}")
+                                modifier = Modifier.size(32.dp).testTag("report_friend_${friend.id}")
                             ) {
-                                Icon(
-                                    Icons.Default.Flag,
-                                    contentDescription = "Report ${friend.name}",
-                                    tint = if (isReported) HazardYellow else TextSecondary,
-                                    modifier = Modifier.size(16.dp)
-                                )
+                                Icon(Icons.Default.Flag, contentDescription = "Report ${friend.name}", tint = if (isReported) HazardYellow else TextSecondary, modifier = Modifier.size(16.dp))
                             }
                             IconButton(
                                 onClick = { onBlockFriend(friend) },
-                                modifier = Modifier
-                                    .size(32.dp)
-                                    .testTag("block_friend_${friend.id}")
+                                modifier = Modifier.size(32.dp).testTag("block_friend_${friend.id}")
                             ) {
-                                Icon(
-                                    Icons.Default.Block,
-                                    contentDescription = "Block ${friend.name}",
-                                    tint = RedZoneBombardment,
-                                    modifier = Modifier.size(16.dp)
-                                )
+                                Icon(Icons.Default.Block, contentDescription = "Block ${friend.name}", tint = RedZoneBombardment, modifier = Modifier.size(16.dp))
                             }
                         }
                     }
@@ -871,19 +903,12 @@ private fun FriendsAndSquadTabContent(
             }
         }
 
-        // Right: Squad Chat
         Card(
-            modifier = Modifier
-                .weight(0.95f)
-                .fillMaxHeight(),
+            modifier = Modifier.weight(0.95f).fillMaxHeight(),
             shape = RoundedCornerShape(12.dp),
             colors = CardDefaults.cardColors(containerColor = TacticalSurface)
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(12.dp)
-            ) {
+            Column(modifier = Modifier.fillMaxSize().padding(12.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Default.Group, contentDescription = "Squad Chat", tint = CyberOrange, modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(6.dp))
@@ -893,12 +918,7 @@ private fun FriendsAndSquadTabContent(
                 Spacer(modifier = Modifier.height(8.dp))
 
                 LazyColumn(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(Color.Black.copy(alpha = 0.3f))
-                        .padding(8.dp),
+                    modifier = Modifier.weight(1f).fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(Color.Black.copy(alpha = 0.3f)).padding(8.dp),
                     verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     items(chatMessages) { msg ->
@@ -906,26 +926,16 @@ private fun FriendsAndSquadTabContent(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clip(RoundedCornerShape(6.dp))
-                                .background(
-                                    if (msg.isSelf) CyberOrange.copy(alpha = 0.16f)
-                                    else TacticalSurfaceVariant
-                                )
+                                .background(if (msg.isSelf) CyberOrange.copy(alpha = 0.16f) else TacticalSurfaceVariant)
                                 .padding(horizontal = 8.dp, vertical = 5.dp)
                         ) {
-                            Text(
-                                msg.sender,
-                                color = if (msg.isSelf) CyberOrange else ElectricBlueSafe,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 9.sp
-                            )
+                            Text(msg.sender, color = if (msg.isSelf) CyberOrange else ElectricBlueSafe, fontWeight = FontWeight.Bold, fontSize = 9.sp)
                             Text(msg.text, color = TextPrimary, fontSize = 11.sp)
                         }
                     }
                 }
 
                 Spacer(modifier = Modifier.height(6.dp))
-
-                // Quick Tactical Callouts
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     listOf("Ready up!", "Drop Pochinki", "Need sniper").forEach { quick ->
                         OutlinedButton(
@@ -939,16 +949,13 @@ private fun FriendsAndSquadTabContent(
                 }
 
                 Spacer(modifier = Modifier.height(6.dp))
-
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     OutlinedTextField(
                         value = chatDraft,
                         onValueChange = { chatDraft = it },
                         placeholder = { Text("Type squad message...", fontSize = 11.sp, color = TextSecondary) },
                         singleLine = true,
-                        modifier = Modifier
-                            .weight(1f)
-                            .testTag("squad_chat_input"),
+                        modifier = Modifier.weight(1f).testTag("squad_chat_input"),
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedTextColor = TextPrimary,
                             unfocusedTextColor = TextPrimary,
@@ -964,9 +971,7 @@ private fun FriendsAndSquadTabContent(
                             }
                         },
                         colors = ButtonDefaults.buttonColors(containerColor = CyberOrange),
-                        modifier = Modifier
-                            .height(48.dp)
-                            .testTag("squad_chat_send_button")
+                        modifier = Modifier.height(48.dp).testTag("squad_chat_send_button")
                     ) {
                         Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send Chat", tint = Color.Black, modifier = Modifier.size(18.dp))
                     }
@@ -977,96 +982,330 @@ private fun FriendsAndSquadTabContent(
 }
 
 @Composable
-private fun ClanTabContent(
+private fun GuildTabContent(
     profile: UserProfileEntity?,
-    onCheckIn: () -> Unit
+    guilds: List<CloudGuild>,
+    activeGuild: CloudGuild?,
+    guildMessages: List<CloudGuildMessage>,
+    currentUid: String?,
+    onCreateGuild: (name: String, tag: String, description: String) -> Unit,
+    onJoinGuild: (CloudGuild) -> Unit,
+    onLeaveGuild: (CloudGuild) -> Unit,
+    onSendGuildMessage: (CloudGuild, String) -> Unit
 ) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .background(TacticalSurface)
-            .padding(16.dp)
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column {
-                Text("[VTX] VORTEX ELITE", color = CyberOrange, fontWeight = FontWeight.Black, fontSize = 18.sp)
-                Text("Clan Level 7 • 48/50 Members • Leader: VortexKing", color = TextSecondary, fontSize = 11.sp)
-            }
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("GLOBAL RANK #12", color = HazardYellow, fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                Button(
-                    onClick = onCheckIn,
-                    colors = ButtonDefaults.buttonColors(containerColor = HealthGreen),
-                    modifier = Modifier.testTag("clan_checkin_button")
-                ) {
-                    Text("DAILY CHECK-IN", color = Color.Black, fontWeight = FontWeight.Black, fontSize = 10.sp)
-                }
-            }
-        }
+    var showCreateForm by remember { mutableStateOf(false) }
+    var guildName by remember { mutableStateOf("") }
+    var guildTag by remember { mutableStateOf("") }
+    var guildDesc by remember { mutableStateOf("") }
+    var msgDraft by remember { mutableStateOf("") }
 
-        Spacer(modifier = Modifier.height(14.dp))
-        Text("CLAN MOTTO: Swift, lethal, and tactical dominance in every zone.", color = TextPrimary, fontSize = 12.sp)
-        Spacer(modifier = Modifier.height(8.dp))
-        Text("YOUR CLAN ROLE: Elite Vanguard (${profile?.username ?: "VortexGhost"} • ${profile?.rankTier ?: "Crown III"})", color = ElectricBlueSafe, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-        Spacer(modifier = Modifier.height(12.dp))
-        Text("CLAN PERKS: +10% BP Match Bonus • Exclusive [VTX] Tag • Weekly Supply Crate", color = HealthGreen, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-    }
-}
-
-@Composable
-private fun LeaderboardTabContent(profile: UserProfileEntity?) {
-    val topPlayers = listOf(
-        Triple(1, "ShroudGhost", "Conqueror • 8,420 RP"),
-        Triple(2, "ApexViper", "Conqueror • 8,110 RP"),
-        Triple(3, "VortexKing", "Ace Dominator • 7,850 RP"),
-        Triple(4, "NinjaBlade", "Ace Master • 7,420 RP"),
-        Triple(5, "SniperGod_99", "Ace • 7,100 RP")
-    )
-    Column(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        LazyColumn(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            items(topPlayers) { (rank, name, tier) ->
+    Row(modifier = Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        // Left: Active Guild or Cloud Guild Directory
+        Column(modifier = Modifier.weight(1.1f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (activeGuild != null) {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(10.dp),
-                    colors = CardDefaults.cardColors(containerColor = TacticalSurface)
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(containerColor = TacticalSurface),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, CyberOrange)
                 ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(12.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                "#$rank",
-                                color = when (rank) {
-                                    1 -> HazardYellow
-                                    2 -> Color(0xFFECEFF1)
-                                    3 -> Color(0xFFFFB74D)
-                                    else -> TextSecondary
-                                },
-                                fontWeight = FontWeight.Black,
-                                fontSize = 14.sp
-                            )
-                            Spacer(modifier = Modifier.width(14.dp))
-                            Column {
-                                Text(name, color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                                Text(tier, color = CyberOrange, fontSize = 10.sp)
+                    Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                            Text("[${activeGuild.tag}] ${activeGuild.name}", color = CyberOrange, fontWeight = FontWeight.Black, fontSize = 15.sp)
+                            OutlinedButton(onClick = { onLeaveGuild(activeGuild) }, modifier = Modifier.height(30.dp), contentPadding = PaddingValues(horizontal = 10.dp)) {
+                                Text("LEAVE", color = RedZoneBombardment, fontSize = 9.sp, fontWeight = FontWeight.Black)
                             }
                         }
-                        Icon(Icons.Default.EmojiEvents, contentDescription = "Rank", tint = HazardYellow, modifier = Modifier.size(20.dp))
+                        Text("Level ${activeGuild.level} • ${activeGuild.memberUids.size} Members", color = HazardYellow, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                        Text(activeGuild.description.ifBlank { "Tactical Guild Division" }, color = TextPrimary, fontSize = 11.sp)
+                    }
+                }
+            } else {
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                    Text("CLOUD GUILD DIRECTORY", color = CyberOrange, fontWeight = FontWeight.Black, fontSize = 12.sp)
+                    Button(
+                        onClick = { showCreateForm = !showCreateForm },
+                        colors = ButtonDefaults.buttonColors(containerColor = CyberOrange),
+                        modifier = Modifier.height(32.dp).testTag("toggle_create_guild_button")
+                    ) {
+                        Text(if (showCreateForm) "CANCEL" else "+ CREATE GUILD", color = Color.Black, fontWeight = FontWeight.Black, fontSize = 10.sp)
+                    }
+                }
+                if (showCreateForm) {
+                    Card(shape = RoundedCornerShape(10.dp), colors = CardDefaults.cardColors(containerColor = TacticalSurface)) {
+                        Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                OutlinedTextField(value = guildName, onValueChange = { if (it.length <= 24) guildName = it }, label = { Text("Guild Name") }, singleLine = true, modifier = Modifier.weight(2f))
+                                OutlinedTextField(value = guildTag, onValueChange = { if (it.length <= 5) guildTag = it.uppercase() }, label = { Text("Tag") }, singleLine = true, modifier = Modifier.weight(1f))
+                            }
+                            OutlinedTextField(value = guildDesc, onValueChange = { if (it.length <= 120) guildDesc = it }, label = { Text("Motto") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                            Button(
+                                enabled = guildName.isNotBlank() && guildTag.isNotBlank(),
+                                onClick = {
+                                    onCreateGuild(guildName.trim(), guildTag.trim(), guildDesc.ifBlank { "Tactical Dominance" })
+                                    guildName = ""; guildTag = ""; guildDesc = ""; showCreateForm = false
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = HealthGreen),
+                                modifier = Modifier.fillMaxWidth().testTag("confirm_create_guild_button")
+                            ) {
+                                Text("FOUND GUILD IN CLOUD", color = Color.Black, fontWeight = FontWeight.Black, fontSize = 11.sp)
+                            }
+                        }
+                    }
+                }
+            }
+
+            LazyColumn(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                if (guilds.isEmpty()) {
+                    item {
+                        Box(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(TacticalSurface).padding(12.dp)) {
+                            Text("No cloud guilds found yet. Found your own guild above!", color = TextSecondary, fontSize = 11.sp)
+                        }
+                    }
+                } else {
+                    items(guilds, key = { it.id }) { guild ->
+                        val isMember = currentUid != null && currentUid in guild.memberUids
+                        Card(shape = RoundedCornerShape(10.dp), colors = CardDefaults.cardColors(containerColor = TacticalSurface)) {
+                            Row(modifier = Modifier.fillMaxWidth().padding(10.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text("[${guild.tag}] ${guild.name}", color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                    Text("Lv.${guild.level} • ${guild.memberUids.size} Members • ${guild.description}", color = TextSecondary, fontSize = 9.sp, maxLines = 1)
+                                }
+                                Button(
+                                    enabled = !isMember,
+                                    onClick = { onJoinGuild(guild) },
+                                    colors = ButtonDefaults.buttonColors(containerColor = if (isMember) TacticalSurfaceVariant else ElectricBlueSafe),
+                                    modifier = Modifier.height(30.dp)
+                                ) {
+                                    Text(if (isMember) "JOINED" else "JOIN", color = if (isMember) HealthGreen else Color.Black, fontSize = 9.sp, fontWeight = FontWeight.Black)
+                                }
+                            }
+                        }
                     }
                 }
             }
         }
-        // Highlight current operative rank
-        val p = profile ?: UserProfileEntity()
+
+        // Right: Live Cloud Guild Chat
+        Card(
+            modifier = Modifier.weight(0.9f).fillMaxHeight(),
+            shape = RoundedCornerShape(12.dp),
+            colors = CardDefaults.cardColors(containerColor = TacticalSurface)
+        ) {
+            Column(modifier = Modifier.fillMaxSize().padding(12.dp)) {
+                Text(
+                    if (activeGuild != null) "LIVE GUILD CHANNEL • [${activeGuild.tag}]" else "JOIN A GUILD FOR LIVE CLOUD CHAT",
+                    color = ElectricBlueSafe,
+                    fontWeight = FontWeight.Black,
+                    fontSize = 11.sp
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                LazyColumn(
+                    modifier = Modifier.weight(1f).fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(Color.Black.copy(alpha = 0.35f)).padding(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    items(guildMessages, key = { it.id }) { m ->
+                        val isSelf = m.senderUid == currentUid
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(if (isSelf) CyberOrange.copy(alpha = 0.16f) else TacticalSurfaceVariant)
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
+                            Text(m.senderName, color = if (isSelf) CyberOrange else ElectricBlueSafe, fontWeight = FontWeight.Bold, fontSize = 9.sp)
+                            Text(m.text, color = TextPrimary, fontSize = 11.sp)
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    OutlinedTextField(
+                        value = msgDraft,
+                        onValueChange = { msgDraft = it },
+                        enabled = activeGuild != null,
+                        placeholder = { Text(if (activeGuild != null) "Message guild..." else "Join guild first", fontSize = 11.sp) },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Button(
+                        enabled = activeGuild != null && msgDraft.isNotBlank(),
+                        onClick = {
+                            if (activeGuild != null && msgDraft.isNotBlank()) {
+                                onSendGuildMessage(activeGuild, msgDraft)
+                                msgDraft = ""
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = CyberOrange),
+                        modifier = Modifier.height(48.dp)
+                    ) {
+                        Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send Guild Msg", tint = Color.Black, modifier = Modifier.size(18.dp))
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun RoomsAndTournamentTabContent(
+    publicRooms: List<CloudMatchRoom>,
+    currentUid: String?,
+    isTournamentRegistered: Boolean,
+    onCreatePublicRoom: (title: String, mode: String, map: String) -> Unit,
+    onJoinRoom: (CloudMatchRoom) -> Unit,
+    onRegisterTournament: () -> Unit
+) {
+    var newRoomTitle by remember { mutableStateOf("") }
+
+    Row(modifier = Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        // Public Cloud Match Rooms Browser
+        Column(modifier = Modifier.weight(1.1f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                OutlinedTextField(
+                    value = newRoomTitle,
+                    onValueChange = { if (it.length <= 36) newRoomTitle = it },
+                    placeholder = { Text("Host Public Match Room Title...", fontSize = 11.sp) },
+                    singleLine = true,
+                    modifier = Modifier.weight(1f)
+                )
+                Button(
+                    onClick = {
+                        onCreatePublicRoom(newRoomTitle.ifBlank { "Season 54 Custom Squads" }, "CLASSIC_BR", "kavala_island")
+                        newRoomTitle = ""
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = CyberOrange),
+                    modifier = Modifier.height(48.dp).testTag("host_public_room_button")
+                ) {
+                    Icon(Icons.Default.Public, contentDescription = "Host Room", tint = Color.Black, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("HOST", color = Color.Black, fontWeight = FontWeight.Black, fontSize = 10.sp)
+                }
+            }
+
+            LazyColumn(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                if (publicRooms.isEmpty()) {
+                    item {
+                        Box(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(TacticalSurface).padding(14.dp)) {
+                            Text("No public rooms active right now. Tap HOST to create one!", color = TextSecondary, fontSize = 11.sp)
+                        }
+                    }
+                } else {
+                    items(publicRooms, key = { it.id }) { room ->
+                        val joined = currentUid != null && currentUid in room.memberUids
+                        Card(shape = RoundedCornerShape(10.dp), colors = CardDefaults.cardColors(containerColor = TacticalSurface)) {
+                            Row(modifier = Modifier.fillMaxWidth().padding(10.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text("${room.title} [#${room.roomCode}]", color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                    Text("${room.gameMode} • ${room.mapId} • ${room.memberUids.size}/${room.maxPlayers} Joined", color = ElectricBlueSafe, fontSize = 9.sp)
+                                }
+                                Button(
+                                    enabled = !joined,
+                                    onClick = { onJoinRoom(room) },
+                                    colors = ButtonDefaults.buttonColors(containerColor = if (joined) TacticalSurfaceVariant else HealthGreen),
+                                    modifier = Modifier.height(32.dp)
+                                ) {
+                                    Text(if (joined) "JOINED ✓" else "JOIN", color = if (joined) HealthGreen else Color.Black, fontSize = 9.sp, fontWeight = FontWeight.Black)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Season 54 Tournament Bracket Panel
+        Card(
+            modifier = Modifier.weight(0.9f).fillMaxHeight(),
+            shape = RoundedCornerShape(12.dp),
+            colors = CardDefaults.cardColors(containerColor = TacticalSurface),
+            border = androidx.compose.foundation.BorderStroke(1.dp, HazardYellow.copy(alpha = 0.6f))
+        ) {
+            Column(modifier = Modifier.fillMaxSize().padding(14.dp), verticalArrangement = Arrangement.SpaceBetween) {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.EmojiEvents, contentDescription = "Tournament", tint = HazardYellow, modifier = Modifier.size(20.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("SEASON 54 VORTEX CUP", color = HazardYellow, fontWeight = FontWeight.Black, fontSize = 13.sp)
+                    }
+                    Text("PRIZE POOL: 5,000 VC + MYTHIC CHAMPION TITLE", color = CyberOrange, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    Box(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(TacticalDarkBg).padding(10.dp)) {
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text("QUARTERFINALS: Team Apex vs Shadow Squad", color = TextPrimary, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                            Text("SEMIFINALS: Vortex Elite vs Nova Strikers", color = ElectricBlueSafe, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                            Text("GRAND FINALS: Best-of-3 Classic BR (Kavala)", color = HealthGreen, fontSize = 10.sp, fontWeight = FontWeight.Black)
+                        }
+                    }
+                }
+                Button(
+                    enabled = !isTournamentRegistered,
+                    onClick = onRegisterTournament,
+                    colors = ButtonDefaults.buttonColors(containerColor = if (isTournamentRegistered) TacticalSurfaceVariant else HazardYellow),
+                    modifier = Modifier.fillMaxWidth().testTag("register_tournament_button")
+                ) {
+                    Text(
+                        if (isTournamentRegistered) "REGISTERED FOR QUALIFIERS ✓" else "ENTER SEASON 54 QUALIFIERS",
+                        color = if (isTournamentRegistered) HealthGreen else Color.Black,
+                        fontWeight = FontWeight.Black,
+                        fontSize = 11.sp
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun LeaderboardTabContent(
+    profile: UserProfileEntity?,
+    cloudProfile: CloudUserProfile?,
+    cloudLeaderboard: List<CloudLeaderboardEntry>
+) {
+    Column(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text("SEASON 54 GLOBAL RANKINGS (SERVER VERIFIED)", color = CyberOrange, fontWeight = FontWeight.Black, fontSize = 11.sp)
+        if (cloudLeaderboard.isEmpty()) {
+            Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                Text("Play ranked matches while signed in to populate the live Season 54 leaderboard.", color = TextSecondary, fontSize = 12.sp)
+            }
+        } else {
+            LazyColumn(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                items(cloudLeaderboard.size) { index ->
+                    val entry = cloudLeaderboard[index]
+                    val rank = index + 1
+                    Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(10.dp), colors = CardDefaults.cardColors(containerColor = TacticalSurface)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(12.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    "#$rank",
+                                    color = when (rank) {
+                                        1 -> HazardYellow
+                                        2 -> Color(0xFFECEFF1)
+                                        3 -> Color(0xFFFFB74D)
+                                        else -> TextSecondary
+                                    },
+                                    fontWeight = FontWeight.Black,
+                                    fontSize = 14.sp
+                                )
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Column {
+                                    Text(entry.username, color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                    Text("${entry.rankTier} • ${entry.rankPoints} RP • ${entry.wins} Wins", color = CyberOrange, fontSize = 10.sp)
+                                }
+                            }
+                            Text("Lv.${entry.level} • ${entry.kills} Kills", color = ElectricBlueSafe, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                        }
+                    }
+                }
+            }
+        }
+
+        val uname = cloudProfile?.username ?: profile?.username ?: "Operative"
+        val rTier = cloudProfile?.rankTier ?: profile?.rankTier ?: "Bronze I"
+        val rPts = cloudProfile?.rankPoints?.toInt() ?: profile?.rankPoints ?: 1000
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -1077,45 +1316,60 @@ private fun LeaderboardTabContent(profile: UserProfileEntity?) {
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text("YOUR STANDING • ${p.username}", color = CyberOrange, fontWeight = FontWeight.Black, fontSize = 12.sp)
-            Text("${p.rankTier} • ${p.rankPoints} RP", color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+            Text("YOUR STANDING • $uname", color = CyberOrange, fontWeight = FontWeight.Black, fontSize = 12.sp)
+            Text("$rTier • $rPts RP", color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 12.sp)
         }
     }
 }
 
 @Composable
-private fun HistoryTabContent(history: List<MatchHistoryEntity>) {
-    if (history.isEmpty()) {
+private fun HistoryTabContent(
+    localHistory: List<MatchHistoryEntity>,
+    cloudMatches: List<CloudMatchRecord>
+) {
+    if (cloudMatches.isEmpty() && localHistory.isEmpty()) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Text("No matches played yet. Start a match to record career stats!", color = TextSecondary, fontSize = 12.sp)
         }
     } else {
         LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            items(history) { match ->
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(10.dp),
-                    colors = CardDefaults.cardColors(containerColor = TacticalSurface)
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(12.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column {
-                            Text(
-                                if (match.isVictory) "VICTORY ROYALE (#1)" else "#${match.placement} / ${match.totalPlayers}",
-                                color = if (match.isVictory) HazardYellow else TextPrimary,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 13.sp
-                            )
-                            Text("${match.gameMode} • ${match.mapName}", color = TextSecondary, fontSize = 10.sp)
+            if (cloudMatches.isNotEmpty()) {
+                items(cloudMatches, key = { "cloud_${it.id}" }) { match ->
+                    Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(10.dp), colors = CardDefaults.cardColors(containerColor = TacticalSurface)) {
+                        Row(modifier = Modifier.fillMaxWidth().padding(12.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                            Column {
+                                Text(
+                                    if (match.isVictory) "VICTORY ROYALE (#1) [CLOUD]" else "#${match.placement} / ${match.totalPlayers} [CLOUD]",
+                                    color = if (match.isVictory) HazardYellow else TextPrimary,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 13.sp
+                                )
+                                Text("${match.gameMode} • ${match.mapName}", color = TextSecondary, fontSize = 10.sp)
+                            }
+                            Column(horizontalAlignment = Alignment.End) {
+                                Text("${match.kills}K • ${match.assists}A • ${match.damage.toInt()} DMG", color = CyberOrange, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                                Text("${match.rankPointsDelta} RP • +${match.bpEarned} BP", color = HealthGreen, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                            }
                         }
-                        Column(horizontalAlignment = Alignment.End) {
-                            Text("${match.kills} KILLS • ${match.damage.toInt()} DMG", color = CyberOrange, fontWeight = FontWeight.Bold, fontSize = 11.sp)
-                            Text("${match.rankPointsDelta} RP • +${match.bpEarned} BP", color = HealthGreen, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+            } else {
+                items(localHistory) { match ->
+                    Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(10.dp), colors = CardDefaults.cardColors(containerColor = TacticalSurface)) {
+                        Row(modifier = Modifier.fillMaxWidth().padding(12.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                            Column {
+                                Text(
+                                    if (match.isVictory) "VICTORY ROYALE (#1)" else "#${match.placement} / ${match.totalPlayers}",
+                                    color = if (match.isVictory) HazardYellow else TextPrimary,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 13.sp
+                                )
+                                Text("${match.gameMode} • ${match.mapName}", color = TextSecondary, fontSize = 10.sp)
+                            }
+                            Column(horizontalAlignment = Alignment.End) {
+                                Text("${match.kills} KILLS • ${match.damage.toInt()} DMG", color = CyberOrange, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                                Text("${match.rankPointsDelta} RP • +${match.bpEarned} BP", color = HealthGreen, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                            }
                         }
                     }
                 }
@@ -1148,24 +1402,15 @@ private fun PrivateRoomDialog(
                 .testTag("private_room_dialog")
         ) {
             Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                     Text("CREATE PRIVATE CUSTOM ROOM", color = CyberOrange, fontWeight = FontWeight.Black, fontSize = 15.sp)
                     IconButton(onClick = onDismiss, modifier = Modifier.size(32.dp)) {
                         Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.White)
                     }
                 }
 
-                // Room Code Box
                 Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(Color.Black.copy(alpha = 0.45f))
-                        .padding(12.dp),
+                    modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(Color.Black.copy(alpha = 0.45f)).padding(12.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -1174,30 +1419,21 @@ private fun PrivateRoomDialog(
                         Text(roomCode, color = HazardYellow, fontWeight = FontWeight.Black, fontSize = 22.sp, letterSpacing = 3.sp)
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        OutlinedButton(onClick = {
-                            clipboard.setText(AnnotatedString(roomCode))
-                            copied = true
-                        }) {
+                        OutlinedButton(onClick = { clipboard.setText(AnnotatedString(roomCode)); copied = true }) {
                             Text(if (copied) "COPIED" else "COPY", color = ElectricBlueSafe, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                         }
-                        IconButton(onClick = {
-                            copied = false
-                            onRegenerateCode()
-                        }) {
+                        IconButton(onClick = { copied = false; onRegenerateCode() }) {
                             Icon(Icons.Default.Refresh, contentDescription = "Regenerate Room Code", tint = CyberOrange)
                         }
                     }
                 }
 
-                // Mode selector
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     listOf("SOLO (100P)", "DUO (100P)", "SQUAD (100P)").forEach { mode ->
                         val active = mode == selectedMode
                         Button(
                             onClick = { onSelectMode(mode) },
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = if (active) CyberOrange else TacticalSurfaceVariant
-                            ),
+                            colors = ButtonDefaults.buttonColors(containerColor = if (active) CyberOrange else TacticalSurfaceVariant),
                             modifier = Modifier.weight(1f),
                             contentPadding = PaddingValues(vertical = 6.dp)
                         ) {
@@ -1206,15 +1442,12 @@ private fun PrivateRoomDialog(
                     }
                 }
 
-                // Map selector
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     listOf("Kavala Island", "Sahara Dunes", "Frostbite Ridge").forEach { mapName ->
                         val active = mapName == selectedMap
                         Button(
                             onClick = { onSelectMap(mapName) },
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = if (active) ElectricBlueSafe else TacticalSurfaceVariant
-                            ),
+                            colors = ButtonDefaults.buttonColors(containerColor = if (active) ElectricBlueSafe else TacticalSurfaceVariant),
                             modifier = Modifier.weight(1f),
                             contentPadding = PaddingValues(vertical = 6.dp)
                         ) {
@@ -1237,6 +1470,4 @@ private fun PrivateRoomDialog(
     }
 }
 
-private fun generateRoomCode(): String {
-    return (100000 + Random.nextInt(900000)).toString()
-}
+private fun generateRoomCode(): String = (100000 + Random.nextInt(900000)).toString()

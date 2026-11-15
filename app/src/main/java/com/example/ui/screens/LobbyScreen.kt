@@ -34,15 +34,21 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Assignment
 import androidx.compose.material.icons.filled.AdminPanelSettings
-import androidx.compose.material.icons.filled.Assignment
 import androidx.compose.material.icons.filled.CardGiftcard
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.ColorLens
 import androidx.compose.material.icons.filled.Diamond
+import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.Map
@@ -54,6 +60,7 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.ShoppingBag
 import androidx.compose.material.icons.filled.SportsKabaddi
 import androidx.compose.material.icons.filled.Stars
+import androidx.compose.material.icons.filled.SupportAgent
 import androidx.compose.material.icons.filled.Whatshot
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -91,7 +98,11 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.example.R
 import com.example.data.UserProfileEntity
+import com.example.data.cloud.CloudAnnouncement
+import com.example.data.cloud.CloudMailMessage
+import com.example.game.model.EmotePreset
 import com.example.game.model.GameModeType
+import com.example.game.model.WeatherType
 import com.example.ui.theme.AirdropGold
 import com.example.ui.theme.CyberOrange
 import com.example.ui.theme.ElectricBlueSafe
@@ -117,6 +128,12 @@ fun LobbyScreen(
     onSelectMode: (GameModeType) -> Unit,
     selectedTeamSize: Int = 4,
     onSelectTeamSize: (Int) -> Unit = {},
+    selectedWeather: WeatherType = WeatherType.CLEAR,
+    onSelectWeather: (WeatherType) -> Unit = {},
+    announcements: List<CloudAnnouncement> = emptyList(),
+    mailList: List<CloudMailMessage> = emptyList(),
+    onClaimMail: (CloudMailMessage) -> Unit = {},
+    onSubmitSupportTicket: (subject: String, message: String) -> Unit = { _, _ -> },
     onStartMatch: () -> Unit,
     onNavigateToBattlePass: () -> Unit,
     onNavigateToShop: () -> Unit,
@@ -133,6 +150,14 @@ fun LobbyScreen(
     var showMapSelectionDialog by remember { mutableStateOf(false) }
     var showDailyRewardToast by remember { mutableStateOf(false) }
     var showMissionsDialog by remember { mutableStateOf(false) }
+    var showMailboxDialog by remember { mutableStateOf(false) }
+    var showNewsDialog by remember { mutableStateOf(false) }
+    var showSupportDialog by remember { mutableStateOf(false) }
+    var supportSubject by remember { mutableStateOf("") }
+    var supportMessage by remember { mutableStateOf("") }
+    var selectedEmote by remember { mutableStateOf(EmotePreset.SALUTE) }
+    var soldierYaw by remember { mutableStateOf(0f) }
+    var inviteToast by remember { mutableStateOf(false) }
     var selectedMissionTab by remember { mutableIntStateOf(0) }
     val scope = androidx.compose.runtime.rememberCoroutineScope()
     val missions: List<MissionEntity> by (repository?.missions ?: kotlinx.coroutines.flow.flowOf(emptyList<MissionEntity>())).collectAsState(initial = emptyList<MissionEntity>())
@@ -282,56 +307,74 @@ fun LobbyScreen(
                 )
             }
 
-            // Standing Soldier Render
+            // Standing Soldier Render (Drag to Rotate 3D Stage Showcase)
             Image(
                 painter = painterResource(id = R.drawable.vortex_hero_soldier_1794458613075),
                 contentDescription = "Futuristic Special Forces Soldier",
                 modifier = Modifier
                     .fillMaxHeight(0.92f)
                     .scale(soldierScale)
-                    .clickable { onPlayEmote() },
+                    .graphicsLayer { rotationY = soldierYaw }
+                    .pointerInput(Unit) {
+                        detectHorizontalDragGestures { change, dragAmount ->
+                            change.consume()
+                            soldierYaw = ((soldierYaw + dragAmount * 0.25f) % 360f)
+                        }
+                    }
+                    .clickable {
+                        val entries = EmotePreset.entries
+                        selectedEmote = entries[(selectedEmote.ordinal + 1) % entries.size]
+                        onPlayEmote()
+                    },
                 contentScale = ContentScale.Fit
             )
 
             // Companion Pet Orbiting Badge next to Soldier (tap to customize pet)
-            Row(
-                modifier = Modifier
-                    .offset(x = 128.dp, y = (-72).dp)
-                    .clip(RoundedCornerShape(14.dp))
-                    .background(TacticalSurface.copy(alpha = 0.90f))
-                    .border(1.5.dp, petGlow, RoundedCornerShape(14.dp))
-                    .clickable { onNavigateToCustomization() }
-                    .padding(horizontal = 10.dp, vertical = 6.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Box(
+            if (profile.petVisible) {
+                Row(
                     modifier = Modifier
-                        .size(22.dp)
-                        .clip(CircleShape)
-                        .background(Color(activePet.bodyRgb.first, activePet.bodyRgb.second, activePet.bodyRgb.third))
-                        .border(1.5.dp, petGlow, CircleShape)
-                )
-                Spacer(modifier = Modifier.width(6.dp))
-                Column {
-                    Text("${activePet.displayName} • Lv.${profile.petLevel}", color = petGlow, fontSize = 9.sp, fontWeight = FontWeight.Black)
-                    Text("${activePreset.displayName} Active", color = TextSecondary, fontSize = 8.sp)
+                        .offset(x = 128.dp, y = (-72).dp)
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(TacticalSurface.copy(alpha = 0.90f))
+                        .border(1.5.dp, petGlow, RoundedCornerShape(14.dp))
+                        .clickable { onNavigateToCustomization() }
+                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(22.dp)
+                            .clip(CircleShape)
+                            .background(Color(activePet.bodyRgb.first, activePet.bodyRgb.second, activePet.bodyRgb.third))
+                            .border(1.5.dp, petGlow, CircleShape)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Column {
+                        Text("${activePet.displayName} • Lv.${profile.petLevel}", color = petGlow, fontSize = 9.sp, fontWeight = FontWeight.Black)
+                        Text("${activePreset.displayName} Active", color = TextSecondary, fontSize = 8.sp)
+                    }
                 }
             }
 
-            // Quick Emote Trigger Pill
+            // Quick Emote Trigger Pill (Cycles & Plays Emotes)
             Row(
                 modifier = Modifier
                     .offset(y = (-45).dp)
                     .clip(RoundedCornerShape(16.dp))
                     .background(TacticalSurface.copy(alpha = 0.85f))
                     .border(1.dp, currentTheme.accentColor, RoundedCornerShape(16.dp))
-                    .clickable { onPlayEmote() }
-                    .padding(horizontal = 12.dp, vertical = 5.dp),
+                    .clickable {
+                        val entries = EmotePreset.entries
+                        selectedEmote = entries[(selectedEmote.ordinal + 1) % entries.size]
+                        onPlayEmote()
+                    }
+                    .padding(horizontal = 12.dp, vertical = 5.dp)
+                    .testTag("lobby_emote_pill"),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Icon(Icons.Default.SportsKabaddi, contentDescription = "Emote", tint = currentTheme.accentColor, modifier = Modifier.size(14.dp))
                 Spacer(modifier = Modifier.width(6.dp))
-                Text("EMOTE: SALUTE", color = TextPrimary, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                Text("EMOTE: ${selectedEmote.label.uppercase()}", color = TextPrimary, fontSize = 10.sp, fontWeight = FontWeight.Bold)
             }
         }
 
@@ -371,7 +414,7 @@ fun LobbyScreen(
                         Text("LVL ${profile.level}", color = HazardYellow, fontWeight = FontWeight.Bold, fontSize = 10.sp)
                     }
                     Text(
-                        text = "${profile.rankTier} • 4,120 RP",
+                        text = "${profile.rankTier} • ${profile.rankPoints} RP",
                         color = currentTheme.accentColor,
                         fontSize = 10.sp,
                         fontWeight = FontWeight.SemiBold
@@ -379,7 +422,7 @@ fun LobbyScreen(
                 }
             }
 
-            // TOP-RIGHT: Currencies, Notifications, Admin & Settings
+            // TOP-RIGHT: Currencies, Mail, Support, Notifications, Themes, Admin & Settings
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -402,7 +445,46 @@ fun LobbyScreen(
                     onClick = onNavigateToShop
                 )
 
-                // Notification Bell
+                // Mailbox Button
+                val unreadMail = mailList.count { !it.isRead && !it.rewardClaimed }
+                Box {
+                    IconButton(
+                        onClick = { showMailboxDialog = true },
+                        modifier = Modifier
+                            .size(34.dp)
+                            .clip(CircleShape)
+                            .background(TacticalSurface.copy(alpha = 0.85f))
+                            .testTag("mailbox_button")
+                    ) {
+                        Icon(Icons.Default.Email, contentDescription = "Mailbox", tint = if (unreadMail > 0) HazardYellow else TextPrimary, modifier = Modifier.size(18.dp))
+                    }
+                    if (unreadMail > 0) {
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.TopEnd)
+                                .size(13.dp)
+                                .clip(CircleShape)
+                                .background(CyberOrange),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text("$unreadMail", color = Color.Black, fontSize = 8.sp, fontWeight = FontWeight.Black)
+                        }
+                    }
+                }
+
+                // Customer Support Button
+                IconButton(
+                    onClick = { showSupportDialog = true },
+                    modifier = Modifier
+                        .size(34.dp)
+                        .clip(CircleShape)
+                        .background(TacticalSurface.copy(alpha = 0.85f))
+                        .testTag("support_button")
+                ) {
+                    Icon(Icons.Default.SupportAgent, contentDescription = "Customer Support", tint = ElectricBlueSafe, modifier = Modifier.size(18.dp))
+                }
+
+                // Notification / Daily Reward Bell
                 IconButton(
                     onClick = { showDailyRewardToast = true },
                     modifier = Modifier
@@ -465,8 +547,8 @@ fun LobbyScreen(
             verticalArrangement = Arrangement.spacedBy(4.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            SidebarNavIcon("EVENTS", Icons.Default.Whatshot, onClick = { showDailyRewardToast = true }, color = CyberOrange)
-            SidebarNavIcon("MISSIONS", Icons.Default.Assignment, onClick = { showMissionsDialog = true }, color = HazardYellow)
+            SidebarNavIcon("EVENTS", Icons.Default.Whatshot, onClick = { showNewsDialog = true }, color = CyberOrange)
+            SidebarNavIcon("MISSIONS", Icons.AutoMirrored.Filled.Assignment, onClick = { showMissionsDialog = true }, color = HazardYellow)
             SidebarNavIcon("ARMORY", Icons.Default.Security, onClick = onNavigateToCustomization, color = ElectricBlueSafe)
             SidebarNavIcon("STORE", Icons.Default.ShoppingBag, onClick = onNavigateToShop, color = AirdropGold)
             SidebarNavIcon("CLAN", Icons.Default.EmojiEvents, onClick = onNavigateToSocial, color = Color(0xFFE040FB))
@@ -539,26 +621,45 @@ fun LobbyScreen(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.Bottom
         ) {
-            // Current Theme Watermark Tag
-            Row(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(TacticalSurface.copy(alpha = 0.75f))
-                    .clickable { showThemeDialog = true }
-                    .padding(horizontal = 10.dp, vertical = 6.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(Icons.Default.ColorLens, contentDescription = "Theme", tint = currentTheme.accentColor, modifier = Modifier.size(14.dp))
-                Spacer(modifier = Modifier.width(6.dp))
-                Text(currentTheme.title.uppercase(), color = TextPrimary, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+            // Bottom-Left: Theme & Weather Switcher Capsules
+            Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                Row(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(TacticalSurface.copy(alpha = 0.82f))
+                        .border(1.dp, ElectricBlueSafe.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
+                        .clickable {
+                            val entries = WeatherType.entries
+                            onSelectWeather(entries[(selectedWeather.ordinal + 1) % entries.size])
+                        }
+                        .padding(horizontal = 10.dp, vertical = 5.dp)
+                        .testTag("weather_cycle_button"),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Default.Cloud, contentDescription = "Weather", tint = ElectricBlueSafe, modifier = Modifier.size(14.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("WEATHER: ${selectedWeather.displayName.uppercase()}", color = ElectricBlueSafe, fontSize = 9.sp, fontWeight = FontWeight.Black)
+                }
+
+                Row(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(TacticalSurface.copy(alpha = 0.75f))
+                        .clickable { showThemeDialog = true }
+                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Default.ColorLens, contentDescription = "Theme", tint = currentTheme.accentColor, modifier = Modifier.size(14.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(currentTheme.title.uppercase(), color = TextPrimary, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                }
             }
 
-            // BOTTOM-CENTER: Team Mode (SOLO, DUO, SQUAD) & Map
+            // BOTTOM-CENTER: Team Mode (SOLO, DUO, SQUAD), Invite Squad & Map
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                // SOLO | DUO | SQUAD Pills & TPP/FPP Toggle
                 Row(
                     modifier = Modifier
                         .clip(RoundedCornerShape(20.dp))
@@ -579,6 +680,19 @@ fun LobbyScreen(
                             .padding(horizontal = 8.dp, vertical = 4.dp)
                     ) {
                         Text(if (isTpp) "TPP" else "FPP", color = if (isTpp) CyberOrange else TextSecondary, fontSize = 9.sp, fontWeight = FontWeight.Black)
+                    }
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(HealthGreen.copy(alpha = 0.22f))
+                            .clickable {
+                                inviteToast = true
+                                onNavigateToSocial()
+                            }
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                    ) {
+                        Text("+ INVITE", color = HealthGreen, fontSize = 9.sp, fontWeight = FontWeight.Black)
                     }
                 }
 
@@ -1003,6 +1117,198 @@ fun LobbyScreen(
                                 }
                             }
                         }
+                    }
+                }
+            }
+        }
+    }
+
+    // MAILBOX DIALOG
+    if (showMailboxDialog) {
+        Dialog(onDismissRequest = { showMailboxDialog = false }) {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth(0.9f)
+                    .fillMaxHeight(0.8f)
+                    .testTag("mailbox_dialog"),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = TacticalDarkBg),
+                border = androidx.compose.foundation.BorderStroke(2.dp, ElectricBlueSafe)
+            ) {
+                Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("OPERATIVE MAILBOX", color = ElectricBlueSafe, fontWeight = FontWeight.Black, fontSize = 15.sp)
+                        IconButton(onClick = { showMailboxDialog = false }) {
+                            Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.White)
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    if (mailList.isEmpty()) {
+                        Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                            Text("No dispatches in inbox yet.", color = TextSecondary, fontSize = 12.sp)
+                        }
+                    } else {
+                        LazyColumn(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            items(mailList, key = { it.id }) { mail ->
+                                Card(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    colors = CardDefaults.cardColors(containerColor = TacticalSurface),
+                                    shape = RoundedCornerShape(10.dp)
+                                ) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth().padding(12.dp),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(mail.title, color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                            Text("From: ${mail.sender}", color = ElectricBlueSafe, fontSize = 10.sp)
+                                            Spacer(modifier = Modifier.height(4.dp))
+                                            Text(mail.body, color = TextSecondary, fontSize = 11.sp)
+                                            if (mail.rewardBp > 0L) {
+                                                Spacer(modifier = Modifier.height(4.dp))
+                                                Text("+${mail.rewardBp} BP Supply Attachment", color = HazardYellow, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                            }
+                                        }
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        if (mail.rewardClaimed) {
+                                            Text("CLAIMED ✓", color = HealthGreen, fontWeight = FontWeight.Black, fontSize = 10.sp)
+                                        } else {
+                                            Button(
+                                                onClick = { onClaimMail(mail) },
+                                                colors = ButtonDefaults.buttonColors(containerColor = CyberOrange),
+                                                modifier = Modifier.height(34.dp).testTag("claim_mail_${mail.id}")
+                                            ) {
+                                                Text(if (mail.rewardBp > 0L) "CLAIM" else "MARK READ", color = Color.Black, fontWeight = FontWeight.Black, fontSize = 10.sp)
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // EVENTS & PATCH NOTES DIALOG
+    if (showNewsDialog) {
+        Dialog(onDismissRequest = { showNewsDialog = false }) {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth(0.9f)
+                    .fillMaxHeight(0.8f)
+                    .testTag("news_dialog"),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = TacticalDarkBg),
+                border = androidx.compose.foundation.BorderStroke(2.dp, CyberOrange)
+            ) {
+                Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("SEASON 54 EVENTS & PATCH NOTES", color = CyberOrange, fontWeight = FontWeight.Black, fontSize = 15.sp)
+                        IconButton(onClick = { showNewsDialog = false }) {
+                            Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.White)
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    LazyColumn(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        if (announcements.isEmpty()) {
+                            item {
+                                Card(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    colors = CardDefaults.cardColors(containerColor = TacticalSurface),
+                                    shape = RoundedCornerShape(10.dp)
+                                ) {
+                                    Column(modifier = Modifier.padding(12.dp)) {
+                                        Text("PATCH 54.0 • WEATHER & REVIVE UPDATE", color = HazardYellow, fontWeight = FontWeight.Black, fontSize = 13.sp)
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Text(
+                                            "• Dynamic Weather presets (Clear, Sunset Dusk, Heavy Fog, Monsoon Rain).\n• Squadmate knockdown & 3.0s revive mechanics live across Duo & Squad modes.\n• Interactive HUD Layout Studio added in Settings.",
+                                            color = TextPrimary,
+                                            fontSize = 11.sp
+                                        )
+                                    }
+                                }
+                            }
+                        } else {
+                            items(announcements, key = { it.id }) { ann ->
+                                Card(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    colors = CardDefaults.cardColors(containerColor = TacticalSurface),
+                                    shape = RoundedCornerShape(10.dp)
+                                ) {
+                                    Column(modifier = Modifier.padding(12.dp)) {
+                                        Text("[${ann.severity}] ${ann.title}", color = HazardYellow, fontWeight = FontWeight.Black, fontSize = 13.sp)
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Text(ann.message, color = TextPrimary, fontSize = 11.sp)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // CUSTOMER SUPPORT DIALOG
+    if (showSupportDialog) {
+        Dialog(onDismissRequest = { showSupportDialog = false }) {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth(0.86f)
+                    .testTag("support_dialog"),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = TacticalDarkBg),
+                border = androidx.compose.foundation.BorderStroke(2.dp, HealthGreen)
+            ) {
+                Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("PLAYER SUPPORT DESK", color = HealthGreen, fontWeight = FontWeight.Black, fontSize = 15.sp)
+                        IconButton(onClick = { showSupportDialog = false }) {
+                            Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.White)
+                        }
+                    }
+                    OutlinedTextField(
+                        value = supportSubject,
+                        onValueChange = { if (it.length <= 80) supportSubject = it },
+                        label = { Text("Subject") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth().testTag("support_subject_input")
+                    )
+                    OutlinedTextField(
+                        value = supportMessage,
+                        onValueChange = { if (it.length <= 400) supportMessage = it },
+                        label = { Text("Describe issue or feedback") },
+                        minLines = 3,
+                        maxLines = 4,
+                        modifier = Modifier.fillMaxWidth().testTag("support_message_input")
+                    )
+                    Button(
+                        enabled = supportSubject.isNotBlank() && supportMessage.isNotBlank(),
+                        onClick = {
+                            onSubmitSupportTicket(supportSubject.trim(), supportMessage.trim())
+                            supportSubject = ""
+                            supportMessage = ""
+                            showSupportDialog = false
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = HealthGreen),
+                        modifier = Modifier.fillMaxWidth().testTag("submit_support_button")
+                    ) {
+                        Text("SUBMIT SUPPORT TICKET", color = Color.Black, fontWeight = FontWeight.Black)
                     }
                 }
             }

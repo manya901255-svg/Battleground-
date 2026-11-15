@@ -55,7 +55,12 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.activity.compose.BackHandler
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import com.example.data.GameRepository
+import com.example.data.cloud.CloudGameRepository
+import com.example.game.model.EmotePreset
 import com.example.ui.theme.CyberOrange
 import com.example.ui.theme.ElectricBlueSafe
 import com.example.ui.theme.HazardYellow
@@ -72,17 +77,21 @@ import kotlinx.coroutines.launch
 @Composable
 fun CustomizationScreen(
     repository: GameRepository,
+    cloudRepository: CloudGameRepository? = null,
     onBack: () -> Unit
 ) {
+    BackHandler { onBack() }
+
     val items by repository.inventory.collectAsState(initial = emptyList())
     val profile by repository.userProfile.collectAsState(initial = null)
     val scope = rememberCoroutineScope()
     var selectedCategory by remember { mutableIntStateOf(0) }
+    var genderFilter by remember { androidx.compose.runtime.mutableStateOf("ALL") }
     var inspectingItem by remember { androidx.compose.runtime.mutableStateOf<com.example.data.InventoryItemEntity?>(null) }
 
-    val categories = listOf("CHARACTER", "PET", "WEAPON_SKIN", "OUTFIT", "HELMET", "BACKPACK", "VEHICLE")
+    val categories = listOf("CHARACTER", "PET", "WEAPON_SKIN", "OUTFIT", "HELMET", "BACKPACK", "VEHICLE", "EMOTES")
 
-    val filteredItems = if (selectedCategory <= 1) emptyList() else items.filter { it.type == categories[selectedCategory] }
+    val filteredItems = if (selectedCategory <= 1 || selectedCategory == 7) emptyList() else items.filter { it.type == categories[selectedCategory] }
 
     Column(
         modifier = Modifier
@@ -117,39 +126,83 @@ fun CustomizationScreen(
             containerColor = TacticalSurface,
             contentColor = CyberOrange
         ) {
-            Tab(selected = selectedCategory == 0, onClick = { selectedCategory = 0 }, text = { Text("CHARACTERS", fontSize = 10.sp, fontWeight = FontWeight.Bold) })
-            Tab(selected = selectedCategory == 1, onClick = { selectedCategory = 1 }, text = { Text("PETS", fontSize = 10.sp, fontWeight = FontWeight.Bold) })
-            Tab(selected = selectedCategory == 2, onClick = { selectedCategory = 2 }, text = { Text("GUNS", fontSize = 10.sp, fontWeight = FontWeight.Bold) })
-            Tab(selected = selectedCategory == 3, onClick = { selectedCategory = 3 }, text = { Text("SUITS", fontSize = 10.sp, fontWeight = FontWeight.Bold) })
-            Tab(selected = selectedCategory == 4, onClick = { selectedCategory = 4 }, text = { Text("HELMETS", fontSize = 10.sp, fontWeight = FontWeight.Bold) })
-            Tab(selected = selectedCategory == 5, onClick = { selectedCategory = 5 }, text = { Text("PACKS", fontSize = 10.sp, fontWeight = FontWeight.Bold) })
-            Tab(selected = selectedCategory == 6, onClick = { selectedCategory = 6 }, text = { Text("VEHICLES", fontSize = 10.sp, fontWeight = FontWeight.Bold) })
+            Tab(selected = selectedCategory == 0, onClick = { selectedCategory = 0 }, text = { Text("CHARACTERS", fontSize = 9.sp, fontWeight = FontWeight.Bold) })
+            Tab(selected = selectedCategory == 1, onClick = { selectedCategory = 1 }, text = { Text("PETS", fontSize = 9.sp, fontWeight = FontWeight.Bold) })
+            Tab(selected = selectedCategory == 2, onClick = { selectedCategory = 2 }, text = { Text("GUNS", fontSize = 9.sp, fontWeight = FontWeight.Bold) })
+            Tab(selected = selectedCategory == 3, onClick = { selectedCategory = 3 }, text = { Text("SUITS", fontSize = 9.sp, fontWeight = FontWeight.Bold) })
+            Tab(selected = selectedCategory == 4, onClick = { selectedCategory = 4 }, text = { Text("HELMETS", fontSize = 9.sp, fontWeight = FontWeight.Bold) })
+            Tab(selected = selectedCategory == 5, onClick = { selectedCategory = 5 }, text = { Text("PACKS", fontSize = 9.sp, fontWeight = FontWeight.Bold) })
+            Tab(selected = selectedCategory == 6, onClick = { selectedCategory = 6 }, text = { Text("VEHICLES", fontSize = 9.sp, fontWeight = FontWeight.Bold) })
+            Tab(selected = selectedCategory == 7, onClick = { selectedCategory = 7 }, text = { Text("EMOTES", fontSize = 9.sp, fontWeight = FontWeight.Bold) })
         }
 
-        Spacer(modifier = Modifier.height(14.dp))
+        Spacer(modifier = Modifier.height(10.dp))
 
         if (selectedCategory == 0) {
             val activePresetId = profile?.selectedCharacterId ?: "vortex_ghost"
+            val voiceEnabled = profile?.voiceCalloutsEnabled ?: true
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf("ALL", "MALE", "FEMALE").forEach { g ->
+                        val active = genderFilter == g
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(if (active) CyberOrange else TacticalSurface)
+                                .clickable { genderFilter = g }
+                                .padding(horizontal = 12.dp, vertical = 6.dp)
+                        ) {
+                            Text(g, color = if (active) Color.Black else TextPrimary, fontSize = 10.sp, fontWeight = FontWeight.Black)
+                        }
+                    }
+                }
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("Voice Callouts", color = TextSecondary, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    Switch(
+                        checked = voiceEnabled,
+                        onCheckedChange = { enabled ->
+                            scope.launch { repository.updateVoiceCallouts(enabled) }
+                        },
+                        colors = SwitchDefaults.colors(checkedThumbColor = CyberOrange)
+                    )
+                }
+            }
+            val visiblePresets = com.example.game.model.CharacterPreset.entries.filter {
+                genderFilter == "ALL" || it.gender.equals(genderFilter, ignoreCase = true)
+            }
             LazyVerticalGrid(
                 columns = GridCells.Fixed(3),
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
                 modifier = Modifier.fillMaxSize()
             ) {
-                items(com.example.game.model.CharacterPreset.entries) { preset ->
+                items(visiblePresets) { preset ->
                     val isSelected = preset.id == activePresetId
                     val accentColor = Color(preset.accentRgb.first, preset.accentRgb.second, preset.accentRgb.third)
                     val armorColor = Color(preset.armorRgb.first, preset.armorRgb.second, preset.armorRgb.third)
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable { scope.launch { repository.updateSelectedCharacter(preset.id) } }
+                            .clickable {
+                                scope.launch {
+                                    repository.updateSelectedCharacter(preset.id)
+                                    cloudRepository?.updateLoadoutSelection(
+                                        characterId = preset.id,
+                                        petId = profile?.selectedPetId ?: "draco_flame",
+                                        petVisible = profile?.petVisible ?: true
+                                    )
+                                }
+                            }
                             .testTag("select_character_${preset.id}"),
                         shape = RoundedCornerShape(12.dp),
                         colors = CardDefaults.cardColors(containerColor = TacticalSurface),
                         border = if (isSelected) androidx.compose.foundation.BorderStroke(2.dp, CyberOrange) else null
                     ) {
-                        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -159,14 +212,23 @@ fun CustomizationScreen(
                                     Box(modifier = Modifier.size(16.dp).clip(RoundedCornerShape(4.dp)).background(armorColor).border(1.dp, Color.White, RoundedCornerShape(4.dp)))
                                     Box(modifier = Modifier.size(16.dp).clip(RoundedCornerShape(4.dp)).background(accentColor).border(1.dp, Color.White, RoundedCornerShape(4.dp)))
                                 }
-                                if (isSelected) {
-                                    Text("ACTIVE", color = HealthGreen, fontSize = 9.sp, fontWeight = FontWeight.Black)
-                                }
+                                Text("${preset.gender.uppercase()} ${if (isSelected) "• ACTIVE" else ""}", color = if (isSelected) HealthGreen else TextSecondary, fontSize = 8.sp, fontWeight = FontWeight.Black)
                             }
                             Text(preset.displayName, color = TextPrimary, fontWeight = FontWeight.Black, fontSize = 13.sp)
-                            Text(preset.roleTitle, color = TextSecondary, fontSize = 10.sp)
+                            Text(preset.roleTitle, color = TextSecondary, fontSize = 9.sp)
+                            Text("ACTIVE: ${preset.activeSkillName} — ${preset.activeSkillDesc}", color = ElectricBlueSafe, fontSize = 8.sp, maxLines = 2)
+                            Text("PASSIVE: ${preset.passiveSkillName} — ${preset.passiveSkillDesc}", color = HazardYellow, fontSize = 8.sp, maxLines = 2)
                             Button(
-                                onClick = { scope.launch { repository.updateSelectedCharacter(preset.id) } },
+                                onClick = {
+                                    scope.launch {
+                                        repository.updateSelectedCharacter(preset.id)
+                                        cloudRepository?.updateLoadoutSelection(
+                                            characterId = preset.id,
+                                            petId = profile?.selectedPetId ?: "draco_flame",
+                                            petVisible = profile?.petVisible ?: true
+                                        )
+                                    }
+                                },
                                 colors = ButtonDefaults.buttonColors(containerColor = if (isSelected) Color.DarkGray else CyberOrange),
                                 modifier = Modifier.fillMaxWidth().height(32.dp)
                             ) {
@@ -182,61 +244,145 @@ fun CustomizationScreen(
                 }
             }
         } else if (selectedCategory == 1) {
+            val activePresetId = profile?.selectedCharacterId ?: "vortex_ghost"
             val activePetId = profile?.selectedPetId ?: "draco_flame"
             val petLvl = profile?.petLevel ?: 3
+            val petVis = profile?.petVisible ?: true
+            Column(modifier = Modifier.fillMaxSize()) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("Show Companion in Match & Lobby", color = TextPrimary, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        Switch(
+                            checked = petVis,
+                            onCheckedChange = { vis ->
+                                scope.launch {
+                                    repository.updatePetVisibility(vis)
+                                    cloudRepository?.updateLoadoutSelection(
+                                        characterId = activePresetId,
+                                        petId = activePetId,
+                                        petVisible = vis
+                                    )
+                                }
+                            },
+                            colors = SwitchDefaults.colors(checkedThumbColor = HazardYellow)
+                        )
+                    }
+                    Button(
+                        enabled = petLvl < 10,
+                        onClick = {
+                            scope.launch {
+                                repository.upgradePetLevelLocal()
+                                cloudRepository?.upgradePetLevel()
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = HealthGreen),
+                        modifier = Modifier.height(32.dp).testTag("upgrade_pet_button")
+                    ) {
+                        Text(
+                            text = if (petLvl >= 10) "PET MAX LV.10" else "UPGRADE PET (${petLvl * 600} BP)",
+                            color = Color.Black,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Black
+                        )
+                    }
+                }
+                LazyVerticalGrid(
+                    columns = GridCells.Fixed(2),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    items(com.example.game.model.PetPreset.entries) { pet ->
+                        val isSelected = pet.id == activePetId
+                        val glowCol = Color(pet.glowRgb.first, pet.glowRgb.second, pet.glowRgb.third)
+                        val bodyCol = Color(pet.bodyRgb.first, pet.bodyRgb.second, pet.bodyRgb.third)
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    scope.launch {
+                                        repository.updateSelectedPet(pet.id)
+                                        cloudRepository?.updateLoadoutSelection(
+                                            characterId = activePresetId,
+                                            petId = pet.id,
+                                            petVisible = petVis
+                                        )
+                                    }
+                                }
+                                .testTag("select_pet_${pet.id}"),
+                            shape = RoundedCornerShape(14.dp),
+                            colors = CardDefaults.cardColors(containerColor = TacticalSurface),
+                            border = if (isSelected) androidx.compose.foundation.BorderStroke(2.dp, HazardYellow) else null
+                        ) {
+                            Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(26.dp)
+                                                .clip(androidx.compose.foundation.shape.CircleShape)
+                                                .background(bodyCol)
+                                                .border(2.dp, glowCol, androidx.compose.foundation.shape.CircleShape)
+                                        )
+                                        Text("${pet.displayName} (Lv.$petLvl)", color = TextPrimary, fontWeight = FontWeight.Black, fontSize = 14.sp)
+                                    }
+                                    if (isSelected) {
+                                        Text("EQUIPPED", color = HazardYellow, fontSize = 10.sp, fontWeight = FontWeight.Black)
+                                    }
+                                }
+                                Text("SKILL: ${pet.skillTitle}", color = glowCol, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                Text(pet.skillDesc, color = TextSecondary, fontSize = 10.sp)
+                                Button(
+                                    onClick = {
+                                        scope.launch {
+                                            repository.updateSelectedPet(pet.id)
+                                            cloudRepository?.updateLoadoutSelection(
+                                                characterId = activePresetId,
+                                                petId = pet.id,
+                                                petVisible = petVis
+                                            )
+                                        }
+                                    },
+                                    colors = ButtonDefaults.buttonColors(containerColor = if (isSelected) Color.DarkGray else HazardYellow),
+                                    modifier = Modifier.fillMaxWidth().height(34.dp)
+                                ) {
+                                    Text(
+                                        text = if (isSelected) "COMPANION ACTIVE ✓" else "EQUIP PET",
+                                        color = if (isSelected) Color.White else Color.Black,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Black
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        } else if (selectedCategory == 7) {
             LazyVerticalGrid(
-                columns = GridCells.Fixed(2),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
+                columns = GridCells.Fixed(3),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
                 modifier = Modifier.fillMaxSize()
             ) {
-                items(com.example.game.model.PetPreset.entries) { pet ->
-                    val isSelected = pet.id == activePetId
-                    val glowCol = Color(pet.glowRgb.first, pet.glowRgb.second, pet.glowRgb.third)
-                    val bodyCol = Color(pet.bodyRgb.first, pet.bodyRgb.second, pet.bodyRgb.third)
+                items(EmotePreset.entries) { emote ->
                     Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { scope.launch { repository.updateSelectedPet(pet.id) } }
-                            .testTag("select_pet_${pet.id}"),
-                        shape = RoundedCornerShape(14.dp),
+                        shape = RoundedCornerShape(12.dp),
                         colors = CardDefaults.cardColors(containerColor = TacticalSurface),
-                        border = if (isSelected) androidx.compose.foundation.BorderStroke(2.dp, HazardYellow) else null
+                        border = androidx.compose.foundation.BorderStroke(1.dp, HazardYellow.copy(alpha = 0.5f))
                     ) {
-                        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(26.dp)
-                                            .clip(androidx.compose.foundation.shape.CircleShape)
-                                            .background(bodyCol)
-                                            .border(2.dp, glowCol, androidx.compose.foundation.shape.CircleShape)
-                                    )
-                                    Text("${pet.displayName} (Lv.$petLvl)", color = TextPrimary, fontWeight = FontWeight.Black, fontSize = 14.sp)
-                                }
-                                if (isSelected) {
-                                    Text("EQUIPPED", color = HazardYellow, fontSize = 10.sp, fontWeight = FontWeight.Black)
-                                }
-                            }
-                            Text("SKILL: ${pet.skillTitle}", color = glowCol, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                            Text(pet.skillDesc, color = TextSecondary, fontSize = 10.sp)
-                            Button(
-                                onClick = { scope.launch { repository.updateSelectedPet(pet.id) } },
-                                colors = ButtonDefaults.buttonColors(containerColor = if (isSelected) Color.DarkGray else HazardYellow),
-                                modifier = Modifier.fillMaxWidth().height(34.dp)
-                            ) {
-                                Text(
-                                    text = if (isSelected) "COMPANION ACTIVE ✓" else "EQUIP PET",
-                                    color = if (isSelected) Color.White else Color.Black,
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Black
-                                )
-                            }
+                        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text("${emote.badge} ${emote.label.uppercase()}", color = HazardYellow, fontWeight = FontWeight.Black, fontSize = 13.sp)
+                            Text("Slot ID: ${emote.id} • Instant Combat Trigger", color = TextPrimary, fontSize = 10.sp)
+                            Text("Equipped in Emote Wheel", color = HealthGreen, fontSize = 9.sp, fontWeight = FontWeight.Bold)
                         }
                     }
                 }

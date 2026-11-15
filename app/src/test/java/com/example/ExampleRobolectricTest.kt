@@ -155,7 +155,7 @@ class ExampleRobolectricTest {
     }
 
     @Test
-    fun `test daily reward cooldown, crate balance, and username update`() = kotlinx.coroutines.runBlocking {
+    fun `test daily reward cooldown, direct bundle purchase with duplicate guard, and username update`() = kotlinx.coroutines.runBlocking {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val repository = com.example.data.GameRepository.create(context)
         repository.initializeDefaultDataIfEmpty()
@@ -171,10 +171,22 @@ class ExampleRobolectricTest {
         val updatedName = repository.userProfile.first()?.username
         assertEquals("ShadowReaper", updatedName)
 
-        // Opening a BP crate succeeds with default BP balance (18500 + 1500 >= 1000)
-        val crateItem = repository.openLootCrate(useCredits = false)
-        assertNotNull(crateItem)
-        assertTrue(crateItem!!.isOwned)
+        // Direct cosmetic bundle purchase succeeds and prevents duplicate purchase
+        val bundle = com.example.data.InventoryItemEntity(
+            id = "para_matrix_test",
+            name = "Matrix Neon Parachute",
+            type = "PARACHUTE",
+            targetItemId = "parachute",
+            rarity = "EPIC",
+            priceBp = 6500
+        )
+        val bpBefore = repository.userProfile.first()?.bpCoins ?: 0
+        val firstBuy = repository.purchaseShopItem(bundle, useCredits = false)
+        assertTrue(firstBuy)
+        val bpAfter = repository.userProfile.first()?.bpCoins ?: 0
+        assertEquals(bpBefore - 6500, bpAfter)
+        val duplicateBuy = repository.purchaseShopItem(bundle, useCredits = false)
+        assertFalse(duplicateBuy)
 
         // Character preset and graphics quality persist
         repository.updateSelectedCharacter("cyber_viper")
@@ -332,5 +344,82 @@ class ExampleRobolectricTest {
         )
         pupEngine.activateRadarScan()
         assertEquals(8.5f, pupEngine.engineState.value.radarScanActiveSec, 0.1f)
+    }
+
+    @Test
+    fun `test weather preset, emote trigger, drop weapon slot, and squad revive`() {
+        val trainingEngine = BattleRoyaleEngine(
+            gameMode = GameModeType.TRAINING_GROUND,
+            mapConfig = MapCatalog.getKavalaIsland(),
+            soundSynthesizer = null,
+            teamSize = 1,
+            weatherType = com.example.game.model.WeatherType.DENSE_FOG,
+            onMatchFinished = { _, _, _, _ -> }
+        )
+        assertEquals(1, trainingEngine.players.size)
+        assertEquals(com.example.game.model.WeatherType.DENSE_FOG, trainingEngine.engineState.value.weatherType)
+
+        val engine = BattleRoyaleEngine(
+            gameMode = GameModeType.CLASSIC_BR,
+            mapConfig = MapCatalog.getKavalaIsland(),
+            soundSynthesizer = null,
+            teamSize = 4,
+            weatherType = com.example.game.model.WeatherType.NIGHT_OPS,
+            petVisible = false,
+            onMatchFinished = { _, _, _, _ -> }
+        )
+
+        assertEquals(com.example.game.model.WeatherType.NIGHT_OPS, engine.engineState.value.weatherType)
+        assertFalse(engine.engineState.value.petVisible)
+
+        // Emote trigger updates state banner
+        engine.triggerEmote(com.example.game.model.EmotePreset.VICTORY_DANCE)
+        assertTrue(engine.engineState.value.activeEmoteText?.contains("Booyah") == true)
+
+        // Drop weapon slot spawns ground loot
+        engine.userPlayer.primaryWeapon1 = WeaponCatalog.createM416()
+        val lootBefore = engine.groundLoot.size
+        engine.dropWeaponSlot(1)
+        assertEquals(null, engine.userPlayer.primaryWeapon1)
+        assertEquals(lootBefore + 1, engine.groundLoot.size)
+
+        // Knocked nearby teammate can be targeted by startRevive & cancelled cleanly
+        val ally = engine.players.first { !it.isUser && it.teamId == engine.userPlayer.teamId }
+        ally.x = engine.userPlayer.x + 20f
+        ally.y = engine.userPlayer.y + 10f
+        ally.isKnocked = true
+        ally.health = 25f
+        engine.startRevive()
+        engine.cancelRevive()
+    }
+
+    @Test
+    fun `test hud layout codec, pet upgrade, and claim all eligible missions`() = kotlinx.coroutines.runBlocking {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val repository = com.example.data.GameRepository.create(context)
+        repository.initializeDefaultDataIfEmpty()
+
+        // HUD Layout Codec round-trip and persistence
+        val defaultMap = com.example.ui.screens.HudLayoutCodec.defaultMap().toMutableMap()
+        defaultMap["FIRE"] = defaultMap["FIRE"]!!.copy(offsetX = 0.12f, offsetY = -0.08f, scale = 1.25f, opacity = 0.80f)
+        val json = com.example.ui.screens.HudLayoutCodec.serialize(defaultMap)
+        repository.saveHudLayout(2, json)
+        val savedSettings = repository.settings.first()
+        assertEquals(2, savedSettings?.hudLayoutPreset)
+        val parsed = com.example.ui.screens.HudLayoutCodec.parse(savedSettings?.hudLayoutJson ?: "")
+        assertEquals(1.25f, parsed["FIRE"]?.scale ?: 0f, 0.01f)
+        assertEquals(0.12f, parsed["FIRE"]?.offsetX ?: 0f, 0.01f)
+
+        // Weather preference and pet upgrade
+        repository.updateSelectedWeather(com.example.game.model.WeatherType.SUNSET_STORM.name)
+        assertEquals("SUNSET_STORM", repository.settings.first()?.selectedWeather)
+        val petLvlBefore = repository.userProfile.first()?.petLevel ?: 1
+        val nextLvl = repository.upgradePetLevelLocal()
+        assertEquals(petLvlBefore + 1, nextLvl)
+
+        // Completing a match advances d_1 and claimAllEligibleMissions claims it atomically
+        repository.recordMatchFinished("Classic BR", "Kavala", 1, 5, 650f, 400)
+        val claimedCount = repository.claimAllEligibleMissions()
+        assertTrue(claimedCount >= 1)
     }
 }

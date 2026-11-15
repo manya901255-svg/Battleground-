@@ -330,10 +330,31 @@ enum class BotDifficulty(val label: String, val accuracyJitterDeg: Float, val fi
     VETERAN("Veteran", 4f, 300L, 1.18f)
 }
 
+enum class WeatherType(val id: String, val displayName: String) {
+    CLEAR("CLEAR", "Clear Daylight"),
+    SUNSET_STORM("SUNSET_STORM", "Sunset Storm"),
+    DENSE_FOG("DENSE_FOG", "Tactical Fog"),
+    NIGHT_OPS("NIGHT_OPS", "Night Ops")
+}
+
+enum class EmotePreset(val id: String, val label: String, val badge: String) {
+    SALUTE("salute", "Tactical Salute", "🫡"),
+    VICTORY_DANCE("victory", "Booyah Groove", "🏆"),
+    RESPECT("respect", "Operative Honor", "🤝"),
+    SHIELD_FLEX("flex", "Titan Flex", "🛡️"),
+    SCAN_PING("scan", "Radar Lock", "📡"),
+    CHAMPION_ROAR("roar", "Apex Battle Cry", "🔥")
+}
+
 enum class CharacterPreset(
     val id: String,
     val displayName: String,
+    val gender: String,
     val roleTitle: String,
+    val activeSkillName: String,
+    val activeSkillDesc: String,
+    val passiveSkillName: String,
+    val passiveSkillDesc: String,
     val armorRgb: Triple<Float, Float, Float>,
     val accentRgb: Triple<Float, Float, Float>,
     val visorRgb: Triple<Float, Float, Float>
@@ -341,15 +362,38 @@ enum class CharacterPreset(
     VORTEX_GHOST(
         id = "vortex_ghost",
         displayName = "Vortex Ghost",
+        gender = "Male",
         roleTitle = "Tactical Assault",
+        activeSkillName = "Overdrive Dash",
+        activeSkillDesc = "+32% sprint burst for 5s",
+        passiveSkillName = "Tactical Steady",
+        passiveSkillDesc = "-10% weapon recoil dispersion",
         armorRgb = Triple(0.18f, 0.22f, 0.28f),
         accentRgb = Triple(1.0f, 0.48f, 0.0f),
         visorRgb = Triple(1.0f, 0.84f, 0.0f)
     ),
+    NOVA_VALKYRIE(
+        id = "nova_valkyrie",
+        displayName = "Nova Valkyrie",
+        gender = "Female",
+        roleTitle = "Combat Medic",
+        activeSkillName = "Bio-Nano Pulse",
+        activeSkillDesc = "Restores +20 HP & +45 EP immediately",
+        passiveSkillName = "Buzzer Beater",
+        passiveSkillDesc = "Recovers +15 HP after eliminating an enemy",
+        armorRgb = Triple(0.26f, 0.14f, 0.34f),
+        accentRgb = Triple(0.96f, 0.32f, 0.72f),
+        visorRgb = Triple(0.35f, 1.0f, 0.90f)
+    ),
     BLAZE_STRIKER(
         id = "blaze_striker",
         displayName = "Blaze Striker",
+        gender = "Male",
         roleTitle = "Frontline Breacher",
+        activeSkillName = "Thermal Surge",
+        activeSkillDesc = "+15% SMG & Shotgun close-range punch",
+        passiveSkillName = "Armor Forged",
+        passiveSkillDesc = "+10 Max Tactical Shield",
         armorRgb = Triple(0.22f, 0.14f, 0.16f),
         accentRgb = Triple(0.95f, 0.16f, 0.22f),
         visorRgb = Triple(1.0f, 0.65f, 0.1f)
@@ -357,7 +401,12 @@ enum class CharacterPreset(
     CYBER_VIPER(
         id = "cyber_viper",
         displayName = "Cyber Viper",
+        gender = "Female",
         roleTitle = "Neon Recon",
+        activeSkillName = "Spectre Scan",
+        activeSkillDesc = "Reveals nearby hostiles on minimap",
+        passiveSkillName = "Silent Step",
+        passiveSkillDesc = "+8% crouch & flank agility",
         armorRgb = Triple(0.12f, 0.18f, 0.28f),
         accentRgb = Triple(0.0f, 0.85f, 1.0f),
         visorRgb = Triple(0.0f, 1.0f, 0.65f)
@@ -365,15 +414,38 @@ enum class CharacterPreset(
     FROST_RECON(
         id = "frost_recon",
         displayName = "Frost Recon",
+        gender = "Male",
         roleTitle = "Arctic Marksman",
+        activeSkillName = "Ballistic Lock",
+        activeSkillDesc = "Stabilizes 4x/8x sniper sway",
+        passiveSkillName = "Cold Blooded",
+        passiveSkillDesc = "+12% headshot critical multiplier",
         armorRgb = Triple(0.75f, 0.82f, 0.88f),
         accentRgb = Triple(0.20f, 0.60f, 0.95f),
         visorRgb = Triple(0.45f, 0.92f, 1.0f)
     ),
+    SERAPH_ECHO(
+        id = "seraph_echo",
+        displayName = "Seraph Echo",
+        gender = "Female",
+        roleTitle = "Aegis Defender",
+        activeSkillName = "Aegis Barrier",
+        activeSkillDesc = "Deploys reinforced directional cover",
+        passiveSkillName = "Fast Hands",
+        passiveSkillDesc = "+12% faster reload speed",
+        armorRgb = Triple(0.84f, 0.86f, 0.90f),
+        accentRgb = Triple(1.0f, 0.72f, 0.18f),
+        visorRgb = Triple(0.25f, 0.85f, 1.0f)
+    ),
     APEX_TITAN(
         id = "apex_titan",
         displayName = "Apex Titan",
+        gender = "Male",
         roleTitle = "Heavy Enforcer",
+        activeSkillName = "Gloo Bastion",
+        activeSkillDesc = "Hardens shield durability by 20%",
+        passiveSkillName = "Deep Pockets",
+        passiveSkillDesc = "+25% backpack supply capacity",
         armorRgb = Triple(0.16f, 0.16f, 0.18f),
         accentRgb = Triple(1.0f, 0.78f, 0.12f),
         visorRgb = Triple(1.0f, 0.35f, 0.1f)
@@ -514,6 +586,7 @@ data class Player(
     var isReloading: Boolean = false,
     var reloadTimerSec: Float = 0f,
     var kills: Int = 0,
+    var assists: Int = 0,
     var damageDealt: Float = 0f,
     var vehicleId: String? = null,
     var isDriver: Boolean = false,
@@ -570,10 +643,14 @@ data class RedZoneState(
 )
 
 enum class GameModeType(val title: String, val subtitle: String, val maxPlayers: Int) {
-    CLASSIC_BR("Classic Battle Royale", "100 Players • Survival to the end", 100),
+    CLASSIC_BR("Classic Battle Royale", "100 Players • Solo / Duo / Squad survival", 100),
+    RANKED_BR("Ranked Battle Royale", "Season 54 • Competitive RP survival", 100),
+    CLASH_SQUAD("Clash Squad 4v4", "Fast round-based tactical 4v4 arena", 8),
+    RANKED_CLASH_SQUAD("Ranked Clash Squad", "Competitive 4v4 squad elimination", 8),
     OFFLINE_PRACTICE("Offline Practice", "Bot Skirmish • Easy/Tactical/Veteran AI", 24),
     TEAM_DEATHMATCH("Team Deathmatch", "Warehouse 4v4 • First to 40 Kills", 8),
     SNIPER_TRAINING("Sniper Training", "Bolt-Action Only • Long-range precision", 20),
+    LIMITED_TIME_BLITZ("Blitz Hot-Drop (LTM)", "Ultra-fast shrinking zones & high-tier drops", 32),
     ZOMBIE_SURVIVAL("Zombie Outbreak", "Survive infected hordes & mutant bosses", 16),
     TRAINING_GROUND("Training Simulator", "Target ranges, recoil lab & vehicle tracks", 1),
     CUSTOM_ROOM("Custom Match Room", "Host tournament matches with custom configs", 100)

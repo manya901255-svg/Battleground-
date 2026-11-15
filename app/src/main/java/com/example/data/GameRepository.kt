@@ -3,7 +3,6 @@ package com.example.data
 import android.content.Context
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.firstOrNull
-import kotlin.random.Random
 
 class GameRepository(private val dao: VortexDao) {
 
@@ -42,7 +41,7 @@ class GameRepository(private val dao: VortexDao) {
         if (tiers.isNullOrEmpty()) {
             val bpTiers = (1..50).map { t ->
                 val freeReward = when {
-                    t % 5 == 0 -> "Vortex Crate"
+                    t % 5 == 0 -> "500 BP Supply Pack"
                     t % 2 == 0 -> "300 BP Coins"
                     else -> "50 XP"
                 }
@@ -209,6 +208,9 @@ class GameRepository(private val dao: VortexDao) {
     }
 
     suspend fun purchaseShopItem(item: InventoryItemEntity, useCredits: Boolean): Boolean {
+        val existingOwned = dao.getAllInventoryItems().any { it.id == item.id && it.isOwned }
+        if (existingOwned) return false
+
         val profile = dao.getUserProfileOnce() ?: return false
         if (useCredits) {
             if (profile.vortexCredits >= item.priceCredits && item.priceCredits > 0) {
@@ -226,30 +228,15 @@ class GameRepository(private val dao: VortexDao) {
         return false
     }
 
-    suspend fun openLootCrate(useCredits: Boolean = false): InventoryItemEntity? {
-        val profile = dao.getUserProfileOnce() ?: UserProfileEntity()
-        if (useCredits) {
-            if (profile.vortexCredits < 120) return null
-            dao.insertOrUpdateProfile(profile.copy(vortexCredits = profile.vortexCredits - 120))
-        } else {
-            if (profile.bpCoins < 1000) return null
-            dao.insertOrUpdateProfile(profile.copy(bpCoins = profile.bpCoins - 1000))
+    suspend fun claimAllEligibleMissions(): Int {
+        val missions = dao.getMissions().firstOrNull() ?: emptyList()
+        var claimed = 0
+        missions.forEach { m ->
+            if (!m.isClaimed && m.currentProgress >= m.targetCount) {
+                if (claimMissionReward(m.id)) claimed++
+            }
         }
-
-        val allItems = dao.getAllInventoryItems()
-        val roll = Random.nextFloat() * 100f
-        val targetRarity = when {
-            roll < 0.5f -> "MYTHIC"
-            roll < 4.0f -> "LEGENDARY"
-            roll < 20.0f -> "EPIC"
-            else -> "RARE"
-        }
-        val pool = allItems.filter { it.rarity == targetRarity }
-        val chosen = (if (pool.isNotEmpty()) pool.random() else allItems.randomOrNull())
-            ?: InventoryItemEntity("skin_awm_${Random.nextInt()}", "AWM - Tactical Viper", "WEAPON_SKIN", "awm", targetRarity, isOwned = true)
-        val owned = chosen.copy(isOwned = true)
-        dao.insertInventoryItems(listOf(owned))
-        return owned
+        return claimed
     }
 
     suspend fun claimDailyReward(): Boolean {
@@ -305,6 +292,41 @@ class GameRepository(private val dao: VortexDao) {
     suspend fun updateSelectedPet(petId: String) {
         val profile = dao.getUserProfileOnce() ?: UserProfileEntity()
         dao.insertOrUpdateProfile(profile.copy(selectedPetId = petId))
+    }
+
+    suspend fun updatePetVisibility(visible: Boolean) {
+        val profile = dao.getUserProfileOnce() ?: UserProfileEntity()
+        dao.insertOrUpdateProfile(profile.copy(petVisible = visible))
+    }
+
+    suspend fun updateVoiceCallouts(enabled: Boolean) {
+        val profile = dao.getUserProfileOnce() ?: UserProfileEntity()
+        dao.insertOrUpdateProfile(profile.copy(voiceCalloutsEnabled = enabled))
+    }
+
+    suspend fun upgradePetLevelLocal(): Int {
+        val profile = dao.getUserProfileOnce() ?: return 1
+        if (profile.petLevel >= 10) return profile.petLevel
+        val cost = profile.petLevel * 600
+        if (profile.bpCoins < cost) return profile.petLevel
+        val next = profile.petLevel + 1
+        dao.insertOrUpdateProfile(profile.copy(bpCoins = profile.bpCoins - cost, petLevel = next))
+        return next
+    }
+
+    suspend fun saveHudLayout(presetId: Int, layoutJson: String) {
+        val current = dao.getSettings().firstOrNull() ?: GameSettingsEntity()
+        dao.insertSettings(current.copy(hudLayoutPreset = presetId, hudLayoutJson = layoutJson))
+    }
+
+    suspend fun resetHudLayout(presetId: Int) {
+        val current = dao.getSettings().firstOrNull() ?: GameSettingsEntity()
+        dao.insertSettings(current.copy(hudLayoutPreset = presetId, hudLayoutJson = ""))
+    }
+
+    suspend fun updateSelectedWeather(weatherId: String) {
+        val current = dao.getSettings().firstOrNull() ?: GameSettingsEntity()
+        dao.insertSettings(current.copy(selectedWeather = weatherId))
     }
 
     suspend fun updateSignatureBio(bio: String) {

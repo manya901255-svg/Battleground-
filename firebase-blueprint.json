@@ -1,0 +1,295 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Authenticated player profile, wallet balances, rank progression, and active character/pet loadout.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "Firebase Auth UID" },
+        "username": { "type": "string", "description": "Display callsign (3-20 chars)" },
+        "bio": { "type": "string", "description": "Profile signature bio" },
+        "avatarId": { "type": "string" },
+        "level": { "type": "integer" },
+        "xp": { "type": "integer" },
+        "maxXp": { "type": "integer" },
+        "bpCoins": { "type": "integer" },
+        "vortexCredits": { "type": "integer" },
+        "rankTier": { "type": "string" },
+        "rankPoints": { "type": "integer" },
+        "matchesPlayed": { "type": "integer" },
+        "wins": { "type": "integer" },
+        "kills": { "type": "integer" },
+        "deaths": { "type": "integer" },
+        "headshots": { "type": "integer" },
+        "assists": { "type": "integer" },
+        "title": { "type": "string" },
+        "selectedCharacterId": { "type": "string" },
+        "selectedPetId": { "type": "string" },
+        "petLevel": { "type": "integer" },
+        "petVisible": { "type": "boolean" },
+        "likesCount": { "type": "integer" },
+        "seasonId": { "type": "string" },
+        "guildId": { "type": "string" },
+        "isBanned": { "type": "boolean" },
+        "lastDailyClaimMs": { "type": "integer" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "username", "bpCoins", "vortexCredits", "rankPoints", "createdAt"]
+    },
+    "InventoryItem": {
+      "title": "InventoryItem",
+      "description": "Owned cosmetic, character unlock, skill upgrade, or pet item.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "type": { "type": "string" },
+        "targetItemId": { "type": "string" },
+        "rarity": { "type": "string" },
+        "isEquipped": { "type": "boolean" },
+        "level": { "type": "integer" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "type", "targetItemId", "rarity", "isEquipped", "createdAt"]
+    },
+    "MissionRecord": {
+      "title": "MissionRecord",
+      "description": "Verified player mission progress and claim state.",
+      "type": "object",
+      "properties": {
+        "category": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "targetType": { "type": "string" },
+        "targetCount": { "type": "integer" },
+        "currentProgress": { "type": "integer" },
+        "rewardBp": { "type": "integer" },
+        "rewardCredits": { "type": "integer" },
+        "rewardXp": { "type": "integer" },
+        "isClaimed": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["category", "title", "targetType", "targetCount", "currentProgress", "isClaimed", "createdAt"]
+    },
+    "TransactionRecord": {
+      "title": "TransactionRecord",
+      "description": "Immutable economy transaction audit log.",
+      "type": "object",
+      "properties": {
+        "txType": { "type": "string" },
+        "itemId": { "type": "string" },
+        "itemName": { "type": "string" },
+        "bpDelta": { "type": "integer" },
+        "creditsDelta": { "type": "integer" },
+        "status": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["txType", "itemId", "itemName", "bpDelta", "creditsDelta", "status", "createdAt"]
+    },
+    "MatchRecord": {
+      "title": "MatchRecord",
+      "description": "Immutable completed match performance record.",
+      "type": "object",
+      "properties": {
+        "gameMode": { "type": "string" },
+        "mapName": { "type": "string" },
+        "placement": { "type": "integer" },
+        "totalPlayers": { "type": "integer" },
+        "kills": { "type": "integer" },
+        "assists": { "type": "integer" },
+        "damage": { "type": "number" },
+        "survivalTimeSec": { "type": "integer" },
+        "rankPointsDelta": { "type": "integer" },
+        "bpEarned": { "type": "integer" },
+        "xpEarned": { "type": "integer" },
+        "isVictory": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["gameMode", "mapName", "placement", "kills", "damage", "isVictory", "createdAt"]
+    },
+    "MailMessage": {
+      "title": "MailMessage",
+      "description": "Player mailbox item and claimable event reward notice.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "body": { "type": "string" },
+        "sender": { "type": "string" },
+        "isRead": { "type": "boolean" },
+        "rewardBp": { "type": "integer" },
+        "rewardClaimed": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "body", "sender", "isRead", "rewardBp", "rewardClaimed", "createdAt"]
+    },
+    "LeaderboardEntry": {
+      "title": "LeaderboardEntry",
+      "description": "Public competitive ranking entry without PII.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "username": { "type": "string" },
+        "rankTier": { "type": "string" },
+        "rankPoints": { "type": "integer" },
+        "wins": { "type": "integer" },
+        "kills": { "type": "integer" },
+        "level": { "type": "integer" },
+        "region": { "type": "string" },
+        "seasonId": { "type": "string" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "username", "rankTier", "rankPoints", "region", "seasonId", "updatedAt"]
+    },
+    "MatchRoom": {
+      "title": "MatchRoom",
+      "description": "Synced multiplayer matchmaking or custom room lobby.",
+      "type": "object",
+      "properties": {
+        "roomCode": { "type": "string" },
+        "hostUid": { "type": "string" },
+        "title": { "type": "string" },
+        "gameMode": { "type": "string" },
+        "mapId": { "type": "string" },
+        "teamSize": { "type": "integer" },
+        "maxPlayers": { "type": "integer" },
+        "memberUids": { "type": "array" },
+        "status": { "type": "string" },
+        "isPrivate": { "type": "boolean" },
+        "region": { "type": "string" },
+        "weather": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["roomCode", "hostUid", "title", "gameMode", "mapId", "status", "isPrivate", "memberUids", "createdAt"]
+    },
+    "Guild": {
+      "title": "Guild",
+      "description": "Player clan / guild with level, XP, and member roster.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "tag": { "type": "string" },
+        "leaderUid": { "type": "string" },
+        "level": { "type": "integer" },
+        "xp": { "type": "integer" },
+        "memberUids": { "type": "array" },
+        "description": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "tag", "leaderUid", "level", "memberUids", "createdAt"]
+    },
+    "GuildMessage": {
+      "title": "GuildMessage",
+      "description": "Real-time clan chat message.",
+      "type": "object",
+      "properties": {
+        "senderUid": { "type": "string" },
+        "senderName": { "type": "string" },
+        "text": { "type": "string" },
+        "memberUids": { "type": "array" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["senderUid", "senderName", "text", "memberUids", "createdAt"]
+    },
+    "SupportTicket": {
+      "title": "SupportTicket",
+      "description": "Player customer support or bug report submission.",
+      "type": "object",
+      "properties": {
+        "reporterUid": { "type": "string" },
+        "category": { "type": "string" },
+        "subject": { "type": "string" },
+        "description": { "type": "string" },
+        "status": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["reporterUid", "category", "subject", "description", "status", "createdAt"]
+    },
+    "PlayerReport": {
+      "title": "PlayerReport",
+      "description": "Anti-cheat or player conduct moderation report.",
+      "type": "object",
+      "properties": {
+        "reporterUid": { "type": "string" },
+        "targetName": { "type": "string" },
+        "reason": { "type": "string" },
+        "status": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["reporterUid", "targetName", "reason", "status", "createdAt"]
+    },
+    "Announcement": {
+      "title": "Announcement",
+      "description": "Global operations announcement published by admins.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "message": { "type": "string" },
+        "severity": { "type": "string" },
+        "createdByUid": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "message", "severity", "createdByUid", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "Authenticated user profile & progression document."
+    },
+    "/users/{userId}/inventory/{itemId}": {
+      "schema": { "$ref": "#/entities/InventoryItem" },
+      "description": "Owned weapons, skins, outfits, character unlocks, and pets."
+    },
+    "/users/{userId}/missions/{missionId}": {
+      "schema": { "$ref": "#/entities/MissionRecord" },
+      "description": "Daily, weekly, monthly, and season mission tracking."
+    },
+    "/users/{userId}/transactions/{txId}": {
+      "schema": { "$ref": "#/entities/TransactionRecord" },
+      "description": "Append-only economy transaction history."
+    },
+    "/users/{userId}/matches/{matchId}": {
+      "schema": { "$ref": "#/entities/MatchRecord" },
+      "description": "Append-only match performance telemetry history."
+    },
+    "/users/{userId}/mail/{mailId}": {
+      "schema": { "$ref": "#/entities/MailMessage" },
+      "description": "Player mailbox notifications and event reward messages."
+    },
+    "/leaderboards/{userId}": {
+      "schema": { "$ref": "#/entities/LeaderboardEntry" },
+      "description": "Public competitive ranking leaderboard."
+    },
+    "/matchRooms/{roomId}": {
+      "schema": { "$ref": "#/entities/MatchRoom" },
+      "description": "Synced multiplayer matchmaking & custom rooms."
+    },
+    "/guilds/{guildId}": {
+      "schema": { "$ref": "#/entities/Guild" },
+      "description": "Player clans / guilds."
+    },
+    "/guilds/{guildId}/messages/{msgId}": {
+      "schema": { "$ref": "#/entities/GuildMessage" },
+      "description": "Guild chat messages."
+    },
+    "/supportTickets/{ticketId}": {
+      "schema": { "$ref": "#/entities/SupportTicket" },
+      "description": "Customer support tickets."
+    },
+    "/reports/{reportId}": {
+      "schema": { "$ref": "#/entities/PlayerReport" },
+      "description": "Moderation & anti-cheat reports."
+    },
+    "/announcements/{announcementId}": {
+      "schema": { "$ref": "#/entities/Announcement" },
+      "description": "Admin-published global game announcements."
+    }
+  }
+}

@@ -7,11 +7,13 @@ import android.opengl.Matrix
 import com.example.game.engine.BattleRoyaleEngine
 import com.example.game.map.ObstacleType
 import com.example.game.model.CharacterPreset
+import com.example.game.model.GameModeType
 import com.example.game.model.MatchPhase
 import com.example.game.model.PetPreset
 import com.example.game.model.Player
 import com.example.game.model.PlayerStance
 import com.example.game.model.VehicleType
+import com.example.game.model.WeatherType
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.FloatBuffer
@@ -285,9 +287,22 @@ class Battle3DRenderer(
         GLES20.glEnableVertexAttribArray(aNormalHandle)
         GLES20.glVertexAttribPointer(aNormalHandle, 3, GLES20.GL_FLOAT, false, 24, cubeBuffer)
 
+        val (fogR, fogG, fogB) = when (engine.weatherType) {
+            WeatherType.CLEAR -> Triple(skyR, skyG, skyB)
+            WeatherType.SUNSET_STORM -> Triple(0.68f, 0.36f, 0.24f)
+            WeatherType.DENSE_FOG -> Triple(0.62f, 0.68f, 0.72f)
+            WeatherType.NIGHT_OPS -> Triple(0.06f, 0.09f, 0.16f)
+        }
+        val fogDist = when (engine.weatherType) {
+            WeatherType.DENSE_FOG -> qualityDrawDist * 0.42f
+            WeatherType.SUNSET_STORM -> qualityDrawDist * 0.72f
+            WeatherType.NIGHT_OPS -> qualityDrawDist * 0.65f
+            WeatherType.CLEAR -> qualityDrawDist
+        }
+
         GLES20.glUniform3f(uLightDirHandle, 0.55f, 0.85f, 0.35f)
-        GLES20.glUniform3f(uFogColorHandle, skyR, skyG, skyB)
-        GLES20.glUniform1f(uFogMaxDistHandle, qualityDrawDist)
+        GLES20.glUniform3f(uFogColorHandle, fogR, fogG, fogB)
+        GLES20.glUniform1f(uFogMaxDistHandle, fogDist)
 
         // 0. Sun, Ambient Sky Clouds & Ambient Supply Plane + Parachutists
         renderSkyDetails(targetGlX, targetGlZ)
@@ -457,6 +472,18 @@ class Battle3DRenderer(
             renderSupplyPlane(state.planeX * WORLD_SCALE, 60f, state.planeY * WORLD_SCALE, -45f)
         }
 
+        // 9b. Training Ground Silhouette Shooting Targets
+        if (engine.gameMode == GameModeType.TRAINING_GROUND) {
+            val rangeTargets = listOf(2440f, 2500f, 2560f, 2620f)
+            rangeTargets.forEach { tx ->
+                val gx = tx * WORLD_SCALE
+                val gz = 2360f * WORLD_SCALE
+                drawBox(gx, 0.9f, gz, 0.25f, 1.8f, 0.25f, 0f, 0.22f, 0.24f, 0.28f, 1f)
+                drawBox(gx, 1.55f, gz, 1.15f, 1.35f, 0.22f, 0f, 0.95f, 0.42f, 0.10f, 1f)
+                drawBox(gx, 2.45f, gz, 0.55f, 0.55f, 0.22f, 0f, 1.0f, 0.85f, 0.15f, 1f, unlit = 0.4f)
+            }
+        }
+
         // 10. Articulated 3D Players + Glowing Weapons + Companion Pet
         val radarActive = state.radarScanActiveSec > 0f
         val petPreset = PetPreset.fromId(state.activePetId)
@@ -467,7 +494,7 @@ class Battle3DRenderer(
             val dz = pz - targetGlZ
             if (dx * dx + dz * dz < qualityDrawDist * qualityDrawDist) {
                 renderSoldier3D(player, user.teamId, showShadows, radarActive)
-                if (player.isUser && player.vehicleId == null && player.z < 5f) {
+                if (state.petVisible && player.isUser && player.vehicleId == null && player.z < 5f) {
                     renderCompanionPet(player, petPreset)
                 }
             }
@@ -792,12 +819,20 @@ class Battle3DRenderer(
         return ScreenProjectedPoint(sx, sy, true)
     }
 
-    private fun getSkyColor(): Triple<Float, Float, Float> = when (engine.mapConfig.id) {
-        "kalahari_dunes" -> Triple(0.84f, 0.62f, 0.36f)
-        "snow_mountain" -> Triple(0.56f, 0.72f, 0.88f)
-        "urban_city" -> Triple(0.14f, 0.18f, 0.30f)
-        "jungle_battleground" -> Triple(0.28f, 0.45f, 0.40f)
-        else -> Triple(0.36f, 0.65f, 0.92f)
+    private fun getSkyColor(): Triple<Float, Float, Float> {
+        val base = when (engine.mapConfig.id) {
+            "kalahari_dunes" -> Triple(0.84f, 0.62f, 0.36f)
+            "snow_mountain" -> Triple(0.56f, 0.72f, 0.88f)
+            "urban_city" -> Triple(0.14f, 0.18f, 0.30f)
+            "jungle_battleground" -> Triple(0.28f, 0.45f, 0.40f)
+            else -> Triple(0.36f, 0.65f, 0.92f)
+        }
+        return when (engine.weatherType) {
+            WeatherType.CLEAR -> base
+            WeatherType.SUNSET_STORM -> Triple(0.72f, 0.38f, 0.24f)
+            WeatherType.DENSE_FOG -> Triple(0.62f, 0.68f, 0.72f)
+            WeatherType.NIGHT_OPS -> Triple(0.06f, 0.09f, 0.16f)
+        }
     }
 
     private fun compileShader(type: Int, source: String): Int {

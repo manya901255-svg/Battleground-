@@ -59,25 +59,34 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.IntOffset
 import com.example.game.engine.BattleRoyaleEngine
+import com.example.game.model.EmotePreset
+import com.example.game.model.GameModeType
 import com.example.game.model.MatchPhase
 import com.example.game.model.PlayerStance
 import com.example.game.model.ScopeType
+import com.example.ui.screens.HudLayoutCodec
 import com.example.ui.theme.BloodKnockout
 import com.example.ui.theme.CyberOrange
 import com.example.ui.theme.ElectricBlueSafe
 import com.example.ui.theme.HazardYellow
+import com.example.ui.theme.HealthGreen
 import com.example.ui.theme.RedZoneBombardment
 import com.example.ui.theme.TacticalDarkBg
 import com.example.ui.theme.TacticalSurface
 import com.example.ui.theme.TextPrimary
 import com.example.ui.theme.TextSecondary
+import kotlin.math.roundToInt
 
 @Composable
 fun BattleScreen(
     engine: BattleRoyaleEngine,
     hudScale: Float = 1.0f,
     hudOpacity: Float = 0.92f,
+    hudLayoutJson: String = "",
     graphicsQuality: String = "High",
     leftHandFireEnabled: Boolean = true,
     onUpdateGraphicsQuality: (String) -> Unit = {},
@@ -89,10 +98,12 @@ fun BattleScreen(
     var showFullMap by remember { mutableStateOf(false) }
     var showBackpack by remember { mutableStateOf(false) }
     var showCommsMenu by remember { mutableStateOf(false) }
+    var showEmoteWheel by remember { mutableStateOf(false) }
     var showInMatchSettings by remember { mutableStateOf(false) }
     var isMicOn by remember { mutableStateOf(true) }
     var isSpeakerOn by remember { mutableStateOf(true) }
     var activeGraphics by remember(graphicsQuality) { mutableStateOf(graphicsQuality) }
+    val customSlots = remember(hudLayoutJson) { HudLayoutCodec.parse(hudLayoutJson) }
 
     val renderer = remember(engine) {
         Battle3DRenderer(engine = engine, graphicsQuality = activeGraphics)
@@ -215,18 +226,30 @@ fun BattleScreen(
                 .windowInsetsPadding(WindowInsets.safeDrawing)
                 .alpha(hudOpacity.coerceIn(0.6f, 1.0f))
         ) {
+            val density = LocalDensity.current
+            val areaW = with(density) { maxWidth.toPx() }
+            val areaH = with(density) { maxHeight.toPx() }
+            fun slotMod(id: String): Modifier {
+                val s = customSlots[id] ?: return Modifier
+                return Modifier
+                    .offset { IntOffset((s.offsetX * areaW).roundToInt(), (s.offsetY * areaH).roundToInt()) }
+                    .alpha(s.opacity)
+            }
+            fun slotScale(id: String): Float = customSlots[id]?.scale ?: 1f
+
             val uiScale = ((maxHeight.value / 412f).coerceIn(0.76f, 1.24f) * hudScale).coerceIn(0.74f, 1.28f)
-            val miniMapSize = (96.dp * uiScale).coerceIn(78.dp, 122.dp)
+            val miniMapSize = (96.dp * uiScale * slotScale("MINIMAP")).coerceIn(78.dp, 138.dp)
             val compassWidth = (240.dp * uiScale).coerceIn(190.dp, 310.dp)
-            val weaponPanelWidth = (182.dp * uiScale).coerceIn(155.dp, 225.dp)
-            val joystickSize = (114.dp * uiScale).coerceIn(90.dp, 140.dp)
+            val weaponPanelWidth = (182.dp * uiScale * slotScale("WEAPON_PANEL")).coerceIn(155.dp, 240.dp)
+            val joystickSize = (114.dp * uiScale * slotScale("JOYSTICK")).coerceIn(90.dp, 152.dp)
             val sprintOrbSize = (46.dp * uiScale).coerceIn(38.dp, 58.dp)
-            val barWidth = (224.dp * uiScale).coerceIn(175.dp, 280.dp)
+            val barWidth = (224.dp * uiScale * slotScale("STATUS_BAR")).coerceIn(175.dp, 295.dp)
 
             // TOP-LEFT: Square Minimap + Side Comms/Pet Column + Live 4-Player Squad Panel
             Column(
                 modifier = Modifier
                     .align(Alignment.TopStart)
+                    .then(slotMod("MINIMAP"))
                     .padding(start = 8.dp, top = 6.dp),
                 verticalArrangement = Arrangement.spacedBy(5.dp)
             ) {
@@ -259,7 +282,7 @@ fun BattleScreen(
                             isMicOn = !isMicOn
                             engine.sendQuickComms(if (isMicOn) "Voice Channel Open" else "Voice Muted")
                         },
-                        onEmoteClick = { engine.sendQuickComms("Tactical Salute!") },
+                        onEmoteClick = { showEmoteWheel = !showEmoteWheel },
                         onChatClick = { showCommsMenu = !showCommsMenu },
                         onCompanionScanClick = { engine.activateRadarScan() },
                         scanReady = state.scanCooldownSec <= 0f,
@@ -365,21 +388,70 @@ fun BattleScreen(
                 }
             }
 
-            // TOP-RIGHT: Coins, Alive, Kills, Settings Strip + Weapon Inventory & Ammo Panel + Kill Feed
+            // EMOTE WHEEL POPUP
+            AnimatedVisibility(
+                visible = showEmoteWheel,
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(start = miniMapSize + 44.dp, top = 46.dp)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(TacticalDarkBg.copy(alpha = 0.95f))
+                        .border(1.dp, HazardYellow.copy(alpha = 0.85f), RoundedCornerShape(10.dp))
+                        .padding(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(3.dp)
+                ) {
+                    Text("EMOTE WHEEL", color = HazardYellow, fontSize = 9.sp, fontWeight = FontWeight.Black)
+                    EmotePreset.entries.forEach { emote ->
+                        Text(
+                            text = "${emote.badge} ${emote.label}",
+                            color = TextPrimary,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(4.dp))
+                                .clickable {
+                                    engine.triggerEmote(emote)
+                                    showEmoteWheel = false
+                                }
+                                .padding(horizontal = 8.dp, vertical = 3.dp)
+                        )
+                    }
+                }
+            }
+
+            // TOP-RIGHT: Latency Pill + Coins, Alive, Kills, Settings Strip + Weapon Inventory & Ammo Panel + Kill Feed
             Column(
                 modifier = Modifier
                     .align(Alignment.TopEnd)
+                    .then(slotMod("WEAPON_PANEL"))
                     .padding(top = 6.dp, end = 8.dp),
                 horizontalAlignment = Alignment.End,
                 verticalArrangement = Arrangement.spacedBy(5.dp)
             ) {
-                TopRightStatusStrip(
-                    coins = state.matchCoins,
-                    aliveCount = state.aliveCount,
-                    killsCount = state.userKills,
-                    onCoinsClick = { engine.spendCoinsForSupply() },
-                    onSettingsClick = { showInMatchSettings = true }
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(Color.Black.copy(alpha = 0.58f))
+                            .border(1.dp, HealthGreen.copy(alpha = 0.65f), RoundedCornerShape(4.dp))
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                    ) {
+                        Text("${state.latencyMs}ms", color = HealthGreen, fontSize = 9.sp, fontWeight = FontWeight.ExtraBold)
+                    }
+                    TopRightStatusStrip(
+                        coins = state.matchCoins,
+                        aliveCount = state.aliveCount,
+                        killsCount = state.userKills,
+                        onCoinsClick = { engine.spendCoinsForSupply() },
+                        onSettingsClick = { showInMatchSettings = true }
+                    )
+                }
 
                 WeaponInventoryPanel(
                     user = user,
@@ -389,6 +461,23 @@ fun BattleScreen(
                     onReloadClick = { engine.reloadWeapon(user) },
                     onSelectSlot = { slot -> user.activeSlot = slot }
                 )
+
+                if (engine.gameMode == GameModeType.TRAINING_GROUND) {
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(TacticalDarkBg.copy(alpha = 0.85f))
+                            .border(1.dp, CyberOrange.copy(alpha = 0.7f), RoundedCornerShape(6.dp))
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                    ) {
+                        Text(
+                            text = "RANGE HITS: ${state.trainingDummyHits} • DMG: ${state.trainingDummyDamage}",
+                            color = HazardYellow,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Black
+                        )
+                    }
+                }
 
                 KillFeedDisplay(entries = state.killFeed)
             }
@@ -421,6 +510,39 @@ fun BattleScreen(
                 )
             }
 
+            // KNOCKED SQUADMATE REVIVE PROMPT & PROGRESS
+            if (state.isRevivingTeammate) {
+                Column(
+                    modifier = Modifier
+                        .align(Alignment.Center)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(TacticalDarkBg.copy(alpha = 0.90f))
+                        .border(1.5.dp, HealthGreen, RoundedCornerShape(10.dp))
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text("REVIVING SQUADMATE... ${(state.reviveProgress * 100).toInt()}%", color = HealthGreen, fontWeight = FontWeight.Black, fontSize = 11.sp)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    LinearProgressIndicator(
+                        progress = { state.reviveProgress },
+                        modifier = Modifier.width(150.dp).height(6.dp).clip(RoundedCornerShape(3.dp)),
+                        color = HealthGreen,
+                        trackColor = TacticalSurface
+                    )
+                }
+            } else if (state.nearbyKnockedAllyName != null && !state.isSpectating) {
+                Button(
+                    onClick = { engine.startRevive() },
+                    colors = ButtonDefaults.buttonColors(containerColor = HealthGreen),
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(bottom = 126.dp)
+                        .testTag("revive_ally_button")
+                ) {
+                    Text("REVIVE ${state.nearbyKnockedAllyName?.uppercase()}", color = Color.Black, fontWeight = FontWeight.Black, fontSize = 12.sp)
+                }
+            }
+
             // VEHICLE INTERACTION & DASHBOARD
             if (state.nearbyVehicle != null && user.vehicleId == null && !state.isSpectating) {
                 Button(
@@ -449,7 +571,7 @@ fun BattleScreen(
                 ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text("${state.vehicleSpeedKmh}", color = HazardYellow, fontSize = 18.sp, fontWeight = FontWeight.Black)
-                        Text("KM/H", color = TextSecondary, fontSize = 8.sp, fontWeight = FontWeight.Bold)
+                        Text("KM/H • FUEL 92%", color = TextSecondary, fontSize = 8.sp, fontWeight = FontWeight.Bold)
                     }
                     Button(
                         onClick = { engine.triggerNitroBoost() },
@@ -544,10 +666,11 @@ fun BattleScreen(
                 if (leftHandFireEnabled) {
                     LeftHandFireButton(
                         isFiring = engine.isFiringInput,
-                        sizeDp = (46.dp * uiScale).coerceIn(38.dp, 54.dp),
+                        sizeDp = (46.dp * uiScale * slotScale("LEFT_FIRE")).coerceIn(38.dp, 64.dp),
                         onFireChange = { engine.isFiringInput = it },
                         modifier = Modifier
                             .align(Alignment.CenterStart)
+                            .then(slotMod("LEFT_FIRE"))
                             .padding(start = 12.dp, top = 28.dp)
                     )
                 }
@@ -556,6 +679,7 @@ fun BattleScreen(
                 Box(
                     modifier = Modifier
                         .align(Alignment.BottomStart)
+                        .then(slotMod("JOYSTICK"))
                         .padding(start = 10.dp, bottom = 10.dp)
                 ) {
                     Row(
@@ -569,7 +693,7 @@ fun BattleScreen(
                             onOpenBackpack = { showBackpack = true },
                             onUseMedkit = { engine.useQuickHeal() },
                             onThrowGrenade = { engine.throwItem() },
-                            uiScale = uiScale
+                            uiScale = uiScale * slotScale("UTILITY_COL")
                         )
 
                         Box(modifier = Modifier.padding(bottom = 2.dp)) {
@@ -616,6 +740,7 @@ fun BattleScreen(
                     barWidth = barWidth,
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
+                        .then(slotMod("STATUS_BAR"))
                         .padding(bottom = 8.dp)
                 )
 
@@ -638,9 +763,10 @@ fun BattleScreen(
                     isReloading = state.isReloading,
                     onDeployShield = { engine.deployTacticalShield() },
                     shieldCooldownSec = state.shieldCooldownSec,
-                    uiScale = uiScale,
+                    uiScale = uiScale * slotScale("RIGHT_CLUSTER"),
                     modifier = Modifier
                         .align(Alignment.BottomEnd)
+                        .then(slotMod("FIRE"))
                         .padding(end = 10.dp, bottom = 8.dp)
                 )
             }
@@ -654,7 +780,11 @@ fun BattleScreen(
     if (showBackpack) {
         BackpackInventoryDialog(
             user = user,
+            usedUnits = state.backpackUsedUnits,
+            maxUnits = state.backpackMaxUnits,
             onUseConsumable = { engine.useConsumable(it) },
+            onDropConsumable = { engine.dropConsumable(it) },
+            onDropWeaponSlot = { engine.dropWeaponSlot(it) },
             onDismiss = { showBackpack = false }
         )
     }
@@ -680,6 +810,7 @@ fun BattleScreen(
             placement = state.userPlacement,
             totalPlayers = state.totalPlayers,
             kills = state.userKills,
+            assists = state.userAssists,
             damage = state.userDamage,
             durationSec = state.matchDurationSec,
             onReturnToLobby = onExitToLobby

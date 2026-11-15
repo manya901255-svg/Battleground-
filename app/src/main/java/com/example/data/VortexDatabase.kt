@@ -37,7 +37,9 @@ data class UserProfileEntity(
     val petLevel: Int = 3,
     val likesCount: Int = 128,
     val signatureBio: String = "Battle in Style!",
-    val seasonId: String = "S54"
+    val seasonId: String = "S54",
+    val petVisible: Boolean = true,
+    val voiceCalloutsEnabled: Boolean = true
 ) {
     val kdRatio: Float
         get() = if (deaths > 0) kills.toFloat() / deaths.toFloat() else kills.toFloat()
@@ -122,7 +124,10 @@ data class GameSettingsEntity(
     val selectedWallpaperTheme: String = "DARK_TACTICAL",
     val hudScale: Float = 1.0f,
     val hudOpacity: Float = 0.90f,
-    val bgmVolume: Float = 0.55f
+    val bgmVolume: Float = 0.55f,
+    val hudLayoutJson: String = "",
+    val hudLayoutPreset: Int = 1,
+    val selectedWeather: String = "CLEAR"
 )
 
 @Dao
@@ -194,7 +199,7 @@ interface VortexDao {
         GameSettingsEntity::class,
         MissionEntity::class
     ],
-    version = 6,
+    version = 7,
     exportSchema = false
 )
 abstract class VortexDatabase : RoomDatabase() {

@@ -11,6 +11,7 @@ import com.example.game.model.BulletProjectile
 import com.example.game.model.ConsumableType
 import com.example.game.model.DamagePopup
 import com.example.game.model.DeployableShield
+import com.example.game.model.EmotePreset
 import com.example.game.model.ExplosiveBarrel
 import com.example.game.model.GameModeType
 import com.example.game.model.GroundLoot
@@ -26,6 +27,7 @@ import com.example.game.model.ThrowableProjectile
 import com.example.game.model.ThrowableType
 import com.example.game.model.VehicleInstance
 import com.example.game.model.WeaponCatalog
+import com.example.game.model.WeatherType
 import com.example.game.model.ZoneState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -109,6 +111,17 @@ data class MatchEngineState(
     val medkitCount: Int = 5,
     val throwableCount: Int = 3,
     val activePetId: String = "draco_flame",
+    val petVisible: Boolean = true,
+    val weatherType: WeatherType = WeatherType.CLEAR,
+    val userAssists: Int = 0,
+    val activeEmoteText: String? = null,
+    val nearbyKnockedAllyId: String? = null,
+    val nearbyKnockedAllyName: String? = null,
+    val trainingDummyHits: Int = 0,
+    val trainingDummyDamage: Int = 0,
+    val latencyMs: Int = 24,
+    val backpackUsedUnits: Int = 0,
+    val backpackMaxUnits: Int = 180,
     val playersSnapshot: List<Player> = emptyList(),
     val groundLootSnapshot: List<GroundLoot> = emptyList(),
     val vehiclesSnapshot: List<VehicleInstance> = emptyList(),
@@ -125,6 +138,8 @@ class BattleRoyaleEngine(
     val teamSize: Int = 4,
     val characterPresetId: String = "vortex_ghost",
     val activePetId: String = "draco_flame",
+    val weatherType: WeatherType = WeatherType.CLEAR,
+    val petVisible: Boolean = true,
     @Volatile var cameraSensitivity: Float = 1.0f,
     @Volatile var adsSensitivity: Float = 0.85f,
     private val onMatchFinished: (placement: Int, kills: Int, damage: Float, durationSec: Int) -> Unit
@@ -190,6 +205,14 @@ class BattleRoyaleEngine(
     private var reloadTotalSec: Float = 2.0f
     private var lastHitTimestampMs: Long = 0L
     private var lastHitWasHeadshot: Boolean = false
+    private var emoteBannerTimerSec: Float = 0f
+    private var activeEmoteLabel: String? = null
+    private var revivingTargetId: String? = null
+    private var reviveElapsedSec: Float = 0f
+    private val reviveDurationSec: Float = 3.0f
+    private var trainingDummyHits: Int = 0
+    private var trainingDummyDamage: Int = 0
+    private val damageContributors = mutableMapOf<String, MutableSet<String>>()
 
     init {
         initializeMatch()
@@ -228,6 +251,11 @@ class BattleRoyaleEngine(
         airdrops.clear()
         killFeed.clear()
         explosiveBarrels.clear()
+        damageContributors.clear()
+        trainingDummyHits = 0
+        trainingDummyDamage = 0
+        revivingTargetId = null
+        reviveElapsedSec = 0f
         elapsedCombatSec = 0f
 
         groundLoot.addAll(MapCatalog.generateInitialLoot(mapConfig))
@@ -364,12 +392,24 @@ class BattleRoyaleEngine(
             medkitCount = totalMedkitsCount(),
             throwableCount = totalThrowableCount(),
             activePetId = activePetId,
+            petVisible = petVisible,
+            weatherType = weatherType,
+            userAssists = userPlayer.assists,
+            backpackUsedUnits = computeBackpackWeight(),
+            backpackMaxUnits = userPlayer.backpackLevel * 90 + 60,
             playersSnapshot = players.toList(),
             groundLootSnapshot = groundLoot.toList(),
             vehiclesSnapshot = vehicles.toList(),
             bulletsSnapshot = bullets.toList(),
             explosiveBarrelsSnapshot = explosiveBarrels.toList()
         )
+    }
+
+    private fun computeBackpackWeight(): Int {
+        val ammoWeight = userPlayer.ammoInventory.values.sum() / 5
+        val medWeight = totalMedkitsCount() * 10
+        val throwWeight = totalThrowableCount() * 12
+        return ammoWeight + medWeight + throwWeight
     }
 
     private fun totalMedkitsCount(): Int =
@@ -626,12 +666,35 @@ class BattleRoyaleEngine(
         val duration = elapsedCombatSec.toInt()
         if (radioBannerTimerSec > 0f) radioBannerTimerSec = (radioBannerTimerSec - deltaSec).coerceAtLeast(0f)
         if (takedownBannerTimerSec > 0f) takedownBannerTimerSec = (takedownBannerTimerSec - deltaSec).coerceAtLeast(0f)
+        if (emoteBannerTimerSec > 0f) emoteBannerTimerSec = (emoteBannerTimerSec - deltaSec).coerceAtLeast(0f)
         if (shieldCooldownSec > 0f) shieldCooldownSec = (shieldCooldownSec - deltaSec).coerceAtLeast(0f)
         if (dashCooldownSec > 0f) dashCooldownSec = (dashCooldownSec - deltaSec).coerceAtLeast(0f)
         if (dashActiveSec > 0f) dashActiveSec = (dashActiveSec - deltaSec).coerceAtLeast(0f)
         if (medicCooldownSec > 0f) medicCooldownSec = (medicCooldownSec - deltaSec).coerceAtLeast(0f)
         if (scanCooldownSec > 0f) scanCooldownSec = (scanCooldownSec - deltaSec).coerceAtLeast(0f)
         if (radarScanActiveSec > 0f) radarScanActiveSec = (radarScanActiveSec - deltaSec).coerceAtLeast(0f)
+
+        // Advance active ally revive if in range
+        val curRevTargetId = revivingTargetId
+        if (curRevTargetId != null) {
+            val ally = players.find { it.id == curRevTargetId && it.isAlive && it.isKnocked }
+            val inRange = ally != null && sqrt((ally.x - userPlayer.x) * (ally.x - userPlayer.x) + (ally.y - userPlayer.y) * (ally.y - userPlayer.y)) < 110f
+            if (ally != null && inRange && userPlayer.isAlive) {
+                reviveElapsedSec += deltaSec
+                if (reviveElapsedSec >= reviveDurationSec) {
+                    ally.isKnocked = false
+                    ally.health = 55f
+                    ally.bleedOutTimerSec = 25f
+                    revivingTargetId = null
+                    reviveElapsedSec = 0f
+                    soundSynthesizer?.playShieldDeploy()
+                    sendQuickComms("Revived ${ally.name}!")
+                }
+            } else {
+                revivingTargetId = null
+                reviveElapsedSec = 0f
+            }
+        }
 
         // 1. Update Safe Zone
         val coordSnap = safeZoneCoordinator.zoneState.value
@@ -757,9 +820,17 @@ class BattleRoyaleEngine(
             (1f - (userPlayer.reloadTimerSec / reloadTotalSec)).coerceIn(0f, 1f)
         } else 0f
 
+        val nearbyKnocked = if (userPlayer.isAlive) {
+            players.firstOrNull { p ->
+                !p.isUser && p.teamId == userPlayer.teamId && p.isAlive && p.isKnocked &&
+                    sqrt((p.x - userPlayer.x) * (p.x - userPlayer.x) + (p.y - userPlayer.y) * (p.y - userPlayer.y)) < 105f
+            }
+        } else null
+
         _engineState.value = state.copy(
             aliveCount = alive,
             userKills = userPlayer.kills,
+            userAssists = userPlayer.assists,
             userDamage = userPlayer.damageDealt,
             userPlacement = userPlacement,
             userHealth = userPlayer.health,
@@ -778,12 +849,17 @@ class BattleRoyaleEngine(
             killFeed = killFeed.takeLast(6),
             nearbyLoot = nearbyL,
             nearbyVehicle = nearbyV,
+            isRevivingTeammate = revivingTargetId != null,
+            reviveProgress = if (revivingTargetId != null) (reviveElapsedSec / reviveDurationSec).coerceIn(0f, 1f) else 0f,
+            nearbyKnockedAllyId = nearbyKnocked?.id,
+            nearbyKnockedAllyName = nearbyKnocked?.name,
             matchDurationSec = duration,
             spectatedPlayer = currentSpectated,
             vehicleNitroActive = nitroDurationSec > 0f,
             vehicleSpeedKmh = currentSpeedKmh,
             radioCommsBanner = if (radioBannerTimerSec > 0f) state.radioCommsBanner else null,
             takedownBanner = if (takedownBannerTimerSec > 0f) activeTakedownText else null,
+            activeEmoteText = if (emoteBannerTimerSec > 0f) activeEmoteLabel else null,
             streakCount = userPlayer.kills,
             cameraYawDegrees = cameraYawDegrees,
             cameraPitchDegrees = cameraPitchDegrees,
@@ -801,6 +877,13 @@ class BattleRoyaleEngine(
             medkitCount = totalMedkitsCount(),
             throwableCount = totalThrowableCount(),
             activePetId = activePetId,
+            petVisible = petVisible,
+            weatherType = weatherType,
+            trainingDummyHits = trainingDummyHits,
+            trainingDummyDamage = trainingDummyDamage,
+            latencyMs = 22 + ((duration % 5)),
+            backpackUsedUnits = computeBackpackWeight(),
+            backpackMaxUnits = userPlayer.backpackLevel * 90 + 60,
             playersSnapshot = players.toList(),
             groundLootSnapshot = groundLoot.toList(),
             vehiclesSnapshot = vehicles.toList(),
@@ -1144,6 +1227,40 @@ class BattleRoyaleEngine(
                 continue
             }
 
+            // Check Training Ground Silhouette Range Targets
+            if (gameMode == GameModeType.TRAINING_GROUND && b.shooterId == userPlayer.id) {
+                val rangeTargets = listOf(
+                    2440f to 2360f,
+                    2500f to 2360f,
+                    2560f to 2360f,
+                    2620f to 2360f
+                )
+                val hitDummy = rangeTargets.firstOrNull { (tx, ty) ->
+                    sqrt((b.x - tx) * (b.x - tx) + (b.y - ty) * (b.y - ty)) < 26f
+                }
+                if (hitDummy != null) {
+                    val dmgAmt = b.damage.toInt()
+                    trainingDummyHits++
+                    trainingDummyDamage += dmgAmt
+                    userPlayer.damageDealt += b.damage
+                    lastHitTimestampMs = System.currentTimeMillis()
+                    lastHitWasHeadshot = b.isSniper
+                    damagePopups.add(
+                        DamagePopup(
+                            worldX = hitDummy.first,
+                            worldY = hitDummy.second,
+                            worldZ = 22f,
+                            amount = dmgAmt,
+                            isHeadshot = b.isSniper,
+                            isShieldHit = false
+                        )
+                    )
+                    soundSynthesizer?.playShieldHit()
+                    bulletIterator.remove()
+                    continue
+                }
+            }
+
             if (isCollidingWithBuildings(b.x, b.y, 4f)) {
                 bulletIterator.remove()
                 continue
@@ -1251,6 +1368,7 @@ class BattleRoyaleEngine(
         val shooter = players.find { it.id == bullet.shooterId }
         if (shooter != null) {
             shooter.damageDealt += finalDamage
+            damageContributors.getOrPut(victim.id) { mutableSetOf() }.add(shooter.id)
             if (shooter.isUser) {
                 lastHitTimestampMs = System.currentTimeMillis()
                 lastHitWasHeadshot = isHeadshot
@@ -1273,7 +1391,15 @@ class BattleRoyaleEngine(
         }
 
         if (victim.health <= 0f) {
-            handlePlayerElimination(victim, shooter, isHeadshot)
+            // Squadmate knockdown before full elimination when in squad play
+            if (!victim.isUser && victim.teamId == userPlayer.teamId && teamSize > 1 && !victim.isKnocked) {
+                victim.isKnocked = true
+                victim.health = 45f
+                victim.bleedOutTimerSec = 25f
+                killFeed.add(KillFeedEntry(shooter?.name ?: "Enemy", victim.name, "Knockdown", isHeadshot, isKnockdown = true))
+            } else {
+                handlePlayerElimination(victim, shooter, isHeadshot)
+            }
         }
     }
 
@@ -1281,8 +1407,14 @@ class BattleRoyaleEngine(
         if (!victim.isAlive) return
         victim.health = 0f
         victim.isAlive = false
+        victim.isKnocked = false
 
         killer?.kills = (killer?.kills ?: 0) + 1
+        // Credit assist if user damaged victim earlier and another teammate/bot finished them
+        val contributors = damageContributors[victim.id].orEmpty()
+        if (killer != null && killer.id != userPlayer.id && userPlayer.id in contributors) {
+            userPlayer.assists++
+        }
         if (killer?.isUser == true) {
             matchCoins += 150
             val petEpBonus = if (activePetId == PetPreset.DRACO_FLAME.id) 15f else 0f
@@ -1669,6 +1801,76 @@ class BattleRoyaleEngine(
         _engineState.value = _engineState.value.copy(
             radioCommsBanner = "${userPlayer.name}: \"$callout\""
         )
+    }
+
+    fun triggerEmote(emote: EmotePreset) {
+        soundSynthesizer?.playUiClick()
+        activeEmoteLabel = "${emote.badge} ${emote.label}"
+        emoteBannerTimerSec = 2.8f
+        radioBannerTimerSec = 2.8f
+        _engineState.value = _engineState.value.copy(
+            activeEmoteText = activeEmoteLabel,
+            radioCommsBanner = "${userPlayer.name}: [${emote.badge} ${emote.label}]"
+        )
+    }
+
+    fun startRevive() {
+        synchronized(worldLock) {
+            if (!userPlayer.isAlive) return
+            val knocked = players.firstOrNull { p ->
+                !p.isUser && p.teamId == userPlayer.teamId && p.isAlive && p.isKnocked &&
+                    sqrt((p.x - userPlayer.x) * (p.x - userPlayer.x) + (p.y - userPlayer.y) * (p.y - userPlayer.y)) < 110f
+            } ?: return
+            revivingTargetId = knocked.id
+            reviveElapsedSec = 0f
+            soundSynthesizer?.playShieldDeploy()
+        }
+    }
+
+    fun cancelRevive() {
+        synchronized(worldLock) {
+            revivingTargetId = null
+            reviveElapsedSec = 0f
+        }
+    }
+
+    fun dropWeaponSlot(slot: Int) {
+        synchronized(worldLock) {
+            val dropped = if (slot == 1) {
+                userPlayer.primaryWeapon1.also { userPlayer.primaryWeapon1 = null }
+            } else {
+                userPlayer.primaryWeapon2.also { userPlayer.primaryWeapon2 = null }
+            } ?: return
+            groundLoot.add(
+                GroundLoot(
+                    x = userPlayer.x + 28f,
+                    y = userPlayer.y + 18f,
+                    name = dropped.name,
+                    weapon = dropped
+                )
+            )
+            if (userPlayer.activeSlot == slot) {
+                userPlayer.activeSlot = if (slot == 1 && userPlayer.primaryWeapon2 != null) 2 else 1
+            }
+            soundSynthesizer?.playUiClick()
+        }
+    }
+
+    fun dropConsumable(type: ConsumableType) {
+        synchronized(worldLock) {
+            val cur = userPlayer.consumableInventory[type] ?: 0
+            if (cur <= 0) return
+            userPlayer.consumableInventory[type] = cur - 1
+            groundLoot.add(
+                GroundLoot(
+                    x = userPlayer.x - 24f,
+                    y = userPlayer.y + 20f,
+                    name = type.displayName,
+                    consumable = type
+                )
+            )
+            soundSynthesizer?.playUiClick()
+        }
     }
 
     fun exitSpectatingToSettlement() {

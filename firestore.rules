@@ -1,0 +1,423 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global default-deny safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- HELPER PRIMITIVES ---
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidTimestamp(ts) {
+      return ts is timestamp && ts <= request.time;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid)) ||
+        (
+          'email_verified' in request.auth.token &&
+          request.auth.token.email_verified == true &&
+          'email' in request.auth.token &&
+          request.auth.token.email == 'maanudhiman85@gmail.com'
+        )
+      );
+    }
+
+    // --- VALIDATION HELPERS ---
+    function isValidUserProfile(data) {
+      return data.userId is string && data.userId.size() >= 1 && data.userId.size() <= 128 &&
+        data.username is string && data.username.size() >= 2 && data.username.size() <= 24 &&
+        data.bpCoins is int && data.bpCoins >= 0 &&
+        data.vortexCredits is int && data.vortexCredits >= 0 &&
+        data.rankPoints is int && data.rankPoints >= 0 &&
+        (!('bio' in data) || (data.bio is string && data.bio.size() <= 80)) &&
+        (!('avatarId' in data) || (data.avatarId is string && data.avatarId.size() <= 64)) &&
+        (!('level' in data) || (data.level is int && data.level >= 1 && data.level <= 999)) &&
+        (!('xp' in data) || (data.xp is int && data.xp >= 0)) &&
+        (!('maxXp' in data) || (data.maxXp is int && data.maxXp >= 100)) &&
+        (!('rankTier' in data) || (data.rankTier is string && data.rankTier.size() <= 32)) &&
+        (!('matchesPlayed' in data) || (data.matchesPlayed is int && data.matchesPlayed >= 0)) &&
+        (!('wins' in data) || (data.wins is int && data.wins >= 0)) &&
+        (!('kills' in data) || (data.kills is int && data.kills >= 0)) &&
+        (!('deaths' in data) || (data.deaths is int && data.deaths >= 0)) &&
+        (!('headshots' in data) || (data.headshots is int && data.headshots >= 0)) &&
+        (!('assists' in data) || (data.assists is int && data.assists >= 0)) &&
+        (!('title' in data) || (data.title is string && data.title.size() <= 48)) &&
+        (!('selectedCharacterId' in data) || (data.selectedCharacterId is string && data.selectedCharacterId.size() <= 64)) &&
+        (!('selectedPetId' in data) || (data.selectedPetId is string && data.selectedPetId.size() <= 64)) &&
+        (!('petLevel' in data) || (data.petLevel is int && data.petLevel >= 1 && data.petLevel <= 50)) &&
+        (!('petVisible' in data) || data.petVisible is bool) &&
+        (!('likesCount' in data) || (data.likesCount is int && data.likesCount >= 0)) &&
+        (!('seasonId' in data) || (data.seasonId is string && data.seasonId.size() <= 16)) &&
+        (!('guildId' in data) || (data.guildId is string && data.guildId.size() <= 64)) &&
+        (!('isBanned' in data) || data.isBanned is bool) &&
+        (!('lastDailyClaimMs' in data) || (data.lastDailyClaimMs is int && data.lastDailyClaimMs >= 0));
+    }
+
+    function isValidInventoryItem(data) {
+      return data.name is string && data.name.size() >= 1 && data.name.size() <= 80 &&
+        data.type is string && data.type.size() >= 1 && data.type.size() <= 32 &&
+        data.targetItemId is string && data.targetItemId.size() >= 1 && data.targetItemId.size() <= 64 &&
+        data.rarity is string && data.rarity.size() >= 1 && data.rarity.size() <= 24 &&
+        data.isEquipped is bool &&
+        (!('level' in data) || (data.level is int && data.level >= 1 && data.level <= 20));
+    }
+
+    function isValidMission(data) {
+      return data.category is string && data.category.size() >= 1 && data.category.size() <= 24 &&
+        data.title is string && data.title.size() >= 1 && data.title.size() <= 80 &&
+        (!('description' in data) || (data.description is string && data.description.size() <= 200)) &&
+        data.targetType is string && data.targetType.size() >= 1 && data.targetType.size() <= 32 &&
+        data.targetCount is int && data.targetCount >= 1 &&
+        data.currentProgress is int && data.currentProgress >= 0 && data.currentProgress <= data.targetCount &&
+        (!('rewardBp' in data) || (data.rewardBp is int && data.rewardBp >= 0)) &&
+        (!('rewardCredits' in data) || (data.rewardCredits is int && data.rewardCredits >= 0)) &&
+        (!('rewardXp' in data) || (data.rewardXp is int && data.rewardXp >= 0)) &&
+        data.isClaimed is bool;
+    }
+
+    function isValidTransaction(data) {
+      return data.txType is string && data.txType.size() >= 1 && data.txType.size() <= 32 &&
+        data.itemId is string && data.itemId.size() >= 1 && data.itemId.size() <= 64 &&
+        data.itemName is string && data.itemName.size() >= 1 && data.itemName.size() <= 80 &&
+        data.bpDelta is int &&
+        data.creditsDelta is int &&
+        data.status is string && data.status in ['COMPLETED', 'REFUNDED'];
+    }
+
+    function isValidMatchRecord(data) {
+      return data.gameMode is string && data.gameMode.size() >= 1 && data.gameMode.size() <= 48 &&
+        data.mapName is string && data.mapName.size() >= 1 && data.mapName.size() <= 48 &&
+        data.placement is int && data.placement >= 1 && data.placement <= 100 &&
+        (!('totalPlayers' in data) || (data.totalPlayers is int && data.totalPlayers >= 1 && data.totalPlayers <= 100)) &&
+        data.kills is int && data.kills >= 0 && data.kills <= 100 &&
+        (!('assists' in data) || (data.assists is int && data.assists >= 0 && data.assists <= 100)) &&
+        (data.damage is number && data.damage >= 0) &&
+        (!('survivalTimeSec' in data) || (data.survivalTimeSec is int && data.survivalTimeSec >= 0)) &&
+        (!('rankPointsDelta' in data) || data.rankPointsDelta is int) &&
+        (!('bpEarned' in data) || (data.bpEarned is int && data.bpEarned >= 0)) &&
+        (!('xpEarned' in data) || (data.xpEarned is int && data.xpEarned >= 0)) &&
+        data.isVictory is bool;
+    }
+
+    function isValidMailMessage(data) {
+      return data.title is string && data.title.size() >= 1 && data.title.size() <= 80 &&
+        data.body is string && data.body.size() >= 1 && data.body.size() <= 400 &&
+        data.sender is string && data.sender.size() >= 1 && data.sender.size() <= 48 &&
+        data.isRead is bool &&
+        data.rewardBp is int && data.rewardBp >= 0 &&
+        data.rewardClaimed is bool;
+    }
+
+    function isValidLeaderboardEntry(data) {
+      return data.userId is string && data.userId.size() >= 1 && data.userId.size() <= 128 &&
+        data.username is string && data.username.size() >= 2 && data.username.size() <= 24 &&
+        data.rankTier is string && data.rankTier.size() >= 1 && data.rankTier.size() <= 32 &&
+        data.rankPoints is int && data.rankPoints >= 0 &&
+        (!('wins' in data) || (data.wins is int && data.wins >= 0)) &&
+        (!('kills' in data) || (data.kills is int && data.kills >= 0)) &&
+        (!('level' in data) || (data.level is int && data.level >= 1)) &&
+        data.region is string && data.region.size() >= 2 && data.region.size() <= 24 &&
+        data.seasonId is string && data.seasonId.size() >= 1 && data.seasonId.size() <= 16;
+    }
+
+    function isValidMatchRoom(data) {
+      return data.roomCode is string && data.roomCode.size() >= 4 && data.roomCode.size() <= 12 &&
+        data.hostUid is string && data.hostUid.size() >= 1 && data.hostUid.size() <= 128 &&
+        data.title is string && data.title.size() >= 2 && data.title.size() <= 48 &&
+        data.gameMode is string && data.gameMode.size() >= 2 && data.gameMode.size() <= 40 &&
+        data.mapId is string && data.mapId.size() >= 2 && data.mapId.size() <= 40 &&
+        (!('teamSize' in data) || (data.teamSize is int && data.teamSize >= 1 && data.teamSize <= 4)) &&
+        (!('maxPlayers' in data) || (data.maxPlayers is int && data.maxPlayers >= 1 && data.maxPlayers <= 100)) &&
+        data.memberUids is list && data.memberUids.size() <= 16 &&
+        (data.memberUids.size() == 0 || data.memberUids[0] is string) &&
+        data.status is string && data.status in ['waiting', 'in_progress', 'finished'] &&
+        data.isPrivate is bool &&
+        (!('region' in data) || (data.region is string && data.region.size() <= 24)) &&
+        (!('weather' in data) || (data.weather is string && data.weather.size() <= 24));
+    }
+
+    function isValidGuild(data) {
+      return data.name is string && data.name.size() >= 2 && data.name.size() <= 32 &&
+        data.tag is string && data.tag.size() >= 2 && data.tag.size() <= 6 &&
+        data.leaderUid is string && data.leaderUid.size() >= 1 && data.leaderUid.size() <= 128 &&
+        data.level is int && data.level >= 1 && data.level <= 50 &&
+        (!('xp' in data) || (data.xp is int && data.xp >= 0)) &&
+        data.memberUids is list && data.memberUids.size() >= 1 && data.memberUids.size() <= 50 &&
+        (data.memberUids[0] is string) &&
+        (!('description' in data) || (data.description is string && data.description.size() <= 160));
+    }
+
+    function isValidGuildMessage(data) {
+      return data.senderUid is string && data.senderUid == request.auth.uid &&
+        data.senderName is string && data.senderName.size() >= 1 && data.senderName.size() <= 24 &&
+        data.text is string && data.text.size() >= 1 && data.text.size() <= 240 &&
+        data.memberUids is list && data.memberUids.size() >= 1 && data.memberUids.size() <= 50;
+    }
+
+    function isValidSupportTicket(data) {
+      return data.reporterUid is string && data.reporterUid.size() >= 1 && data.reporterUid.size() <= 128 &&
+        data.category is string && data.category.size() >= 2 && data.category.size() <= 32 &&
+        data.subject is string && data.subject.size() >= 2 && data.subject.size() <= 80 &&
+        data.description is string && data.description.size() >= 4 && data.description.size() <= 500 &&
+        data.status is string && data.status in ['OPEN', 'RESOLVED'];
+    }
+
+    function isValidReport(data) {
+      return data.reporterUid is string && data.reporterUid.size() >= 1 && data.reporterUid.size() <= 128 &&
+        data.targetName is string && data.targetName.size() >= 2 && data.targetName.size() <= 32 &&
+        data.reason is string && data.reason.size() >= 2 && data.reason.size() <= 120 &&
+        data.status is string && data.status in ['PENDING', 'REVIEWED', 'DISMISSED'];
+    }
+
+    function isValidAnnouncement(data) {
+      return data.title is string && data.title.size() >= 2 && data.title.size() <= 80 &&
+        data.message is string && data.message.size() >= 2 && data.message.size() <= 300 &&
+        data.severity is string && data.severity in ['INFO', 'EVENT', 'MAINTENANCE'] &&
+        data.createdByUid is string && data.createdByUid.size() <= 128;
+    }
+
+    // --- COLLECTIONS ---
+    match /admins/{adminUid} {
+      allow get: if isSignedIn() && request.auth.uid == adminUid;
+      allow list, create, update, delete: if false;
+    }
+
+    match /users/{userId} {
+      allow get: if isValidId(userId) && (isOwner(userId) || isAdmin());
+      allow list: if isAdmin();
+
+      allow create: if isValidId(userId) &&
+        isOwner(userId) &&
+        incoming().userId == request.auth.uid &&
+        incoming().keys().hasAll(['userId', 'username', 'bpCoins', 'vortexCredits', 'rankPoints', 'createdAt']) &&
+        (!('isBanned' in incoming()) || incoming().isBanned == false) &&
+        isValidTimestamp(incoming().createdAt) &&
+        isValidUserProfile(incoming());
+
+      allow update: if isValidId(userId) &&
+        isValidUserProfile(incoming()) &&
+        incoming().userId == existing().userId &&
+        incoming().createdAt == existing().createdAt &&
+        (!('updatedAt' in incoming()) || isValidTimestamp(incoming().updatedAt)) &&
+        (
+          isAdmin() ||
+          (
+            isOwner(userId) &&
+            (!('isBanned' in incoming()) || incoming().isBanned == existing().get('isBanned', false))
+          )
+        );
+
+      allow delete: if false;
+
+      match /inventory/{itemId} {
+        allow get: if isValidId(itemId) && (isOwner(userId) || isAdmin());
+        allow list: if isOwner(userId) || isAdmin();
+        allow create: if isValidId(itemId) && (isOwner(userId) || isAdmin()) &&
+          incoming().keys().hasAll(['name', 'type', 'targetItemId', 'rarity', 'isEquipped', 'createdAt']) &&
+          isValidTimestamp(incoming().createdAt) &&
+          isValidInventoryItem(incoming());
+        allow update: if isValidId(itemId) && (isOwner(userId) || isAdmin()) &&
+          isValidInventoryItem(incoming()) &&
+          incoming().createdAt == existing().createdAt &&
+          incoming().diff(existing()).affectedKeys().hasOnly(['isEquipped', 'level', 'rarity', 'updatedAt']);
+        allow delete: if false;
+      }
+
+      match /missions/{missionId} {
+        allow get: if isValidId(missionId) && (isOwner(userId) || isAdmin());
+        allow list: if isOwner(userId) || isAdmin();
+        allow create: if isValidId(missionId) && (isOwner(userId) || isAdmin()) &&
+          incoming().keys().hasAll(['category', 'title', 'targetType', 'targetCount', 'currentProgress', 'isClaimed', 'createdAt']) &&
+          incoming().isClaimed == false &&
+          isValidTimestamp(incoming().createdAt) &&
+          isValidMission(incoming());
+        allow update: if isValidId(missionId) && isValidMission(incoming()) &&
+          incoming().createdAt == existing().createdAt &&
+          incoming().targetCount == existing().targetCount &&
+          (
+            isAdmin() ||
+            (
+              isOwner(userId) &&
+              (
+                // Progress update without claiming
+                (incoming().isClaimed == existing().isClaimed &&
+                 incoming().currentProgress >= existing().currentProgress &&
+                 incoming().diff(existing()).affectedKeys().hasOnly(['currentProgress', 'updatedAt'])) ||
+                // Claiming verified completed mission (cannot double-claim)
+                (existing().isClaimed == false &&
+                 incoming().isClaimed == true &&
+                 incoming().currentProgress >= existing().targetCount &&
+                 incoming().diff(existing()).affectedKeys().hasOnly(['isClaimed', 'updatedAt']))
+              )
+            )
+          );
+        allow delete: if false;
+      }
+
+      match /transactions/{txId} {
+        allow get: if isValidId(txId) && (isOwner(userId) || isAdmin());
+        allow list: if isOwner(userId) || isAdmin();
+        allow create: if isValidId(txId) && isOwner(userId) &&
+          incoming().keys().hasAll(['txType', 'itemId', 'itemName', 'bpDelta', 'creditsDelta', 'status', 'createdAt']) &&
+          isValidTimestamp(incoming().createdAt) &&
+          isValidTransaction(incoming());
+        allow update, delete: if false;
+      }
+
+      match /matches/{matchId} {
+        allow get: if isValidId(matchId) && (isOwner(userId) || isAdmin());
+        allow list: if isOwner(userId) || isAdmin();
+        allow create: if isValidId(matchId) && isOwner(userId) &&
+          incoming().keys().hasAll(['gameMode', 'mapName', 'placement', 'kills', 'damage', 'isVictory', 'createdAt']) &&
+          isValidTimestamp(incoming().createdAt) &&
+          isValidMatchRecord(incoming());
+        allow update, delete: if false;
+      }
+
+      match /mail/{mailId} {
+        allow get: if isValidId(mailId) && (isOwner(userId) || isAdmin());
+        allow list: if isOwner(userId) || isAdmin();
+        allow create: if isValidId(mailId) && (isOwner(userId) || isAdmin()) &&
+          incoming().keys().hasAll(['title', 'body', 'sender', 'isRead', 'rewardBp', 'rewardClaimed', 'createdAt']) &&
+          isValidTimestamp(incoming().createdAt) &&
+          isValidMailMessage(incoming());
+        allow update: if isValidId(mailId) && (isOwner(userId) || isAdmin()) &&
+          isValidMailMessage(incoming()) &&
+          incoming().createdAt == existing().createdAt &&
+          incoming().rewardBp == existing().rewardBp &&
+          (existing().rewardClaimed == false || incoming().rewardClaimed == true) &&
+          incoming().diff(existing()).affectedKeys().hasOnly(['isRead', 'rewardClaimed', 'updatedAt']);
+        allow delete: if isValidId(mailId) && (isOwner(userId) || isAdmin());
+      }
+    }
+
+    match /leaderboards/{userId} {
+      allow get: if isValidId(userId) && isSignedIn();
+      allow list: if isSignedIn();
+      allow create, update: if isValidId(userId) && (isOwner(userId) || isAdmin()) &&
+        incoming().userId == userId &&
+        isValidLeaderboardEntry(incoming()) &&
+        isValidTimestamp(incoming().updatedAt);
+      allow delete: if isAdmin();
+    }
+
+    match /matchRooms/{roomId} {
+      allow get: if isValidId(roomId) && isSignedIn();
+      allow list: if isSignedIn() && (
+        resource.data.isPrivate == false ||
+        request.auth.uid in resource.data.memberUids ||
+        resource.data.hostUid == request.auth.uid
+      );
+      allow create: if isValidId(roomId) && isSignedIn() &&
+        incoming().hostUid == request.auth.uid &&
+        incoming().status == 'waiting' &&
+        isValidTimestamp(incoming().createdAt) &&
+        isValidMatchRoom(incoming());
+      allow update: if isValidId(roomId) && isSignedIn() &&
+        isValidMatchRoom(incoming()) &&
+        incoming().createdAt == existing().createdAt &&
+        existing().status != 'finished' &&
+        (
+          isAdmin() ||
+          (existing().hostUid == request.auth.uid &&
+           incoming().diff(existing()).affectedKeys().hasOnly(['title', 'gameMode', 'mapId', 'status', 'memberUids', 'weather', 'updatedAt'])) ||
+          (request.auth.uid in incoming().memberUids &&
+           incoming().hostUid == existing().hostUid &&
+           incoming().diff(existing()).affectedKeys().hasOnly(['memberUids', 'updatedAt']))
+        );
+      allow delete: if isValidId(roomId) && isSignedIn() && (existing().hostUid == request.auth.uid || isAdmin());
+    }
+
+    match /guilds/{guildId} {
+      allow get: if isValidId(guildId) && isSignedIn();
+      allow list: if isSignedIn();
+      allow create: if isValidId(guildId) && isSignedIn() &&
+        incoming().leaderUid == request.auth.uid &&
+        request.auth.uid in incoming().memberUids &&
+        isValidTimestamp(incoming().createdAt) &&
+        isValidGuild(incoming());
+      allow update: if isValidId(guildId) && isSignedIn() &&
+        isValidGuild(incoming()) &&
+        incoming().createdAt == existing().createdAt &&
+        (
+          isAdmin() ||
+          (existing().leaderUid == request.auth.uid &&
+           incoming().diff(existing()).affectedKeys().hasOnly(['description', 'level', 'xp', 'memberUids', 'updatedAt'])) ||
+          ((request.auth.uid in incoming().memberUids || request.auth.uid in existing().memberUids) &&
+           incoming().leaderUid == existing().leaderUid &&
+           incoming().diff(existing()).affectedKeys().hasOnly(['memberUids', 'xp', 'level', 'updatedAt']))
+        );
+      allow delete: if isValidId(guildId) && (existing().leaderUid == request.auth.uid || isAdmin());
+
+      match /messages/{msgId} {
+        allow get: if isValidId(msgId) && isSignedIn() && request.auth.uid in resource.data.memberUids;
+        allow list: if isSignedIn() && request.auth.uid in resource.data.memberUids;
+        allow create: if isValidId(msgId) && isSignedIn() &&
+          isValidGuildMessage(incoming()) &&
+          isValidTimestamp(incoming().createdAt) &&
+          request.auth.uid in get(/databases/$(database)/documents/guilds/$(guildId)).data.memberUids;
+        allow update, delete: if false;
+      }
+    }
+
+    match /supportTickets/{ticketId} {
+      allow get: if isValidId(ticketId) && isSignedIn() && (resource.data.reporterUid == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (resource.data.reporterUid == request.auth.uid || isAdmin());
+      allow create: if isValidId(ticketId) && isSignedIn() &&
+        incoming().reporterUid == request.auth.uid &&
+        incoming().status == 'OPEN' &&
+        isValidTimestamp(incoming().createdAt) &&
+        isValidSupportTicket(incoming());
+      allow update: if isValidId(ticketId) && isAdmin() &&
+        isValidSupportTicket(incoming()) &&
+        incoming().reporterUid == existing().reporterUid &&
+        incoming().createdAt == existing().createdAt;
+      allow delete: if false;
+    }
+
+    match /reports/{reportId} {
+      allow get: if isValidId(reportId) && isSignedIn() && (resource.data.reporterUid == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (resource.data.reporterUid == request.auth.uid || isAdmin());
+      allow create: if isValidId(reportId) && isSignedIn() &&
+        incoming().reporterUid == request.auth.uid &&
+        incoming().status == 'PENDING' &&
+        isValidTimestamp(incoming().createdAt) &&
+        isValidReport(incoming());
+      allow update: if isValidId(reportId) && isAdmin() &&
+        isValidReport(incoming()) &&
+        incoming().reporterUid == existing().reporterUid &&
+        incoming().createdAt == existing().createdAt;
+      allow delete: if false;
+    }
+
+    match /announcements/{announcementId} {
+      allow get, list: if isSignedIn();
+      allow create, update: if isValidId(announcementId) && isAdmin() &&
+        isValidAnnouncement(incoming()) &&
+        isValidTimestamp(incoming().createdAt);
+      allow delete: if isValidId(announcementId) && isAdmin();
+    }
+  }
+}

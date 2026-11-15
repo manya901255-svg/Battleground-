@@ -45,11 +45,15 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.activity.compose.BackHandler
 import com.example.data.GameRepository
 import com.example.data.GameSettingsEntity
+import com.example.game.model.WeatherType
 import com.example.ui.theme.CyberOrange
+import com.example.ui.theme.ElectricBlueSafe
 import com.example.ui.theme.HazardYellow
 import com.example.ui.theme.HealthGreen
+import com.example.ui.theme.RedZoneBombardment
 import com.example.ui.theme.TacticalDarkBg
 import com.example.ui.theme.TacticalSurface
 import com.example.ui.theme.TextPrimary
@@ -59,8 +63,12 @@ import kotlinx.coroutines.launch
 @Composable
 fun SettingsScreen(
     repository: GameRepository,
+    userEmail: String? = null,
+    onOpenHudCustomizer: () -> Unit = {},
+    onSignOut: () -> Unit = {},
     onBack: () -> Unit
 ) {
+    BackHandler { onBack() }
     val settingsState by repository.settings.collectAsState(initial = null)
     val scope = rememberCoroutineScope()
 
@@ -76,6 +84,7 @@ fun SettingsScreen(
     var masterVol by remember(settingsState) { mutableFloatStateOf(settingsState?.masterVolume ?: 1.0f) }
     var sfxVol by remember(settingsState) { mutableFloatStateOf(settingsState?.sfxVolume ?: 1.0f) }
     var bgmVol by remember(settingsState) { mutableFloatStateOf(settingsState?.bgmVolume ?: 0.55f) }
+    var weatherId by remember(settingsState) { mutableStateOf(settingsState?.selectedWeather ?: "CLEAR") }
 
     fun saveSettings() {
         scope.launch {
@@ -92,7 +101,8 @@ fun SettingsScreen(
                     hudOpacity = hudOpacity,
                     masterVolume = masterVol,
                     sfxVolume = sfxVol,
-                    bgmVolume = bgmVol
+                    bgmVolume = bgmVol,
+                    selectedWeather = weatherId
                 )
             )
         }
@@ -314,6 +324,38 @@ fun SettingsScreen(
                     valueRange = 0.4f..1.0f,
                     colors = SliderDefaults.colors(thumbColor = HealthGreen, activeTrackColor = HealthGreen)
                 )
+
+                Spacer(modifier = Modifier.height(10.dp))
+                Button(
+                    onClick = onOpenHudCustomizer,
+                    colors = ButtonDefaults.buttonColors(containerColor = ElectricBlueSafe),
+                    modifier = Modifier.fillMaxWidth().height(40.dp).testTag("open_hud_customizer_button")
+                ) {
+                    Text("OPEN INTERACTIVE HUD LAYOUT STUDIO", color = Color.Black, fontWeight = FontWeight.Black, fontSize = 11.sp)
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+                Text("DEFAULT MATCH WEATHER", color = TextSecondary, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                Spacer(modifier = Modifier.height(6.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    WeatherType.entries.forEach { wt ->
+                        val active = weatherId == wt.name
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(if (active) CyberOrange else Color.White.copy(alpha = 0.08f))
+                                .clickable {
+                                    weatherId = wt.name
+                                    saveSettings()
+                                }
+                                .padding(vertical = 6.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(wt.displayName, color = if (active) Color.Black else TextPrimary, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
             }
         }
 
@@ -372,6 +414,32 @@ fun SettingsScreen(
                     valueRange = 0.0f..1.0f,
                     colors = SliderDefaults.colors(thumbColor = HealthGreen, activeTrackColor = HealthGreen)
                 )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+        SettingSectionTitle("ACCOUNT & CLOUD SESSION")
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(12.dp),
+            colors = CardDefaults.cardColors(containerColor = TacticalSurface)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(14.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column {
+                    Text("GOOGLE ACCOUNT AUTHENTICATION", color = TextSecondary, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    Text(userEmail ?: "Signed In via Google Credential Manager", color = TextPrimary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                }
+                Button(
+                    onClick = onSignOut,
+                    colors = ButtonDefaults.buttonColors(containerColor = RedZoneBombardment),
+                    modifier = Modifier.height(38.dp).testTag("sign_out_button")
+                ) {
+                    Text("SIGN OUT", color = Color.White, fontWeight = FontWeight.Black, fontSize = 11.sp)
+                }
             }
         }
     }
