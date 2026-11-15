@@ -167,6 +167,7 @@ fun MainApp(
                         aimAssistEnabled = settings?.aimAssistEnabled ?: true,
                         teamSize = selectedTeamSize,
                         characterPresetId = profile?.selectedCharacterId ?: "vortex_ghost",
+                        activePetId = profile?.selectedPetId ?: "draco_flame",
                         cameraSensitivity = settings?.cameraSensitivity ?: 1.0f,
                         adsSensitivity = settings?.adsSensitivity ?: 0.85f,
                         onMatchFinished = { placement, kills, damage, durationSec ->
@@ -209,6 +210,7 @@ fun MainApp(
                     hudScale = settings?.hudScale ?: 1.0f,
                     hudOpacity = settings?.hudOpacity ?: 0.90f,
                     graphicsQuality = settings?.graphicsQuality ?: "High",
+                    leftHandFireEnabled = settings?.leftHandFireEnabled ?: true,
                     onUpdateGraphicsQuality = { q ->
                         scope.launch { repository.updateGraphicsQuality(q) }
                     },

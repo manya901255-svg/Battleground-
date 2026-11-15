@@ -1,7 +1,10 @@
 package com.example.ui.screens
 
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
@@ -31,6 +35,7 @@ import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.Flag
@@ -39,9 +44,11 @@ import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Pets
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.ThumbUp
 import androidx.compose.material.icons.filled.Whatshot
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -71,21 +78,29 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import com.example.R
 import com.example.data.GameRepository
 import com.example.data.MatchHistoryEntity
 import com.example.data.MissionEntity
 import com.example.data.UserProfileEntity
+import com.example.game.model.CharacterPreset
+import com.example.game.model.PetPreset
 import com.example.ui.theme.AirdropGold
 import com.example.ui.theme.CyberOrange
 import com.example.ui.theme.ElectricBlueSafe
@@ -256,6 +271,21 @@ fun SocialScreen(
                         statusBanner = "Operative callsign updated to $newName"
                     }
                 },
+                onSaveBio = { newBio ->
+                    scope.launch {
+                        repository.updateSignatureBio(newBio)
+                        statusBanner = "Signature bio updated!"
+                    }
+                },
+                onIncrementLikes = {
+                    scope.launch {
+                        repository.incrementProfileLikes()
+                        statusBanner = "Profile liked!"
+                    }
+                },
+                onCopyUid = { uid ->
+                    statusBanner = "Copied UID: $uid"
+                },
                 onClaimAchievement = { missionId ->
                     scope.launch {
                         val ok = repository.claimMissionReward(missionId)
@@ -341,50 +371,187 @@ private fun ProfileTabContent(
     profile: UserProfileEntity?,
     achievements: List<MissionEntity>,
     onSaveUsername: (String) -> Unit,
+    onSaveBio: (String) -> Unit,
+    onIncrementLikes: () -> Unit,
+    onCopyUid: (String) -> Unit,
     onClaimAchievement: (String) -> Unit
 ) {
     val p = profile ?: UserProfileEntity()
+    val clipboard = LocalClipboardManager.current
     var isEditingName by remember { mutableStateOf(false) }
     var nameDraft by remember(p.username) { mutableStateOf(p.username) }
+    var isEditingBio by remember { mutableStateOf(false) }
+    var bioDraft by remember(p.signatureBio) { mutableStateOf(p.signatureBio) }
+
+    val pet = remember(p.selectedPetId) { PetPreset.fromId(p.selectedPetId) }
+    val preset = remember(p.selectedCharacterId) { CharacterPreset.fromId(p.selectedCharacterId) }
+    val petGlow = Color(pet.glowRgb.first, pet.glowRgb.second, pet.glowRgb.third)
+    val uidString = "19105274${p.id}9"
 
     Row(
         modifier = Modifier.fillMaxSize(),
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        // Left Column: Identity Card & Level Progress
-        Card(
+        // LEFT HALF: Free Fire MAX-Style Cyber Pedestal Stage + Operative + Pet Companion + UID Card
+        Box(
             modifier = Modifier
-                .weight(1f)
-                .fillMaxHeight(),
-            shape = RoundedCornerShape(12.dp),
-            colors = CardDefaults.cardColors(containerColor = TacticalSurface)
+                .weight(0.95f)
+                .fillMaxHeight()
+                .clip(RoundedCornerShape(14.dp))
+                .background(
+                    Brush.verticalGradient(
+                        listOf(Color(0xFF211238), Color(0xFF130D22), Color(0xFF0A0A12))
+                    )
+                )
+                .border(1.5.dp, HazardYellow.copy(alpha = 0.55f), RoundedCornerShape(14.dp))
         ) {
+            // Cyber spotlight beams & hexagonal stage base
+            Canvas(modifier = Modifier.fillMaxSize()) {
+                drawLine(
+                    color = Color(0xFF9C27B0).copy(alpha = 0.28f),
+                    start = Offset(size.width * 0.15f, 0f),
+                    end = Offset(size.width * 0.45f, size.height * 0.85f),
+                    strokeWidth = 28f
+                )
+                drawLine(
+                    color = HazardYellow.copy(alpha = 0.18f),
+                    start = Offset(size.width * 0.85f, 0f),
+                    end = Offset(size.width * 0.52f, size.height * 0.85f),
+                    strokeWidth = 22f
+                )
+                // Stage pedestal ring
+                drawOval(
+                    color = Color.Black.copy(alpha = 0.82f),
+                    topLeft = Offset(size.width * 0.16f, size.height * 0.78f),
+                    size = Size(size.width * 0.68f, size.height * 0.16f)
+                )
+                drawOval(
+                    color = HazardYellow.copy(alpha = 0.6f),
+                    topLeft = Offset(size.width * 0.18f, size.height * 0.79f),
+                    size = Size(size.width * 0.64f, size.height * 0.14f),
+                    style = Stroke(width = 3f)
+                )
+            }
+
+            // Standing Full-Body Operative
+            Image(
+                painter = painterResource(id = R.drawable.vortex_hero_soldier_1794458613075),
+                contentDescription = preset.displayName,
+                contentScale = ContentScale.Fit,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxHeight(0.88f)
+                    .padding(bottom = 18.dp)
+            )
+
+            // Companion Battle Pet Card beside Operative (matching screenshot Pet stand)
             Column(
                 modifier = Modifier
-                    .fillMaxSize()
-                    .padding(14.dp),
-                verticalArrangement = Arrangement.SpaceBetween
+                    .align(Alignment.BottomEnd)
+                    .padding(end = 12.dp, bottom = 26.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(Color.Black.copy(alpha = 0.72f))
+                    .border(1.5.dp, petGlow, RoundedCornerShape(12.dp))
+                    .padding(horizontal = 10.dp, vertical = 7.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Column {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
+                Box(
+                    modifier = Modifier
+                        .size(28.dp)
+                        .clip(CircleShape)
+                        .background(Color(pet.bodyRgb.first, pet.bodyRgb.second, pet.bodyRgb.third))
+                        .border(2.dp, petGlow, CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(Icons.Default.Pets, contentDescription = pet.displayName, tint = Color.White, modifier = Modifier.size(16.dp))
+                }
+                Spacer(modifier = Modifier.height(3.dp))
+                Text(pet.displayName, color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.Black)
+                Text("Lv.${p.petLevel}", color = petGlow, fontSize = 8.sp, fontWeight = FontWeight.Bold)
+            }
+
+            // Bottom-left QR-style UID Identity Badge
+            Column(
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .padding(start = 10.dp, bottom = 10.dp)
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(Color.White)
+                    .border(1.5.dp, HazardYellow, RoundedCornerShape(6.dp))
+                    .clickable {
+                        clipboard.setText(AnnotatedString(uidString))
+                        onCopyUid(uidString)
+                    }
+                    .padding(4.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Canvas(modifier = Modifier.size(34.dp)) {
+                    val cell = size.width / 5f
+                    val pattern = listOf(1,1,1,0,1, 1,0,1,1,0, 1,1,0,1,1, 0,1,1,0,1, 1,0,1,1,1)
+                    pattern.forEachIndexed { idx, v ->
+                        if (v == 1) {
+                            val r = idx / 5
+                            val c = idx % 5
+                            drawRect(Color.Black, Offset(c * cell, r * cell), Size(cell - 1f, cell - 1f))
+                        }
+                    }
+                }
+                Text("UID: $uidString", color = Color.Black, fontSize = 6.sp, fontWeight = FontWeight.Black)
+            }
+
+            // Operative Preset Pill top-left
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(10.dp)
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(Color.Black.copy(alpha = 0.65f))
+                    .border(1.dp, CyberOrange, RoundedCornerShape(6.dp))
+                    .padding(horizontal = 8.dp, vertical = 3.dp)
+            ) {
+                Text("${preset.displayName.uppercase()} • ${p.title.uppercase()}", color = HazardYellow, fontSize = 9.sp, fontWeight = FontWeight.Black)
+            }
+        }
+
+        // RIGHT HALF: Free Fire MAX Gold/Slate Esports Inspection Card + Achievements
+        Column(
+            modifier = Modifier
+                .weight(1.25f)
+                .fillMaxHeight(),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            // Gold Header Banner (Rank Crest, Name, UID, Level, Likes)
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(Color(0xFF141824))
+                    .border(1.5.dp, HazardYellow, RoundedCornerShape(12.dp))
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(
+                            Brush.horizontalGradient(
+                                listOf(Color(0xFFE59A1A), Color(0xFF282E42))
+                            )
+                        )
+                        .padding(10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
                         Box(
                             modifier = Modifier
-                                .size(58.dp)
-                                .clip(CircleShape)
-                                .background(
-                                    Brush.radialGradient(
-                                        colors = listOf(CyberOrange.copy(alpha = 0.55f), TacticalSurfaceVariant)
-                                    )
-                                )
-                                .border(2.dp, CyberOrange, CircleShape),
+                                .size(42.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(Color(0xFF1E1336))
+                                .border(2.dp, HazardYellow, RoundedCornerShape(8.dp)),
                             contentAlignment = Alignment.Center
                         ) {
-                            Icon(Icons.Default.Person, contentDescription = "Avatar", tint = Color.White, modifier = Modifier.size(32.dp))
+                            Icon(Icons.Default.Shield, contentDescription = "Rank", tint = HazardYellow, modifier = Modifier.size(24.dp))
                         }
-
+                        Spacer(modifier = Modifier.width(10.dp))
                         Column(modifier = Modifier.weight(1f)) {
                             if (isEditingName) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -392,161 +559,138 @@ private fun ProfileTabContent(
                                         value = nameDraft,
                                         onValueChange = { if (it.length <= 16) nameDraft = it },
                                         singleLine = true,
-                                        modifier = Modifier
-                                            .weight(1f)
-                                            .testTag("username_input"),
+                                        modifier = Modifier.weight(1f).testTag("username_input"),
                                         colors = OutlinedTextFieldDefaults.colors(
                                             focusedTextColor = TextPrimary,
                                             unfocusedTextColor = TextPrimary,
-                                            focusedBorderColor = CyberOrange,
+                                            focusedBorderColor = HazardYellow,
                                             unfocusedBorderColor = TextSecondary
                                         )
                                     )
                                     IconButton(
                                         onClick = {
-                                            if (nameDraft.isNotBlank()) {
-                                                onSaveUsername(nameDraft.trim())
-                                            }
+                                            if (nameDraft.isNotBlank()) onSaveUsername(nameDraft.trim())
                                             isEditingName = false
                                         },
                                         modifier = Modifier.testTag("save_username_button")
                                     ) {
                                         Icon(Icons.Default.Check, contentDescription = "Save Username", tint = HealthGreen)
                                     }
-                                    IconButton(onClick = {
-                                        nameDraft = p.username
-                                        isEditingName = false
-                                    }) {
-                                        Icon(Icons.Default.Close, contentDescription = "Cancel Edit", tint = RedZoneBombardment)
+                                    IconButton(onClick = { nameDraft = p.username; isEditingName = false }) {
+                                        Icon(Icons.Default.Close, contentDescription = "Cancel", tint = RedZoneBombardment)
                                     }
                                 }
                             } else {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Text(
-                                        p.username,
-                                        color = TextPrimary,
-                                        fontWeight = FontWeight.Black,
-                                        fontSize = 18.sp,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(p.username, color = Color.White, fontWeight = FontWeight.Black, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    Spacer(modifier = Modifier.width(4.dp))
                                     IconButton(
-                                        onClick = {
-                                            nameDraft = p.username
-                                            isEditingName = true
-                                        },
-                                        modifier = Modifier
-                                            .size(32.dp)
-                                            .testTag("edit_username_button")
+                                        onClick = { nameDraft = p.username; isEditingName = true },
+                                        modifier = Modifier.size(24.dp).testTag("edit_username_button")
                                     ) {
-                                        Icon(Icons.Default.Edit, contentDescription = "Edit Username", tint = CyberOrange, modifier = Modifier.size(16.dp))
+                                        Icon(Icons.Default.Edit, contentDescription = "Edit Username", tint = HazardYellow, modifier = Modifier.size(14.dp))
                                     }
                                 }
                             }
-                            Text("ID: VTX-1049-882 • ${p.title}", color = TextSecondary, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            Text("English • Global • ${p.rankTier}", color = Color.White.copy(alpha = 0.88f), fontSize = 9.sp, fontWeight = FontWeight.Bold)
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(14.dp))
-
-                    // Level & XP Progress
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text("LEVEL ${p.level}", color = CyberOrange, fontWeight = FontWeight.Black, fontSize = 12.sp)
-                        Text("${p.xp} / ${p.maxXp} XP", color = TextSecondary, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    // Level & Likes & Copy UID
+                    Column(horizontalAlignment = Alignment.End) {
+                        Row(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(Color.Black.copy(alpha = 0.45f))
+                                .clickable { onIncrementLikes() }
+                                .padding(horizontal = 8.dp, vertical = 3.dp)
+                                .testTag("like_profile_button"),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Icon(Icons.Default.ThumbUp, contentDescription = "Like Profile", tint = HazardYellow, modifier = Modifier.size(13.dp))
+                            Text("${p.likesCount}", color = Color.White, fontWeight = FontWeight.Black, fontSize = 11.sp)
+                        }
+                        Spacer(modifier = Modifier.height(3.dp))
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            modifier = Modifier.clickable {
+                                clipboard.setText(AnnotatedString(uidString))
+                                onCopyUid(uidString)
+                            }
+                        ) {
+                            Text("Lv.${p.level} • UID: $uidString", color = HazardYellow, fontSize = 9.sp, fontWeight = FontWeight.Black)
+                            Icon(Icons.Default.ContentCopy, contentDescription = "Copy UID", tint = Color.White, modifier = Modifier.size(11.dp))
+                        }
                     }
-                    Spacer(modifier = Modifier.height(5.dp))
-                    LinearProgressIndicator(
-                        progress = { (p.xp.toFloat() / p.maxXp.coerceAtLeast(1).toFloat()).coerceIn(0f, 1f) },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(8.dp)
-                            .clip(RoundedCornerShape(4.dp)),
-                        color = CyberOrange,
-                        trackColor = TacticalSurfaceVariant
-                    )
+                }
 
-                    Spacer(modifier = Modifier.height(14.dp))
-
-                    // Current Rank Banner
+                // BATTLE ROYALE Season Strip (S54 + Heroic Emblem + Pet Lv + Signature Bio)
+                Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(TacticalSurfaceVariant)
-                            .padding(12.dp),
+                        modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
+                        Text("BATTLE ROYALE • ${p.seasonId}", color = ElectricBlueSafe, fontWeight = FontWeight.Black, fontSize = 10.sp)
+                        Text("HEROIC EMBLEM • ${p.rankPoints} RP", color = HazardYellow, fontWeight = FontWeight.Black, fontSize = 10.sp)
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        ProfileStatTile("MATCHES", "${p.matchesPlayed}", Icons.Default.History, Modifier.weight(1f))
+                        ProfileStatTile("WINS", "${p.wins}", Icons.Default.EmojiEvents, Modifier.weight(1f))
+                        ProfileStatTile("K/D RATIO", String.format(Locale.US, "%.2f", p.kdRatio), Icons.Default.Whatshot, Modifier.weight(1f))
+                        ProfileStatTile("PET", "${pet.displayName} Lv.${p.petLevel}", Icons.Default.Pets, Modifier.weight(1f))
+                    }
+
+                    // Editable Player Bio / Signature ("Battle in Style!")
+                    if (isEditingBio) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.Shield, contentDescription = "Rank", tint = AirdropGold, modifier = Modifier.size(24.dp))
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Column {
-                                Text("SEASON RANK", color = TextSecondary, fontSize = 9.sp, fontWeight = FontWeight.Bold)
-                                Text(p.rankTier.uppercase(), color = AirdropGold, fontWeight = FontWeight.Black, fontSize = 14.sp)
+                            OutlinedTextField(
+                                value = bioDraft,
+                                onValueChange = { if (it.length <= 48) bioDraft = it },
+                                singleLine = true,
+                                modifier = Modifier.weight(1f).testTag("signature_bio_input"),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedTextColor = TextPrimary,
+                                    unfocusedTextColor = TextPrimary,
+                                    focusedBorderColor = CyberOrange,
+                                    unfocusedBorderColor = TextSecondary
+                                )
+                            )
+                            IconButton(
+                                onClick = {
+                                    if (bioDraft.isNotBlank()) onSaveBio(bioDraft)
+                                    isEditingBio = false
+                                },
+                                modifier = Modifier.testTag("save_bio_button")
+                            ) {
+                                Icon(Icons.Default.Check, contentDescription = "Save Bio", tint = HealthGreen)
                             }
                         }
-                        Text("${p.rankPoints} RP", color = TextPrimary, fontWeight = FontWeight.Black, fontSize = 15.sp)
-                    }
-                }
-
-                // Economy summary
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(Color.Black.copy(alpha = 0.35f))
-                            .padding(8.dp)
-                    ) {
-                        Column {
-                            Text("BATTLE POINTS", color = TextSecondary, fontSize = 9.sp, fontWeight = FontWeight.Bold)
-                            Text("${p.bpCoins} BP", color = HazardYellow, fontWeight = FontWeight.Black, fontSize = 13.sp)
-                        }
-                    }
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(Color.Black.copy(alpha = 0.35f))
-                            .padding(8.dp)
-                    ) {
-                        Column {
-                            Text("VORTEX CREDITS", color = TextSecondary, fontSize = 9.sp, fontWeight = FontWeight.Bold)
-                            Text("${p.vortexCredits} VC", color = ElectricBlueSafe, fontWeight = FontWeight.Black, fontSize = 13.sp)
+                    } else {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(Color.Black.copy(alpha = 0.35f))
+                                .clickable { bioDraft = p.signatureBio; isEditingBio = true }
+                                .padding(horizontal = 10.dp, vertical = 6.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(p.signatureBio, color = TextPrimary, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                            Icon(Icons.Default.Edit, contentDescription = "Edit Signature", tint = TextSecondary, modifier = Modifier.size(13.dp))
                         }
                     }
                 }
             }
-        }
 
-        // Right Column: Career Metrics + Achievements
-        Column(
-            modifier = Modifier
-                .weight(1.3f)
-                .fillMaxHeight(),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            val stats = listOf(
-                Triple("MATCHES", "${p.matchesPlayed}", Icons.Default.History),
-                Triple("VICTORIES", "${p.wins}", Icons.Default.EmojiEvents),
-                Triple("K/D RATIO", String.format(Locale.US, "%.2f", p.kdRatio), Icons.Default.Whatshot),
-                Triple("WIN RATE", String.format(Locale.US, "%.1f%%", p.winRatePercent), Icons.Default.Star),
-                Triple("HEADSHOTS", "${p.headshots}", Icons.Default.GpsFixed),
-                Triple("FAV WEAPON", "M416", Icons.Default.Shield)
-            )
-
-            LazyVerticalGrid(
-                columns = GridCells.Fixed(3),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.height(148.dp)
-            ) {
-                items(stats) { (label, value, icon) ->
-                    ProfileStatTile(label = label, value = value, icon = icon)
-                }
-            }
-
+            // Career Honor & Achievements
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -554,20 +698,23 @@ private fun ProfileTabContent(
                 shape = RoundedCornerShape(12.dp),
                 colors = CardDefaults.cardColors(containerColor = TacticalSurface)
             ) {
-                Column(modifier = Modifier.padding(12.dp)) {
-                    Text("COMBAT ACHIEVEMENTS", color = CyberOrange, fontWeight = FontWeight.Black, fontSize = 12.sp)
+                Column(modifier = Modifier.padding(10.dp)) {
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("COMBAT ACHIEVEMENTS & SEASON BADGES", color = CyberOrange, fontWeight = FontWeight.Black, fontSize = 11.sp)
+                        Text("${p.bpCoins} BP • ${p.vortexCredits} VC", color = HazardYellow, fontWeight = FontWeight.Bold, fontSize = 10.sp)
+                    }
                     Spacer(modifier = Modifier.height(6.dp))
                     if (achievements.isEmpty()) {
                         Text("Play matches to track career milestones.", color = TextSecondary, fontSize = 11.sp)
                     } else {
-                        LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        LazyColumn(verticalArrangement = Arrangement.spacedBy(5.dp)) {
                             items(achievements) { ach ->
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .clip(RoundedCornerShape(8.dp))
                                         .background(TacticalSurfaceVariant)
-                                        .padding(horizontal = 10.dp, vertical = 7.dp),
+                                        .padding(horizontal = 10.dp, vertical = 6.dp),
                                     horizontalArrangement = Arrangement.SpaceBetween,
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
@@ -598,22 +745,23 @@ private fun ProfileTabContent(
 }
 
 @Composable
-private fun ProfileStatTile(label: String, value: String, icon: ImageVector) {
+private fun ProfileStatTile(label: String, value: String, icon: ImageVector, modifier: Modifier = Modifier) {
     Card(
-        shape = RoundedCornerShape(10.dp),
-        colors = CardDefaults.cardColors(containerColor = TacticalSurface)
+        modifier = modifier,
+        shape = RoundedCornerShape(8.dp),
+        colors = CardDefaults.cardColors(containerColor = TacticalSurfaceVariant)
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(10.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
+                .padding(7.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp)
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                Icon(icon, contentDescription = label, tint = CyberOrange, modifier = Modifier.size(13.dp))
-                Text(label, color = TextSecondary, fontSize = 9.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                Icon(icon, contentDescription = label, tint = CyberOrange, modifier = Modifier.size(11.dp))
+                Text(label, color = TextSecondary, fontSize = 8.sp, fontWeight = FontWeight.Bold, maxLines = 1)
             }
-            Text(value, color = TextPrimary, fontWeight = FontWeight.Black, fontSize = 15.sp, maxLines = 1)
+            Text(value, color = TextPrimary, fontWeight = FontWeight.Black, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
 }

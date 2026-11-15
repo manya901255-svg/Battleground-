@@ -395,6 +395,61 @@ data class DeployableShield(
     var remainingSec: Float = 16f
 )
 
+data class ExplosiveBarrel(
+    val id: String = UUID.randomUUID().toString(),
+    val x: Float,
+    val y: Float,
+    var health: Float = 60f,
+    val maxHealth: Float = 60f,
+    var isExploded: Boolean = false
+)
+
+enum class PetPreset(
+    val id: String,
+    val displayName: String,
+    val skillTitle: String,
+    val skillDesc: String,
+    val bodyRgb: Triple<Float, Float, Float>,
+    val glowRgb: Triple<Float, Float, Float>
+) {
+    DRACO_FLAME(
+        id = "draco_flame",
+        displayName = "Draco Flame",
+        skillTitle = "Dragon Ember",
+        skillDesc = "+15 EP gained per elimination",
+        bodyRgb = Triple(0.58f, 0.16f, 0.42f),
+        glowRgb = Triple(1.0f, 0.42f, 0.08f)
+    ),
+    CYBER_PUP(
+        id = "cyber_pup",
+        displayName = "Cyber Pup",
+        skillTitle = "Tactical Sense",
+        skillDesc = "Extended Pulse radar range",
+        bodyRgb = Triple(0.18f, 0.42f, 0.72f),
+        glowRgb = Triple(0.0f, 0.90f, 1.0f)
+    ),
+    FROST_OWL(
+        id = "frost_owl",
+        displayName = "Frost Owl",
+        skillTitle = "Glacial Ward",
+        skillDesc = "+15 Max Tactical Shield capacity",
+        bodyRgb = Triple(0.75f, 0.88f, 0.96f),
+        glowRgb = Triple(0.35f, 0.85f, 1.0f)
+    ),
+    VORTEX_ROBO(
+        id = "vortex_robo",
+        displayName = "Vortex Robo",
+        skillTitle = "Overclocked Mag",
+        skillDesc = "+15% faster weapon reload speed",
+        bodyRgb = Triple(0.24f, 0.26f, 0.30f),
+        glowRgb = Triple(1.0f, 0.84f, 0.0f)
+    );
+
+    companion object {
+        fun fromId(id: String): PetPreset = entries.firstOrNull { it.id == id } ?: DRACO_FLAME
+    }
+}
+
 data class DamagePopup(
     val id: String = UUID.randomUUID().toString(),
     val worldX: Float,

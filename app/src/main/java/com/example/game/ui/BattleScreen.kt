@@ -79,6 +79,7 @@ fun BattleScreen(
     hudScale: Float = 1.0f,
     hudOpacity: Float = 0.92f,
     graphicsQuality: String = "High",
+    leftHandFireEnabled: Boolean = true,
     onUpdateGraphicsQuality: (String) -> Unit = {},
     onExitToLobby: () -> Unit
 ) {
@@ -539,6 +540,18 @@ fun BattleScreen(
 
             // MAIN PLAYABLE COMBAT HUD CONTROLS
             if (!state.isSpectating) {
+                // LEFT CLAW FIRE BUTTON (3-finger/4-finger Free Fire & BGMI style)
+                if (leftHandFireEnabled) {
+                    LeftHandFireButton(
+                        isFiring = engine.isFiringInput,
+                        sizeDp = (46.dp * uiScale).coerceIn(38.dp, 54.dp),
+                        onFireChange = { engine.isFiringInput = it },
+                        modifier = Modifier
+                            .align(Alignment.CenterStart)
+                            .padding(start = 12.dp, top = 28.dp)
+                    )
+                }
+
                 // LEFT EDGE & BOTTOM-LEFT: Backpack/Medkit/Grenade Column + Golden Sprint Lock + Virtual Joystick
                 Box(
                     modifier = Modifier
@@ -606,7 +619,7 @@ fun BattleScreen(
                         .padding(bottom = 8.dp)
                 )
 
-                // BOTTOM-RIGHT: Large Bullet-Splash Fire Button + Arc of Aim / Jump / Crouch / Prone / Reload
+                // BOTTOM-RIGHT: Large Bullet-Splash Fire Button + Arc of Aim / Jump / Crouch / Prone / Reload / Gloo Shield
                 RightCombatCluster(
                     isFiring = engine.isFiringInput,
                     onFireChange = { engine.isFiringInput = it },
@@ -623,6 +636,8 @@ fun BattleScreen(
                     },
                     onReload = { engine.reloadWeapon(user) },
                     isReloading = state.isReloading,
+                    onDeployShield = { engine.deployTacticalShield() },
+                    shieldCooldownSec = state.shieldCooldownSec,
                     uiScale = uiScale,
                     modifier = Modifier
                         .align(Alignment.BottomEnd)
@@ -674,23 +689,36 @@ fun BattleScreen(
 
 private fun DrawScope.drawScopeReticle(scope: ScopeType, cx: Float, cy: Float) {
     when (scope) {
-        ScopeType.RED_DOT, ScopeType.HOLO -> {
-            drawCircle(Color.Red, center = Offset(cx, cy), radius = 4f)
-            drawCircle(Color.Red.copy(alpha = 0.45f), center = Offset(cx, cy), radius = 22f, style = Stroke(width = 2f))
+        ScopeType.RED_DOT, ScopeType.HOLO, ScopeType.IRON_SIGHT -> {
+            val radius = if (scope == ScopeType.IRON_SIGHT) 140f else 185f
+            drawCircle(
+                brush = Brush.radialGradient(
+                    colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.55f)),
+                    center = Offset(cx, cy),
+                    radius = radius * 1.3f
+                ),
+                center = Offset(cx, cy),
+                radius = radius * 1.3f
+            )
+            drawCircle(Color.Black.copy(alpha = 0.78f), center = Offset(cx, cy), radius = radius, style = Stroke(width = 8f))
+            drawCircle(Color.Red.copy(alpha = 0.48f), center = Offset(cx, cy), radius = 18f, style = Stroke(width = 2f))
+            drawLine(Color.Red.copy(alpha = 0.75f), Offset(cx - 28f, cy), Offset(cx - 8f, cy), strokeWidth = 2f)
+            drawLine(Color.Red.copy(alpha = 0.75f), Offset(cx + 8f, cy), Offset(cx + 28f, cy), strokeWidth = 2f)
+            drawLine(Color.Red.copy(alpha = 0.75f), Offset(cx, cy - 28f), Offset(cx, cy - 8f), strokeWidth = 2f)
+            drawLine(Color.Red.copy(alpha = 0.75f), Offset(cx, cy + 8f), Offset(cx, cy + 28f), strokeWidth = 2f)
+            drawCircle(Color.Red, center = Offset(cx, cy), radius = 4.2f)
         }
         ScopeType.SCOPE_2X, ScopeType.SCOPE_4X, ScopeType.SCOPE_8X -> {
-            drawRect(Color.Black.copy(alpha = 0.55f))
-            drawCircle(Color.Black, center = Offset(cx, cy), radius = 250f, style = Stroke(width = 6f))
-            drawLine(Color.Black, start = Offset(cx - 250f, cy), end = Offset(cx + 250f, cy), strokeWidth = 2.5f)
-            drawLine(Color.Black, start = Offset(cx, cy - 250f), end = Offset(cx, cy + 250f), strokeWidth = 2.5f)
+            drawRect(Color.Black.copy(alpha = 0.48f))
+            drawCircle(Color.Black, center = Offset(cx, cy), radius = 250f, style = Stroke(width = 10f))
+            drawCircle(Color.Cyan.copy(alpha = 0.35f), center = Offset(cx, cy), radius = 244f, style = Stroke(width = 2f))
+            drawLine(Color.Black, start = Offset(cx - 245f, cy), end = Offset(cx + 245f, cy), strokeWidth = 2.5f)
+            drawLine(Color.Black, start = Offset(cx, cy - 245f), end = Offset(cx, cy + 245f), strokeWidth = 2.5f)
             for (i in 1..4) {
                 val offset = i * 35f
-                drawLine(Color.Red, start = Offset(cx - 10f, cy + offset), end = Offset(cx + 10f, cy + offset), strokeWidth = 2f)
+                drawLine(Color.Red, start = Offset(cx - 10f, cy + offset), end = Offset(cx + 10f, cy + offset), strokeWidth = 2.2f)
             }
-            drawCircle(Color.Red, center = Offset(cx, cy), radius = 3.5f)
-        }
-        else -> {
-            drawCircle(Color.Green, center = Offset(cx, cy), radius = 3.5f)
+            drawCircle(Color.Red, center = Offset(cx, cy), radius = 4f)
         }
     }
 }

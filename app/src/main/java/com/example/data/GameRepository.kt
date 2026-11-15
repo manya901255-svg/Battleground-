@@ -302,6 +302,23 @@ class GameRepository(private val dao: VortexDao) {
         dao.insertOrUpdateProfile(profile.copy(selectedCharacterId = presetId))
     }
 
+    suspend fun updateSelectedPet(petId: String) {
+        val profile = dao.getUserProfileOnce() ?: UserProfileEntity()
+        dao.insertOrUpdateProfile(profile.copy(selectedPetId = petId))
+    }
+
+    suspend fun updateSignatureBio(bio: String) {
+        val cleaned = bio.trim().take(48)
+        if (cleaned.isEmpty()) return
+        val profile = dao.getUserProfileOnce() ?: UserProfileEntity()
+        dao.insertOrUpdateProfile(profile.copy(signatureBio = cleaned))
+    }
+
+    suspend fun incrementProfileLikes() {
+        val profile = dao.getUserProfileOnce() ?: UserProfileEntity()
+        dao.insertOrUpdateProfile(profile.copy(likesCount = profile.likesCount + 1))
+    }
+
     suspend fun updateGraphicsQuality(quality: String) {
         val current = dao.getSettings().firstOrNull() ?: GameSettingsEntity()
         dao.insertSettings(current.copy(graphicsQuality = quality))

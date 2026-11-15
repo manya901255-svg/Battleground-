@@ -231,23 +231,54 @@ fun LobbyScreen(
             }
         }
 
-        // 2. CENTER: STANDING FUTURISTIC HERO SOLDIER
+        // 2. CENTER: FREE FIRE MAX CYBER STAGE + STANDING SOLDIER + COMPANION PET
+        val activePreset = remember(profile.selectedCharacterId) {
+            com.example.game.model.CharacterPreset.fromId(profile.selectedCharacterId)
+        }
+        val activePet = remember(profile.selectedPetId) {
+            com.example.game.model.PetPreset.fromId(profile.selectedPetId)
+        }
+        val petGlow = Color(activePet.glowRgb.first, activePet.glowRgb.second, activePet.glowRgb.third)
+
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(bottom = 16.dp),
             contentAlignment = Alignment.BottomCenter
         ) {
-            // Ground Spotlight Shadow
+            // Diagonal Cyber Spotlight Beams & Hexagonal Stage Pedestal
+            Canvas(modifier = Modifier.fillMaxSize()) {
+                val cx = size.width * 0.5f
+                drawLine(
+                    color = Color(0xFF9C27B0).copy(alpha = 0.22f),
+                    start = Offset(cx - 260f, 0f),
+                    end = Offset(cx - 90f, size.height * 0.85f),
+                    strokeWidth = 34f
+                )
+                drawLine(
+                    color = HazardYellow.copy(alpha = 0.16f),
+                    start = Offset(cx + 260f, 0f),
+                    end = Offset(cx + 90f, size.height * 0.85f),
+                    strokeWidth = 28f
+                )
+            }
+
+            // Hexagonal Pedestal Disc
             Canvas(
                 modifier = Modifier
-                    .size(width = 300.dp, height = 50.dp)
-                    .offset(y = 20.dp)
+                    .size(width = 330.dp, height = 62.dp)
+                    .offset(y = 14.dp)
             ) {
                 drawOval(
-                    color = Color.Black.copy(alpha = 0.70f),
+                    color = Color.Black.copy(alpha = 0.78f),
                     topLeft = Offset.Zero,
                     size = size
+                )
+                drawOval(
+                    color = currentTheme.accentColor.copy(alpha = 0.55f),
+                    topLeft = Offset(10f, 6f),
+                    size = androidx.compose.ui.geometry.Size(size.width - 20f, size.height - 12f),
+                    style = androidx.compose.ui.graphics.drawscope.Stroke(width = 3f)
                 )
             }
 
@@ -261,6 +292,31 @@ fun LobbyScreen(
                     .clickable { onPlayEmote() },
                 contentScale = ContentScale.Fit
             )
+
+            // Companion Pet Orbiting Badge next to Soldier (tap to customize pet)
+            Row(
+                modifier = Modifier
+                    .offset(x = 128.dp, y = (-72).dp)
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(TacticalSurface.copy(alpha = 0.90f))
+                    .border(1.5.dp, petGlow, RoundedCornerShape(14.dp))
+                    .clickable { onNavigateToCustomization() }
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(22.dp)
+                        .clip(CircleShape)
+                        .background(Color(activePet.bodyRgb.first, activePet.bodyRgb.second, activePet.bodyRgb.third))
+                        .border(1.5.dp, petGlow, CircleShape)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Column {
+                    Text("${activePet.displayName} • Lv.${profile.petLevel}", color = petGlow, fontSize = 9.sp, fontWeight = FontWeight.Black)
+                    Text("${activePreset.displayName} Active", color = TextSecondary, fontSize = 8.sp)
+                }
+            }
 
             // Quick Emote Trigger Pill
             Row(

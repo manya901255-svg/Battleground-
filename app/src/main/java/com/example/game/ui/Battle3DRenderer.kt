@@ -8,8 +8,10 @@ import com.example.game.engine.BattleRoyaleEngine
 import com.example.game.map.ObstacleType
 import com.example.game.model.CharacterPreset
 import com.example.game.model.MatchPhase
+import com.example.game.model.PetPreset
 import com.example.game.model.Player
 import com.example.game.model.PlayerStance
+import com.example.game.model.VehicleType
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.FloatBuffer
@@ -18,7 +20,6 @@ import javax.microedition.khronos.opengles.GL10
 import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.sin
-import kotlin.math.sqrt
 
 data class ScreenProjectedPoint(
     val x: Float,
@@ -45,6 +46,11 @@ class Battle3DRenderer(
     companion object {
         private const val WORLD_SCALE = 0.1f // 5000 engine units -> 500m OpenGL world
 
+        private const val SURFACE_SOLID = 0
+        private const val SURFACE_TERRAIN = 1
+        private const val SURFACE_RIBBED = 2
+        private const val SURFACE_CONCRETE = 3
+
         private const val VERTEX_SHADER = """
             uniform mat4 uMVPMatrix;
             uniform mat4 uModelMatrix;
@@ -53,14 +59,18 @@ class Battle3DRenderer(
             attribute vec3 aNormal;
             varying float vLightIntensity;
             varying float vViewDist;
+            varying vec3 vWorldPos;
+            varying vec3 vWorldNormal;
             void main() {
                 vec4 worldPos = uModelMatrix * vec4(aPosition, 1.0);
                 vec3 worldNormal = normalize(mat3(uModelMatrix) * aNormal);
                 float diff = max(dot(worldNormal, normalize(uLightDir)), 0.0);
-                float hemi = 0.42 + 0.14 * worldNormal.y;
-                vLightIntensity = clamp(hemi + diff * 0.68, 0.28, 1.25);
+                float hemi = 0.45 + 0.16 * worldNormal.y;
+                vLightIntensity = clamp(hemi + diff * 0.72, 0.30, 1.30);
                 vec4 clipPos = uMVPMatrix * vec4(aPosition, 1.0);
                 vViewDist = clipPos.w;
+                vWorldPos = worldPos.xyz;
+                vWorldNormal = worldNormal;
                 gl_Position = clipPos;
             }
         """
@@ -71,12 +81,33 @@ class Battle3DRenderer(
             uniform vec3 uFogColor;
             uniform float uFogMaxDist;
             uniform float uUnlit;
+            uniform int uSurfaceType;
             varying float vLightIntensity;
             varying float vViewDist;
+            varying vec3 vWorldPos;
+            varying vec3 vWorldNormal;
             void main() {
-                vec3 lit = mix(uColor.rgb * vLightIntensity, uColor.rgb, uUnlit);
-                float fogFactor = clamp((vViewDist - 40.0) / max(uFogMaxDist - 40.0, 20.0), 0.0, 0.88);
-                vec3 finalRgb = mix(lit, uFogColor, fogFactor * (1.0 - uUnlit * 0.5));
+                vec3 baseRgb = uColor.rgb;
+                if (uSurfaceType == 1) {
+                    // Rich procedural battleground grass / soil pattern
+                    float macro = sin(vWorldPos.x * 0.09) * cos(vWorldPos.z * 0.09);
+                    float tufts = sin(vWorldPos.x * 0.85 + sin(vWorldPos.z * 0.7)) * cos(vWorldPos.z * 0.92);
+                    float fine = fract(sin(dot(floor(vWorldPos.xz * 2.2), vec2(12.9898, 78.233))) * 43758.5453);
+                    vec3 dirtPatch = baseRgb * vec3(1.18, 0.94, 0.72);
+                    baseRgb = mix(baseRgb, dirtPatch, clamp(macro * 0.35 + 0.20, 0.0, 0.45));
+                    baseRgb *= (0.88 + tufts * 0.10 + fine * 0.12);
+                } else if (uSurfaceType == 2) {
+                    // Corrugated steel container / plank crate ribs
+                    float stripe = sin((vWorldPos.x + vWorldPos.z) * 7.5 + vWorldPos.y * 1.5);
+                    baseRgb *= (0.90 + 0.12 * stripe);
+                } else if (uSurfaceType == 3) {
+                    // Weathered concrete plaster blocks
+                    float block = sin(vWorldPos.y * 2.6) * 0.04 + sin((vWorldPos.x + vWorldPos.z) * 1.4) * 0.04;
+                    baseRgb *= (0.96 + block);
+                }
+                vec3 lit = mix(baseRgb * vLightIntensity, baseRgb, uUnlit);
+                float fogFactor = clamp((vViewDist - 48.0) / max(uFogMaxDist - 48.0, 24.0), 0.0, 0.86);
+                vec3 finalRgb = mix(lit, uFogColor, fogFactor * (1.0 - uUnlit * 0.55));
                 gl_FragColor = vec4(finalRgb, uColor.a);
             }
         """
@@ -92,6 +123,7 @@ class Battle3DRenderer(
     private var uFogColorHandle = 0
     private var uFogMaxDistHandle = 0
     private var uUnlitHandle = 0
+    private var uSurfaceTypeHandle = 0
 
     private lateinit var cubeBuffer: FloatBuffer
 
@@ -101,17 +133,16 @@ class Battle3DRenderer(
     private val modelMatrix = FloatArray(16)
     private val mvpMatrix = FloatArray(16)
 
-    // Thread-safe copy of VP matrix for projecting 3D damage popups & enemy bars to Compose HUD
     private val lock = Any()
     private val sharedVpMatrix = FloatArray(16)
     @Volatile private var viewportWidth = 1280
     @Volatile private var viewportHeight = 720
 
-    // Smoothed camera tracking state
     private var smoothCamX = 250f
     private var smoothCamY = 4f
     private var smoothCamZ = 250f
-    private var smoothFov = 60f
+    private var smoothFov = 58f
+    private var frameTimeSec = 0f
 
     override fun onSurfaceCreated(gl: GL10?, config: EGLConfig?) {
         val (skyR, skyG, skyB) = getSkyColor()
@@ -139,6 +170,7 @@ class Battle3DRenderer(
         uFogColorHandle = GLES20.glGetUniformLocation(program, "uFogColor")
         uFogMaxDistHandle = GLES20.glGetUniformLocation(program, "uFogMaxDist")
         uUnlitHandle = GLES20.glGetUniformLocation(program, "uUnlit")
+        uSurfaceTypeHandle = GLES20.glGetUniformLocation(program, "uSurfaceType")
     }
 
     override fun onSurfaceChanged(gl: GL10?, width: Int, height: Int) {
@@ -148,6 +180,7 @@ class Battle3DRenderer(
     }
 
     override fun onDrawFrame(gl: GL10?) {
+        frameTimeSec += 0.016f
         val (skyR, skyG, skyB) = getSkyColor()
         GLES20.glClearColor(skyR, skyG, skyB, 1f)
         GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT or GLES20.GL_DEPTH_BUFFER_BIT)
@@ -155,29 +188,28 @@ class Battle3DRenderer(
 
         val state = engine.engineState.value
         val user = engine.userPlayer
-        val activeTarget = if (state.isSpectating && state.spectatedPlayer != null) state.spectatedPlayer!! else user
+        val activeTarget = if (state.isSpectating && state.spectatedPlayer != null) state.spectatedPlayer else user
 
         val qualityDrawDist = when (graphicsQuality.lowercase()) {
-            "low", "smooth" -> 125f
-            "medium", "balanced" -> 185f
-            "high", "hd" -> 250f
-            else -> 320f // Ultra / Ultra HD
+            "low", "smooth" -> 135f
+            "medium", "balanced" -> 195f
+            "high", "hd" -> 265f
+            else -> 340f
         }
         val showShadows = !graphicsQuality.equals("Low", true) && !graphicsQuality.equals("Smooth", true)
 
-        // Compute Camera & Projection
         val aspect = viewportWidth.toFloat() / viewportHeight.toFloat()
         val desiredFov = when {
             engine.isAimingDownSights -> {
                 val mag = user.activeWeapon?.equippedScope?.magnification ?: 1.5f
-                (58f / mag.coerceIn(1.2f, 4.2f)).coerceIn(14f, 48f)
+                (56f / mag.coerceIn(1.25f, 4.5f)).coerceIn(14f, 44f)
             }
-            user.isSprinting -> 66f
+            user.isSprinting -> 65f
             state.phase == MatchPhase.SKYDIVING -> 68f
-            else -> 58f
+            else -> 57f
         }
-        smoothFov += (desiredFov - smoothFov) * 0.18f
-        Matrix.perspectiveM(projectionMatrix, 0, smoothFov, aspect, 0.4f, qualityDrawDist + 80f)
+        smoothFov += (desiredFov - smoothFov) * 0.20f
+        Matrix.perspectiveM(projectionMatrix, 0, smoothFov, aspect, 0.4f, qualityDrawDist + 110f)
 
         val yawRad = Math.toRadians(engine.cameraYawDegrees.toDouble())
         val pitchRad = Math.toRadians(engine.cameraPitchDegrees.toDouble())
@@ -215,9 +247,9 @@ class Battle3DRenderer(
                 targetGlX = activeTarget.x * WORLD_SCALE
                 targetGlY = activeTarget.z * WORLD_SCALE + 1.65f + crouchDip
                 targetGlZ = activeTarget.y * WORLD_SCALE
-                camDist = if (activeTarget.vehicleId != null) 9.5f else if (engine.isAimingDownSights) 2.5f else 6.0f
-                shoulderOffset = if (activeTarget.vehicleId != null) 0.4f else if (engine.isAimingDownSights) 0.72f else 1.25f
-                camHeightOffset = if (activeTarget.vehicleId != null) 3.4f else 0.75f
+                camDist = if (activeTarget.vehicleId != null) 9.6f else if (engine.isAimingDownSights) 2.2f else 5.8f
+                shoulderOffset = if (activeTarget.vehicleId != null) 0.4f else if (engine.isAimingDownSights) 0.68f else 1.22f
+                camHeightOffset = if (activeTarget.vehicleId != null) 3.4f else 0.72f
             }
         }
 
@@ -229,9 +261,9 @@ class Battle3DRenderer(
         smoothCamY += (desiredCamY - smoothCamY) * 0.35f
         smoothCamZ += (desiredCamZ - smoothCamZ) * 0.35f
 
-        val lookX = targetGlX + fx * 22f + rx * shoulderOffset * 0.55f
+        val lookX = targetGlX + fx * 24f + rx * shoulderOffset * 0.52f
         val lookY = (targetGlY - sin(pitchRad).toFloat() * 14f).coerceAtLeast(-12f)
-        val lookZ = targetGlZ + fz * 22f + rz * shoulderOffset * 0.55f
+        val lookZ = targetGlZ + fz * 24f + rz * shoulderOffset * 0.52f
 
         Matrix.setLookAtM(
             viewMatrix, 0,
@@ -245,7 +277,6 @@ class Battle3DRenderer(
             System.arraycopy(vpMatrix, 0, sharedVpMatrix, 0, 16)
         }
 
-        // Bind shared cube vertex attributes once
         cubeBuffer.position(0)
         GLES20.glEnableVertexAttribArray(aPositionHandle)
         GLES20.glVertexAttribPointer(aPositionHandle, 3, GLES20.GL_FLOAT, false, 24, cubeBuffer)
@@ -258,17 +289,20 @@ class Battle3DRenderer(
         GLES20.glUniform3f(uFogColorHandle, skyR, skyG, skyB)
         GLES20.glUniform1f(uFogMaxDistHandle, qualityDrawDist)
 
-        // 1. Ground Terrain Plane + Roads + Hills
+        // 0. Sun, Ambient Sky Clouds & Ambient Supply Plane + Parachutists
+        renderSkyDetails(targetGlX, targetGlZ)
+
+        // 1. Textured Procedural Ground Terrain + Roads + Hills
         renderTerrain(targetGlX, targetGlZ, qualityDrawDist)
 
         // 2. Water Rivers
         engine.mapConfig.waterBodies.forEach { wb ->
             val cx = (wb.x + wb.width * 0.5f) * WORLD_SCALE
             val cz = (wb.y + wb.height * 0.5f) * WORLD_SCALE
-            drawBox(cx, 0.04f, cz, wb.width * WORLD_SCALE, 0.08f, wb.height * WORLD_SCALE, 0f, 0.08f, 0.36f, 0.72f, 0.88f)
+            drawBox(cx, 0.04f, cz, wb.width * WORLD_SCALE, 0.08f, wb.height * WORLD_SCALE, 0f, 0.08f, 0.42f, 0.78f, 0.88f, unlit = 0.25f)
         }
 
-        // 3. 3D Buildings (with roofs, window trims & interior contrast)
+        // 3. Detailed Battleground Buildings (Concrete, Blue Window Frames, Roof Overhang & Parapets)
         engine.mapConfig.buildings.forEach { b ->
             val bx = (b.x + b.width * 0.5f) * WORLD_SCALE
             val bz = (b.y + b.height * 0.5f) * WORLD_SCALE
@@ -277,21 +311,27 @@ class Battle3DRenderer(
             if (dx * dx + dz * dz < qualityDrawDist * qualityDrawDist) {
                 val bw = b.width * WORLD_SCALE
                 val bd = b.height * WORLD_SCALE
-                val bh = if (bw > 9f) 7.2f else 5.2f
+                val bh = if (bw > 9f) 7.0f else 5.2f
                 // Foundation slab
-                drawBox(bx, 0.15f, bz, bw + 0.8f, 0.3f, bd + 0.8f, 0f, 0.22f, 0.25f, 0.28f, 1f)
-                // Main structure
-                drawBox(bx, bh * 0.5f + 0.3f, bz, bw, bh, bd, 0f, 0.42f, 0.46f, 0.50f, 1f)
-                // Roof overhang
-                drawBox(bx, bh + 0.55f, bz, bw + 0.7f, 0.5f, bd + 0.7f, 0f, 0.24f, 0.20f, 0.18f, 1f)
-                // Door / window dark accents
-                drawBox(bx, 1.4f, bz + bd * 0.5f + 0.05f, 1.5f, 2.5f, 0.12f, 0f, 0.10f, 0.12f, 0.15f, 1f)
-                drawBox(bx - bw * 0.25f, bh * 0.65f, bz + bd * 0.5f + 0.05f, 1.4f, 1.1f, 0.12f, 0f, 0.55f, 0.78f, 0.92f, 1f, unlit = 0.3f)
-                drawBox(bx + bw * 0.25f, bh * 0.65f, bz + bd * 0.5f + 0.05f, 1.4f, 1.1f, 0.12f, 0f, 0.55f, 0.78f, 0.92f, 1f, unlit = 0.3f)
+                drawBox(bx, 0.16f, bz, bw + 0.9f, 0.32f, bd + 0.9f, 0f, 0.22f, 0.25f, 0.28f, 1f, surfaceType = SURFACE_CONCRETE)
+                // Weathered concrete main structure
+                drawBox(bx, bh * 0.5f + 0.32f, bz, bw, bh, bd, 0f, 0.48f, 0.52f, 0.55f, 1f, surfaceType = SURFACE_CONCRETE)
+                // Roof slab + parapet
+                drawBox(bx, bh + 0.55f, bz, bw + 0.7f, 0.48f, bd + 0.7f, 0f, 0.26f, 0.22f, 0.20f, 1f)
+                drawBox(bx - bw * 0.22f, bh + 1.1f, bz + bd * 0.15f, 1.8f, 0.9f, 1.8f, 0f, 0.34f, 0.38f, 0.42f, 1f)
+                // Blue window trim frames + dark interior windows (matching reference battleground building)
+                drawBox(bx - bw * 0.26f, bh * 0.65f, bz + bd * 0.5f + 0.04f, 1.65f, 1.35f, 0.12f, 0f, 0.08f, 0.45f, 0.85f, 1f)
+                drawBox(bx - bw * 0.26f, bh * 0.65f, bz + bd * 0.5f + 0.08f, 1.30f, 1.00f, 0.12f, 0f, 0.09f, 0.11f, 0.14f, 1f)
+                drawBox(bx + bw * 0.26f, bh * 0.65f, bz + bd * 0.5f + 0.04f, 1.65f, 1.35f, 0.12f, 0f, 0.08f, 0.45f, 0.85f, 1f)
+                drawBox(bx + bw * 0.26f, bh * 0.65f, bz + bd * 0.5f + 0.08f, 1.30f, 1.00f, 0.12f, 0f, 0.09f, 0.11f, 0.14f, 1f)
+                // Side windows & doorway
+                drawBox(bx, 1.35f, bz + bd * 0.5f + 0.05f, 1.55f, 2.45f, 0.14f, 0f, 0.10f, 0.12f, 0.15f, 1f)
+                drawBox(bx + bw * 0.5f + 0.05f, bh * 0.62f, bz, 0.12f, 1.3f, 1.6f, 0f, 0.08f, 0.45f, 0.85f, 1f)
+                drawBox(bx + bw * 0.5f + 0.08f, bh * 0.62f, bz, 0.12f, 0.95f, 1.25f, 0f, 0.09f, 0.11f, 0.14f, 1f)
             }
         }
 
-        // 4. 3D Trees, Rocks, Crates
+        // 4. Conifer Pine Trees, Rocks, Crates
         engine.mapConfig.obstacles.forEach { obs ->
             val ox = obs.x * WORLD_SCALE
             val oz = obs.y * WORLD_SCALE
@@ -301,36 +341,66 @@ class Battle3DRenderer(
                 val r = obs.radius * WORLD_SCALE
                 when (obs.type) {
                     ObstacleType.TREE -> {
-                        // Trunk
-                        drawBox(ox, 1.8f, oz, 0.65f, 3.6f, 0.65f, 0f, 0.36f, 0.24f, 0.14f, 1f)
-                        // Lower & upper canopy
-                        drawBox(ox, 4.1f, oz, r * 1.5f, 2.2f, r * 1.5f, 15f, 0.14f, 0.42f, 0.16f, 1f)
-                        drawBox(ox, 5.6f, oz, r * 1.0f, 1.6f, r * 1.0f, 45f, 0.18f, 0.50f, 0.20f, 1f)
+                        if (showShadows) {
+                            drawBox(ox, 0.04f, oz, r * 1.4f, 0.04f, r * 1.4f, 0f, 0.04f, 0.06f, 0.04f, 0.35f, unlit = 1f)
+                        }
+                        drawBox(ox, 1.9f, oz, 0.55f, 3.8f, 0.55f, 0f, 0.35f, 0.22f, 0.12f, 1f, surfaceType = SURFACE_RIBBED)
+                        // 3-tier conifer pine foliage
+                        drawBox(ox, 3.6f, oz, r * 1.65f, 1.55f, r * 1.65f, 12f, 0.13f, 0.38f, 0.14f, 1f)
+                        drawBox(ox, 4.9f, oz, r * 1.22f, 1.45f, r * 1.22f, 38f, 0.16f, 0.46f, 0.18f, 1f)
+                        drawBox(ox, 6.1f, oz, r * 0.72f, 1.30f, r * 0.72f, 65f, 0.20f, 0.54f, 0.22f, 1f)
                     }
                     ObstacleType.ROCK -> {
-                        drawBox(ox, r * 0.45f, oz, r * 1.3f, r * 0.9f, r * 1.1f, 25f, 0.44f, 0.46f, 0.48f, 1f)
+                        drawBox(ox, r * 0.45f, oz, r * 1.35f, r * 0.90f, r * 1.15f, 25f, 0.44f, 0.46f, 0.48f, 1f, surfaceType = SURFACE_CONCRETE)
+                        drawBox(ox + r * 0.25f, r * 0.25f, oz - r * 0.2f, r * 0.7f, r * 0.5f, r * 0.7f, 52f, 0.38f, 0.40f, 0.42f, 1f)
                     }
                     ObstacleType.CRATE, ObstacleType.SANDBAGS -> {
-                        drawBox(ox, 0.75f, oz, 1.6f, 1.5f, 1.6f, 0f, 0.52f, 0.40f, 0.22f, 1f)
+                        drawBox(ox, 0.75f, oz, 1.6f, 1.5f, 1.6f, 0f, 0.56f, 0.42f, 0.24f, 1f, surfaceType = SURFACE_RIBBED)
                     }
                 }
             }
         }
 
-        // 4b. Central Tactical Plaza Props (Shipping Container Cover, Crates, Barrels, Cooling Tower)
+        // 4b. Iconic Battleground Landmarks & Cover Props (Shipping Container, Wooden Crates, Cooling Tower, Radio Mast, Billboard)
         if ((targetGlX - 250f) * (targetGlX - 250f) + (targetGlZ - 250f) * (targetGlZ - 250f) < qualityDrawDist * qualityDrawDist) {
-            // Blue steel shipping container
-            drawBox(264f, 1.7f, 240f, 7.6f, 3.4f, 3.2f, -15f, 0.08f, 0.42f, 0.72f, 1f)
+            // Blue corrugated shipping container
+            drawBox(264f, 1.7f, 240f, 7.6f, 3.4f, 3.2f, -15f, 0.08f, 0.46f, 0.80f, 1f, surfaceType = SURFACE_RIBBED)
+            drawBox(264f, 3.42f, 240f, 7.7f, 0.18f, 3.3f, -15f, 0.06f, 0.36f, 0.65f, 1f)
+            // Second olive cargo container nearby
+            drawBox(234f, 1.7f, 263f, 7.2f, 3.3f, 3.1f, 72f, 0.18f, 0.36f, 0.24f, 1f, surfaceType = SURFACE_RIBBED)
             // Stacked wooden supply crates
-            drawBox(260f, 0.85f, 244f, 1.8f, 1.7f, 1.8f, 5f, 0.60f, 0.44f, 0.25f, 1f)
-            drawBox(262f, 0.85f, 244.5f, 1.8f, 1.7f, 1.8f, 12f, 0.56f, 0.40f, 0.22f, 1f)
-            drawBox(261f, 2.55f, 244.2f, 1.7f, 1.7f, 1.7f, -8f, 0.62f, 0.46f, 0.26f, 1f)
-            // Red hazard fuel drums
-            drawBox(268.5f, 0.85f, 243f, 1.0f, 1.7f, 1.0f, 0f, 0.84f, 0.14f, 0.14f, 1f)
-            drawBox(242f, 0.85f, 236f, 1.0f, 1.7f, 1.0f, 0f, 0.84f, 0.14f, 0.14f, 1f)
-            // Distant Industrial Cooling Tower Landmark
-            drawBox(295f, 11f, 195f, 11f, 22f, 11f, 22f, 0.52f, 0.56f, 0.60f, 1f)
-            drawBox(295f, 22.5f, 195f, 9.5f, 2.2f, 9.5f, 22f, 0.60f, 0.64f, 0.68f, 1f)
+            drawBox(260f, 0.85f, 244f, 1.8f, 1.7f, 1.8f, 5f, 0.62f, 0.45f, 0.25f, 1f, surfaceType = SURFACE_RIBBED)
+            drawBox(262f, 0.85f, 244.5f, 1.8f, 1.7f, 1.8f, 12f, 0.58f, 0.41f, 0.22f, 1f, surfaceType = SURFACE_RIBBED)
+            drawBox(261f, 2.55f, 244.2f, 1.7f, 1.7f, 1.7f, -8f, 0.64f, 0.48f, 0.27f, 1f, surfaceType = SURFACE_RIBBED)
+            // Wooden perimeter cover fence
+            drawBox(242f, 0.65f, 260f, 6.5f, 1.25f, 0.24f, 12f, 0.48f, 0.34f, 0.18f, 1f, surfaceType = SURFACE_RIBBED)
+
+            // Highway "VORTEX" Billboard (like BATTLE ROYALE highway sign)
+            drawBox(272f, 3.2f, 232f, 0.55f, 6.4f, 0.55f, 0f, 0.25f, 0.27f, 0.30f, 1f)
+            drawBox(272f, 6.8f, 232f, 7.5f, 3.6f, 0.45f, -20f, 0.08f, 0.10f, 0.18f, 1f)
+            drawBox(272f, 6.8f, 232.15f, 7.0f, 3.1f, 0.25f, -20f, 1.0f, 0.72f, 0.08f, 1f, unlit = 0.7f)
+
+            // Distant Industrial Cooling Tower + Radio Lattice Tower Landmark
+            drawBox(295f, 8.5f, 195f, 12.5f, 17f, 12.5f, 22f, 0.54f, 0.58f, 0.62f, 1f, surfaceType = SURFACE_CONCRETE)
+            drawBox(295f, 19.5f, 195f, 10.2f, 7f, 10.2f, 22f, 0.58f, 0.62f, 0.66f, 1f, surfaceType = SURFACE_CONCRETE)
+            drawBox(295f, 23.4f, 195f, 10.6f, 1.2f, 10.6f, 22f, 0.72f, 0.75f, 0.78f, 1f)
+            // Radio communications tower + red warning light
+            drawBox(318f, 10f, 212f, 1.6f, 20f, 1.6f, 0f, 0.42f, 0.46f, 0.50f, 1f)
+            drawBox(318f, 20.6f, 212f, 0.7f, 0.7f, 0.7f, 0f, 1.0f, 0.15f, 0.12f, 1f, unlit = 1f)
+        }
+
+        // 4c. Interactive Red Explosive Fuel Barrels (shoot to detonate!)
+        state.explosiveBarrelsSnapshot.filter { !it.isExploded }.forEach { barrel ->
+            val bx = barrel.x * WORLD_SCALE
+            val bz = barrel.y * WORLD_SCALE
+            val dx = bx - targetGlX
+            val dz = bz - targetGlZ
+            if (dx * dx + dz * dz < qualityDrawDist * qualityDrawDist) {
+                drawBox(bx, 0.85f, bz, 1.05f, 1.70f, 1.05f, 0f, 0.86f, 0.12f, 0.12f, 1f)
+                // Yellow hazard band around middle
+                drawBox(bx, 0.90f, bz, 1.09f, 0.34f, 1.09f, 0f, 1.0f, 0.82f, 0.08f, 1f, unlit = 0.2f)
+                drawBox(bx, 1.72f, bz, 0.98f, 0.08f, 0.98f, 0f, 0.25f, 0.25f, 0.28f, 1f)
+            }
         }
 
         // 5. Loot Beacons
@@ -339,62 +409,57 @@ class Battle3DRenderer(
             val lz = loot.y * WORLD_SCALE
             val dx = lx - targetGlX
             val dz = lz - targetGlZ
-            if (dx * dx + dz * dz < 110f * 110f) {
+            if (dx * dx + dz * dz < 115f * 115f) {
                 val (r, g, b) = when {
-                    loot.weapon != null -> Triple(1.0f, 0.48f, 0.0f)
-                    loot.armorLevel > 0 -> Triple(0.0f, 0.72f, 1.0f)
-                    loot.consumable != null -> Triple(0.0f, 0.90f, 0.45f)
+                    loot.weapon != null -> Triple(1.0f, 0.52f, 0.05f)
+                    loot.armorLevel > 0 -> Triple(0.0f, 0.75f, 1.0f)
+                    loot.consumable != null -> Triple(0.0f, 0.92f, 0.45f)
                     else -> Triple(1.0f, 0.84f, 0.0f)
                 }
-                drawBox(lx, 0.35f, lz, 0.85f, 0.45f, 0.85f, 20f, r, g, b, 0.95f, unlit = 0.6f)
-                drawBox(lx, 1.5f, lz, 0.12f, 2.4f, 0.12f, 0f, r, g, b, 0.35f, unlit = 1.0f)
+                drawBox(lx, 0.35f, lz, 0.85f, 0.45f, 0.85f, frameTimeSec * 40f, r, g, b, 0.95f, unlit = 0.6f)
+                drawBox(lx, 1.6f, lz, 0.12f, 2.5f, 0.12f, 0f, r, g, b, 0.32f, unlit = 1.0f)
             }
         }
 
-        // 6. Vehicles
+        // 6. Detailed 4x4 Vehicles (Wheels, Grille, Windshield, Headlights)
         state.vehiclesSnapshot.forEach { v ->
             val vx = v.x * WORLD_SCALE
             val vz = v.y * WORLD_SCALE
             val dx = vx - targetGlX
             val dz = vz - targetGlZ
             if (dx * dx + dz * dz < qualityDrawDist * qualityDrawDist) {
-                val rot = -v.rotationAngle
-                val chassisR = if (v.isDestroyed) 0.25f else 0.12f
-                val chassisG = if (v.isDestroyed) 0.25f else 0.42f
-                val chassisB = if (v.isDestroyed) 0.25f else 0.78f
-                drawBox(vx, 0.75f, vz, 4.4f, 0.95f, 2.2f, rot, chassisR, chassisG, chassisB, 1f)
-                drawBox(vx, 1.55f, vz, 2.2f, 0.75f, 1.95f, rot, 0.55f, 0.80f, 0.96f, 0.92f)
+                renderVehicle3D(vx, vz, -v.rotationAngle, v.type, v.isDestroyed)
             }
         }
 
-        // 7. Deployable Energy Shields
+        // 7. Gloo Wall / Deployable Energy Shields
         state.deployableShields.forEach { shield ->
             val sx = shield.x * WORLD_SCALE
             val sz = shield.y * WORLD_SCALE
-            drawBox(sx, 1.35f, sz, 0.35f, 2.6f, 4.2f, -shield.angleDegrees, 0.05f, 0.78f, 1.0f, 0.62f, unlit = 0.85f)
-            drawBox(sx, 2.7f, sz, 0.4f, 0.15f, 4.3f, -shield.angleDegrees, 0.7f, 0.95f, 1.0f, 0.9f, unlit = 1f)
+            val rot = -shield.angleDegrees
+            drawBox(sx, 1.35f, sz, 0.36f, 2.65f, 4.4f, rot, 0.06f, 0.78f, 1.0f, 0.68f, unlit = 0.82f, surfaceType = SURFACE_RIBBED)
+            drawBox(sx, 2.72f, sz, 0.42f, 0.18f, 4.5f, rot, 0.75f, 0.96f, 1.0f, 0.92f, unlit = 1f)
+            drawBox(sx, 0.18f, sz, 0.44f, 0.25f, 4.5f, rot, 0.12f, 0.22f, 0.35f, 0.95f)
         }
 
-        // 8. Airdrops with Red Beacon Beam
+        // 8. Airdrops with Red/Blue Beacon
         state.airdrops.forEach { drop ->
             val ax = drop.x * WORLD_SCALE
             val az = drop.y * WORLD_SCALE
             val ay = (drop.altitude * WORLD_SCALE).coerceAtLeast(1.1f)
-            drawBox(ax, ay, az, 2.2f, 2.2f, 2.2f, 0f, 0.82f, 0.15f, 0.15f, 1f)
-            drawBox(ax, ay + 1.2f, az, 2.3f, 0.45f, 2.3f, 0f, 0.1f, 0.42f, 0.85f, 1f)
-            drawBox(ax, ay + 25f, az, 0.35f, 50f, 0.35f, 0f, 1.0f, 0.15f, 0.15f, 0.32f, unlit = 1f)
+            drawBox(ax, ay, az, 2.2f, 2.2f, 2.2f, 0f, 0.84f, 0.15f, 0.15f, 1f)
+            drawBox(ax, ay + 1.2f, az, 2.3f, 0.45f, 2.3f, 0f, 0.10f, 0.45f, 0.88f, 1f)
+            drawBox(ax, ay + 25f, az, 0.35f, 50f, 0.35f, 0f, 1.0f, 0.18f, 0.15f, 0.32f, unlit = 1f)
         }
 
         // 9. Plane during Flight Phase
         if (state.phase == MatchPhase.PLANE_FLIGHT || state.phase == MatchPhase.WAITING_IN_LOBBY) {
-            val px = state.planeX * WORLD_SCALE
-            val pz = state.planeY * WORLD_SCALE
-            drawBox(px, 60f, pz, 14f, 3.5f, 3.6f, -45f, 0.42f, 0.48f, 0.44f, 1f)
-            drawBox(px, 60.5f, pz, 3.5f, 0.6f, 18f, -45f, 0.35f, 0.40f, 0.36f, 1f)
+            renderSupplyPlane(state.planeX * WORLD_SCALE, 60f, state.planeY * WORLD_SCALE, -45f)
         }
 
-        // 10. Articulated 3D Players & AI Bots
+        // 10. Articulated 3D Players + Glowing Weapons + Companion Pet
         val radarActive = state.radarScanActiveSec > 0f
+        val petPreset = PetPreset.fromId(state.activePetId)
         state.playersSnapshot.filter { it.isAlive }.forEach { player ->
             val px = player.x * WORLD_SCALE
             val pz = player.y * WORLD_SCALE
@@ -402,6 +467,9 @@ class Battle3DRenderer(
             val dz = pz - targetGlZ
             if (dx * dx + dz * dz < qualityDrawDist * qualityDrawDist) {
                 renderSoldier3D(player, user.teamId, showShadows, radarActive)
+                if (player.isUser && player.vehicleId == null && player.z < 5f) {
+                    renderCompanionPet(player, petPreset)
+                }
             }
         }
 
@@ -410,8 +478,8 @@ class Battle3DRenderer(
             val bx = b.x * WORLD_SCALE
             val bz = b.y * WORLD_SCALE
             val angleDeg = -Math.toDegrees(kotlin.math.atan2(b.vy.toDouble(), b.vx.toDouble())).toFloat()
-            val len = if (b.isSniper) 2.2f else 1.35f
-            drawBox(bx, 1.45f, bz, len, 0.11f, 0.11f, angleDeg, 1.0f, 0.85f, 0.2f, 1f, unlit = 1f)
+            val len = if (b.isSniper) 2.3f else 1.45f
+            drawBox(bx, 1.45f, bz, len, 0.12f, 0.12f, angleDeg, 1.0f, 0.88f, 0.25f, 1f, unlit = 1f)
         }
 
         // 12. Smoke Clouds & Explosion Shockwaves
@@ -419,15 +487,16 @@ class Battle3DRenderer(
             val sx = smoke.x * WORLD_SCALE
             val sz = smoke.y * WORLD_SCALE
             val r = smoke.radius * WORLD_SCALE
-            val alpha = (smoke.remainingDurationSec / 25f).coerceIn(0.2f, 0.65f)
-            drawBox(sx, r * 0.45f, sz, r * 1.5f, r * 0.9f, r * 1.5f, 20f, 0.78f, 0.82f, 0.86f, alpha, unlit = 0.5f)
+            val alpha = (smoke.remainingDurationSec / 25f).coerceIn(0.22f, 0.65f)
+            drawBox(sx, r * 0.45f, sz, r * 1.5f, r * 0.9f, r * 1.5f, 20f, 0.80f, 0.84f, 0.88f, alpha, unlit = 0.5f)
         }
         state.explosions.forEach { exp ->
             val ex = exp.x * WORLD_SCALE
             val ez = exp.y * WORLD_SCALE
             val p = (exp.elapsedSec / exp.durationSec).coerceIn(0f, 1f)
             val rad = exp.maxRadius * WORLD_SCALE * p
-            drawBox(ex, rad * 0.4f, ez, rad * 1.4f, rad * 1.1f, rad * 1.4f, p * 90f, 1.0f, 0.45f, 0.05f, (1f - p) * 0.75f, unlit = 1f)
+            drawBox(ex, rad * 0.42f, ez, rad * 1.4f, rad * 1.1f, rad * 1.4f, p * 95f, 1.0f, 0.42f, 0.05f, (1f - p) * 0.80f, unlit = 1f)
+            drawBox(ex, rad * 0.25f, ez, rad * 0.85f, rad * 0.7f, rad * 0.85f, -p * 60f, 1.0f, 0.88f, 0.22f, (1f - p) * 0.9f, unlit = 1f)
         }
 
         // 13. Safe Zone Electric Blue Wall Indicator Ring Segments
@@ -438,51 +507,116 @@ class Battle3DRenderer(
         )
     }
 
+    private fun renderSkyDetails(focusX: Float, focusZ: Float) {
+        // Bright sunlit disc + soft clouds + distant Battle Royale supply plane
+        drawBox(focusX + 120f, 88f, focusZ - 140f, 14f, 14f, 14f, 0f, 1.0f, 0.95f, 0.75f, 0.92f, unlit = 1f)
+        drawBox(focusX - 80f, 75f, focusZ - 120f, 28f, 5f, 16f, 15f, 0.96f, 0.98f, 1.0f, 0.75f, unlit = 0.9f)
+        drawBox(focusX + 65f, 80f, focusZ + 115f, 34f, 5.5f, 18f, -20f, 0.96f, 0.98f, 1.0f, 0.72f, unlit = 0.9f)
+
+        // Ambient orbiting C-130 Supply Plane + 2 skydiving silhouettes
+        val orbitAngle = frameTimeSec * 0.14f
+        val px = focusX + cos(orbitAngle) * 95f
+        val pz = focusZ + sin(orbitAngle) * 95f
+        renderSupplyPlane(px, 46f, pz, -Math.toDegrees(orbitAngle.toDouble()).toFloat() + 90f)
+    }
+
+    private fun renderSupplyPlane(px: Float, py: Float, pz: Float, rotDeg: Float) {
+        drawBox(px, py, pz, 13f, 2.8f, 3.0f, rotDeg, 0.92f, 0.94f, 0.96f, 1f, unlit = 0.3f)
+        drawBox(px, py + 0.3f, pz, 3.2f, 0.55f, 17f, rotDeg, 0.85f, 0.16f, 0.16f, 1f, unlit = 0.3f)
+        drawBox(px - 5.2f, py + 2.2f, pz, 2.2f, 2.6f, 0.5f, rotDeg, 0.85f, 0.16f, 0.16f, 1f, unlit = 0.3f)
+    }
+
+    private fun renderVehicle3D(vx: Float, vz: Float, rot: Float, type: VehicleType, isDestroyed: Boolean) {
+        val chassisR = when {
+            isDestroyed -> 0.22f
+            type == VehicleType.UAZ_JEEP -> 0.82f
+            type == VehicleType.BUGGY -> 0.92f
+            type == VehicleType.MOTORBIKE -> 0.85f
+            else -> 0.12f
+        }
+        val chassisG = when {
+            isDestroyed -> 0.22f
+            type == VehicleType.UAZ_JEEP -> 0.84f
+            type == VehicleType.BUGGY -> 0.55f
+            type == VehicleType.MOTORBIKE -> 0.20f
+            else -> 0.45f
+        }
+        val chassisB = when {
+            isDestroyed -> 0.22f
+            type == VehicleType.UAZ_JEEP -> 0.86f
+            type == VehicleType.BUGGY -> 0.12f
+            type == VehicleType.MOTORBIKE -> 0.20f
+            else -> 0.82f
+        }
+        val rad = Math.toRadians((-rot).toDouble())
+        val fx = cos(rad).toFloat()
+        val fz = sin(rad).toFloat()
+        val rx = -fz
+        val rz = fx
+
+        // Main chassis & cab
+        drawBox(vx, 0.78f, vz, 4.4f, 0.92f, 2.15f, rot, chassisR, chassisG, chassisB, 1f)
+        drawBox(vx - fx * 0.25f, 1.55f, vz - fz * 0.25f, 2.25f, 0.75f, 1.95f, rot, chassisR * 0.85f, chassisG * 0.85f, chassisB * 0.85f, 1f)
+        // Windshield & headlights
+        drawBox(vx + fx * 0.90f, 1.52f, vz + fz * 0.90f, 0.15f, 0.62f, 1.78f, rot, 0.45f, 0.75f, 0.92f, 0.88f, unlit = 0.4f)
+        drawBox(vx + fx * 2.22f + rx * 0.65f, 0.78f, vz + fz * 2.22f + rz * 0.65f, 0.14f, 0.26f, 0.35f, rot, 1.0f, 0.92f, 0.55f, 1f, unlit = 1f)
+        drawBox(vx + fx * 2.22f - rx * 0.65f, 0.78f, vz + fz * 2.22f - rz * 0.65f, 0.14f, 0.26f, 0.35f, rot, 1.0f, 0.92f, 0.55f, 1f, unlit = 1f)
+        // 4 Black rubber wheels
+        val wheelPositions = listOf(
+            Pair(1.35f, 1.05f), Pair(1.35f, -1.05f),
+            Pair(-1.35f, 1.05f), Pair(-1.35f, -1.05f)
+        )
+        wheelPositions.forEach { (wForward, wSide) ->
+            val wx = vx + fx * wForward + rx * wSide
+            val wz = vz + fz * wForward + rz * wSide
+            drawBox(wx, 0.42f, wz, 0.82f, 0.82f, 0.35f, rot, 0.10f, 0.10f, 0.12f, 1f)
+        }
+    }
+
     private fun renderTerrain(focusX: Float, focusZ: Float, drawDist: Float) {
         val (gr, gg, gb) = when (engine.mapConfig.id) {
             "kalahari_dunes" -> Triple(0.68f, 0.54f, 0.33f)
             "snow_mountain" -> Triple(0.80f, 0.86f, 0.92f)
             "urban_city" -> Triple(0.24f, 0.27f, 0.30f)
-            "jungle_battleground" -> Triple(0.14f, 0.32f, 0.16f)
-            else -> Triple(0.23f, 0.35f, 0.19f)
+            "jungle_battleground" -> Triple(0.16f, 0.38f, 0.17f)
+            else -> Triple(0.28f, 0.44f, 0.20f)
         }
-        // Main Ground Slab
-        drawBox(250f, -0.25f, 250f, 540f, 0.5f, 540f, 0f, gr, gg, gb, 1f)
+        // Main Textured Ground Slab
+        drawBox(250f, -0.25f, 250f, 540f, 0.5f, 540f, 0f, gr, gg, gb, 1f, surfaceType = SURFACE_TERRAIN)
 
-        // Major Paved Highway Roads (North-South & East-West intersecting central town)
-        drawBox(250f, 0.02f, 250f, 500f, 0.04f, 11f, 0f, 0.18f, 0.19f, 0.21f, 1f)
-        drawBox(250f, 0.02f, 250f, 11f, 0.04f, 500f, 0f, 0.18f, 0.19f, 0.21f, 1f)
-        // Diagonal Perimeter Road
-        drawBox(250f, 0.025f, 250f, 440f, 0.04f, 7f, 45f, 0.20f, 0.21f, 0.23f, 1f)
+        // Major Paved Highway Roads
+        drawBox(250f, 0.02f, 250f, 500f, 0.04f, 11f, 0f, 0.20f, 0.21f, 0.23f, 1f)
+        drawBox(250f, 0.02f, 250f, 11f, 0.04f, 500f, 0f, 0.20f, 0.21f, 0.23f, 1f)
+        drawBox(250f, 0.025f, 250f, 440f, 0.04f, 7f, 45f, 0.22f, 0.23f, 0.25f, 1f)
 
-        // Dashed Yellow Center Stripes near player
+        // Dashed Yellow Center Stripes
         val snapX = ((focusX / 12f).toInt() * 12f).coerceIn(20f, 480f)
         val snapZ = ((focusZ / 12f).toInt() * 12f).coerceIn(20f, 480f)
         for (i in -6..6) {
             val sx = snapX + i * 12f
             val sz = snapZ + i * 12f
             if (abs(250f - focusZ) < drawDist) {
-                drawBox(sx, 0.045f, 250f, 4.5f, 0.02f, 0.45f, 0f, 0.92f, 0.78f, 0.12f, 1f, unlit = 0.5f)
+                drawBox(sx, 0.045f, 250f, 4.5f, 0.02f, 0.45f, 0f, 0.94f, 0.80f, 0.14f, 1f, unlit = 0.5f)
             }
             if (abs(250f - focusX) < drawDist) {
-                drawBox(250f, 0.045f, sz, 0.45f, 0.02f, 4.5f, 0f, 0.92f, 0.78f, 0.12f, 1f, unlit = 0.5f)
+                drawBox(250f, 0.045f, sz, 0.45f, 0.02f, 4.5f, 0f, 0.94f, 0.80f, 0.14f, 1f, unlit = 0.5f)
             }
         }
 
         // Rolling Hills / Elevated Tactical Ridges
         val hillCoords = listOf(
-            Triple(180f, 190f, 22f),
-            Triple(310f, 210f, 26f),
+            Triple(180f, 190f, 24f),
+            Triple(310f, 210f, 28f),
             Triple(210f, 315f, 24f),
             Triple(330f, 330f, 28f),
-            Triple(150f, 260f, 20f)
+            Triple(150f, 260f, 22f)
         )
         hillCoords.forEach { (hx, hz, hw) ->
             val dx = hx - focusX
             val dz = hz - focusZ
             if (dx * dx + dz * dz < drawDist * drawDist) {
-                drawBox(hx, 0.8f, hz, hw, 1.6f, hw * 0.8f, 18f, gr * 0.92f, gg * 0.95f, gb * 0.92f, 1f)
-                drawBox(hx + 2f, 1.9f, hz - 1f, hw * 0.55f, 1.4f, hw * 0.45f, 32f, gr * 0.85f, gg * 0.9f, gb * 0.85f, 1f)
+                drawBox(hx, 0.9f, hz, hw, 1.8f, hw * 0.82f, 18f, gr * 0.92f, gg * 0.96f, gb * 0.92f, 1f, surfaceType = SURFACE_TERRAIN)
+                drawBox(hx + 2f, 2.1f, hz - 1f, hw * 0.55f, 1.5f, hw * 0.45f, 32f, gr * 0.86f, gg * 0.92f, gb * 0.86f, 1f, surfaceType = SURFACE_TERRAIN)
             }
         }
     }
@@ -495,7 +629,7 @@ class Battle3DRenderer(
 
         val preset = CharacterPreset.fromId(player.characterPresetId)
         val isTeammate = player.teamId == userTeamId
-        val (armorR, armorG, armorB) = if (player.isUser || isTeammate) preset.armorRgb else Triple(0.55f, 0.12f, 0.12f)
+        val (armorR, armorG, armorB) = if (player.isUser || isTeammate) preset.armorRgb else Triple(0.58f, 0.14f, 0.14f)
         val (accR, accG, accB) = if (player.isUser || isTeammate) preset.accentRgb else Triple(0.95f, 0.25f, 0.15f)
         val (visR, visG, visB) = if (player.isUser || isTeammate) preset.visorRgb else Triple(1.0f, 0.15f, 0.15f)
 
@@ -504,11 +638,10 @@ class Battle3DRenderer(
             PlayerStance.PRONE -> 0.40f
             else -> 1.0f
         }
-        val stride = if (player.currentSpeed > 15f || !player.isUser) sin(player.animWalkPhase) * 0.35f else 0f
+        val stride = if (player.currentSpeed > 15f || !player.isUser) sin(player.animWalkPhase) * 0.36f else 0f
 
-        // Ground Drop Shadow
         if (showShadow) {
-            drawBox(px, 0.05f, pz, 1.2f, 0.04f, 1.2f, 0f, 0.05f, 0.06f, 0.08f, 0.45f, unlit = 1f)
+            drawBox(px, 0.05f, pz, 1.25f, 0.04f, 1.25f, 0f, 0.05f, 0.06f, 0.08f, 0.48f, unlit = 1f)
         }
 
         val rad = Math.toRadians(player.angle.toDouble())
@@ -518,11 +651,10 @@ class Battle3DRenderer(
         val rz = fx
 
         if (player.stance == PlayerStance.PRONE) {
-            // Prone horizontal soldier pose
             drawBox(px - fx * 0.55f + rx * 0.16f, py + 0.18f, pz - fz * 0.55f + rz * 0.16f, 0.85f, 0.24f, 0.26f, yaw, 0.14f, 0.15f, 0.18f, 1f)
             drawBox(px - fx * 0.55f - rx * 0.16f, py + 0.18f, pz - fz * 0.55f - rz * 0.16f, 0.85f, 0.24f, 0.26f, yaw, 0.14f, 0.15f, 0.18f, 1f)
             drawBox(px + fx * 0.10f, py + 0.28f, pz + fz * 0.10f, 0.90f, 0.36f, 0.66f, yaw, armorR, armorG, armorB, 1f)
-            drawBox(px + fx * 0.12f, py + 0.36f, pz + fz * 0.12f, 0.60f, 0.22f, 0.68f, yaw, accR, accG, accB, 1f, unlit = 0.35f)
+            drawBox(px + fx * 0.12f, py + 0.36f, pz + fz * 0.12f, 0.60f, 0.22f, 0.68f, yaw, accR, accG, accB, 1f, unlit = 0.45f)
             drawBox(px + fx * 0.72f, py + 0.36f, pz + fz * 0.72f, 0.42f, 0.38f, 0.42f, yaw, armorR * 0.8f, armorG * 0.8f, armorB * 0.8f, 1f)
             drawBox(px + fx * 0.92f, py + 0.38f, pz + fz * 0.92f, 0.14f, 0.14f, 0.36f, yaw, visR, visG, visB, 1f, unlit = 0.9f)
             if (player.activeWeapon != null) {
@@ -534,50 +666,74 @@ class Battle3DRenderer(
             return
         }
 
-        // Legs (animated stride forward/back)
+        // Legs + Boots
         val legH = 0.85f * crouchScale
-        drawBox(
-            px + rx * 0.20f + fx * stride, py + legH * 0.5f, pz + rz * 0.20f + fz * stride,
-            0.28f, legH, 0.30f, yaw, 0.14f, 0.15f, 0.18f, 1f
-        )
-        drawBox(
-            px - rx * 0.20f - fx * stride, py + legH * 0.5f, pz - rz * 0.20f - fz * stride,
-            0.28f, legH, 0.30f, yaw, 0.14f, 0.15f, 0.18f, 1f
-        )
+        drawBox(px + rx * 0.20f + fx * stride, py + legH * 0.5f, pz + rz * 0.20f + fz * stride, 0.28f, legH, 0.30f, yaw, 0.14f, 0.15f, 0.18f, 1f)
+        drawBox(px - rx * 0.20f - fx * stride, py + legH * 0.5f, pz - rz * 0.20f - fz * stride, 0.28f, legH, 0.30f, yaw, 0.14f, 0.15f, 0.18f, 1f)
 
-        // Torso & Glowing Jacket/Armor Accent
+        // Torso, Vest & Shoulder Trim
         val torsoY = py + legH + 0.42f * crouchScale
         drawBox(px, torsoY, pz, 0.50f, 0.84f * crouchScale, 0.74f, yaw, armorR, armorG, armorB, 1f)
-        drawBox(px, torsoY + 0.06f, pz, 0.54f, 0.34f * crouchScale, 0.78f, yaw, accR, accG, accB, 1f, unlit = 0.35f)
+        drawBox(px, torsoY + 0.08f, pz, 0.54f, 0.32f * crouchScale, 0.80f, yaw, accR, accG, accB, 1f, unlit = 0.45f)
 
-        // Head & Visor Helmet
-        val headY = py + legH + 0.84f * crouchScale + 0.26f
-        drawBox(px, headY, pz, 0.42f, 0.44f, 0.42f, yaw, armorR * 0.8f, armorG * 0.8f, armorB * 0.8f, 1f)
-        drawBox(px + fx * 0.16f, headY + 0.03f, pz + fz * 0.16f, 0.16f, 0.14f, 0.36f, yaw, visR, visG, visB, 1f, unlit = 0.9f)
-
-        // Equipped Weapon & Muzzle Flash
-        if (player.activeWeapon != null) {
-            val gunX = px + fx * 0.55f + rx * 0.32f
-            val gunZ = pz + fz * 0.55f + rz * 0.32f
-            drawBox(gunX, torsoY + 0.10f, gunZ, 1.15f, 0.16f, 0.14f, yaw, 0.18f, 0.20f, 0.22f, 1f)
-
-            val justFired = System.currentTimeMillis() - player.lastFireTimestampMs < 95L
-            if (justFired) {
-                val flashX = px + fx * 1.25f + rx * 0.32f
-                val flashZ = pz + fz * 1.25f + rz * 0.32f
-                drawBox(flashX, torsoY + 0.10f, flashZ, 0.45f, 0.35f, 0.35f, yaw + 45f, 1.0f, 0.75f, 0.1f, 0.92f, unlit = 1f)
+        // Tactical Backpack + Glowing Back Rifle (matching reference over-the-shoulder look)
+        if (player.backpackLevel > 0) {
+            drawBox(px - fx * 0.36f, torsoY + 0.04f, pz - fz * 0.36f, 0.30f, 0.62f * crouchScale, 0.52f, yaw, 0.15f, 0.17f, 0.20f, 1f)
+            if (player.isUser) {
+                drawBox(px - fx * 0.50f - rx * 0.16f, torsoY + 0.16f, pz - fz * 0.50f - rz * 0.16f, 0.14f, 1.25f * crouchScale, 0.14f, yaw + 15f, 0.0f, 0.85f, 1.0f, 0.95f, unlit = 0.9f)
             }
         }
 
-        // Radar Pulse Highlight Ring on Enemies
-        if (!isTeammate && radarActive) {
-            drawBox(px, py + 0.12f, pz, 1.6f, 0.15f, 1.6f, yaw, 1.0f, 0.15f, 0.15f, 0.85f, unlit = 1f)
+        // Head, Helmet & Neon Visor
+        val headY = py + legH + 0.84f * crouchScale + 0.26f
+        drawBox(px, headY, pz, 0.42f, 0.44f, 0.42f, yaw, armorR * 0.85f, armorG * 0.85f, armorB * 0.85f, 1f)
+        drawBox(px + fx * 0.16f, headY + 0.03f, pz + fz * 0.16f, 0.16f, 0.14f, 0.36f, yaw, visR, visG, visB, 1f, unlit = 0.9f)
+
+        // Equipped Weapon with Glowing Accent Rail + Muzzle Flash
+        if (player.activeWeapon != null) {
+            val gunX = px + fx * 0.58f + rx * 0.32f
+            val gunZ = pz + fz * 0.58f + rz * 0.32f
+            drawBox(gunX, torsoY + 0.10f, gunZ, 1.18f, 0.17f, 0.15f, yaw, 0.16f, 0.18f, 0.22f, 1f)
+            drawBox(gunX + fx * 0.12f, torsoY + 0.17f, gunZ + fz * 0.12f, 0.82f, 0.06f, 0.16f, yaw, accR, accG, accB, 1f, unlit = 0.9f)
+
+            val justFired = System.currentTimeMillis() - player.lastFireTimestampMs < 95L
+            if (justFired) {
+                val flashX = px + fx * 1.28f + rx * 0.32f
+                val flashZ = pz + fz * 1.28f + rz * 0.32f
+                drawBox(flashX, torsoY + 0.10f, flashZ, 0.52f, 0.38f, 0.38f, yaw + 45f, 1.0f, 0.78f, 0.12f, 0.95f, unlit = 1f)
+            }
         }
 
-        // Skydiving Parachute Canopy
-        if (player.z > 15f) {
-            drawBox(px, py + 4.4f, pz, 3.6f, 0.45f, 2.4f, yaw, 1.0f, 0.48f, 0.0f, 0.9f, unlit = 0.25f)
+        // Radar Pulse Highlight Ring
+        if (!isTeammate && radarActive) {
+            drawBox(px, py + 0.12f, pz, 1.65f, 0.16f, 1.65f, yaw, 1.0f, 0.15f, 0.15f, 0.85f, unlit = 1f)
         }
+
+        // Skydiving Parachute Canopy + Risers
+        if (player.z > 15f) {
+            drawBox(px, py + 4.5f, pz, 3.8f, 0.48f, 2.5f, yaw, 1.0f, 0.48f, 0.0f, 0.92f, unlit = 0.25f)
+            drawBox(px + rx * 0.8f, py + 2.7f, pz + rz * 0.8f, 0.06f, 3.2f, 0.06f, yaw, 0.2f, 0.2f, 0.2f, 0.8f)
+            drawBox(px - rx * 0.8f, py + 2.7f, pz - rz * 0.8f, 0.06f, 3.2f, 0.06f, yaw, 0.2f, 0.2f, 0.2f, 0.8f)
+        }
+    }
+
+    private fun renderCompanionPet(owner: Player, pet: PetPreset) {
+        val rad = Math.toRadians(owner.angle.toDouble())
+        val fx = cos(rad).toFloat()
+        val fz = sin(rad).toFloat()
+        val rx = -fz
+        val rz = fx
+        val hover = sin(frameTimeSec * 4.5f) * 0.18f
+        val petX = owner.x * WORLD_SCALE - fx * 0.75f - rx * 1.15f
+        val petY = owner.z * WORLD_SCALE + 1.35f + hover
+        val petZ = owner.y * WORLD_SCALE - fz * 0.75f - rz * 1.15f
+        val yaw = -owner.angle
+        val (br, bg, bb) = pet.bodyRgb
+        val (gr, gg, gb) = pet.glowRgb
+        // Body, wings/fins, and glowing eyes
+        drawBox(petX, petY, petZ, 0.52f, 0.48f, 0.52f, yaw, br, bg, bb, 1f)
+        drawBox(petX, petY + 0.12f, petZ, 0.25f, 0.18f, 1.15f, yaw, gr, gg, gb, 0.92f, unlit = 0.75f)
+        drawBox(petX + fx * 0.22f, petY + 0.10f, petZ + fz * 0.22f, 0.14f, 0.14f, 0.34f, yaw, 1.0f, 0.92f, 0.2f, 1f, unlit = 1f)
     }
 
     private fun renderZoneRing(cx: Float, cz: Float, radius: Float) {
@@ -597,7 +753,8 @@ class Battle3DRenderer(
         sx: Float, sy: Float, sz: Float,
         rotYDeg: Float,
         r: Float, g: Float, b: Float, a: Float,
-        unlit: Float = 0f
+        unlit: Float = 0f,
+        surfaceType: Int = SURFACE_SOLID
     ) {
         Matrix.setIdentityM(modelMatrix, 0)
         Matrix.translateM(modelMatrix, 0, x, y, z)
@@ -611,6 +768,7 @@ class Battle3DRenderer(
         GLES20.glUniformMatrix4fv(uModelMatrixHandle, 1, false, modelMatrix, 0)
         GLES20.glUniform4f(uColorHandle, r, g, b, a)
         GLES20.glUniform1f(uUnlitHandle, unlit)
+        GLES20.glUniform1i(uSurfaceTypeHandle, surfaceType)
         GLES20.glDrawArrays(GLES20.GL_TRIANGLES, 0, 36)
     }
 
@@ -639,7 +797,7 @@ class Battle3DRenderer(
         "snow_mountain" -> Triple(0.56f, 0.72f, 0.88f)
         "urban_city" -> Triple(0.14f, 0.18f, 0.30f)
         "jungle_battleground" -> Triple(0.28f, 0.45f, 0.40f)
-        else -> Triple(0.42f, 0.64f, 0.85f)
+        else -> Triple(0.36f, 0.65f, 0.92f)
     }
 
     private fun compileShader(type: Int, source: String): Int {
@@ -650,44 +808,37 @@ class Battle3DRenderer(
     }
 
     private fun buildUnitCubeBuffer(): FloatBuffer {
-        // 36 vertices * (3 pos + 3 normal) = 216 floats
         val v = floatArrayOf(
-            // Front (+Z)
             -0.5f, -0.5f,  0.5f,  0f, 0f, 1f,
              0.5f, -0.5f,  0.5f,  0f, 0f, 1f,
              0.5f,  0.5f,  0.5f,  0f, 0f, 1f,
             -0.5f, -0.5f,  0.5f,  0f, 0f, 1f,
              0.5f,  0.5f,  0.5f,  0f, 0f, 1f,
             -0.5f,  0.5f,  0.5f,  0f, 0f, 1f,
-            // Back (-Z)
              0.5f, -0.5f, -0.5f,  0f, 0f, -1f,
             -0.5f, -0.5f, -0.5f,  0f, 0f, -1f,
             -0.5f,  0.5f, -0.5f,  0f, 0f, -1f,
              0.5f, -0.5f, -0.5f,  0f, 0f, -1f,
             -0.5f,  0.5f, -0.5f,  0f, 0f, -1f,
              0.5f,  0.5f, -0.5f,  0f, 0f, -1f,
-            // Left (-X)
             -0.5f, -0.5f, -0.5f, -1f, 0f, 0f,
             -0.5f, -0.5f,  0.5f, -1f, 0f, 0f,
             -0.5f,  0.5f,  0.5f, -1f, 0f, 0f,
             -0.5f, -0.5f, -0.5f, -1f, 0f, 0f,
             -0.5f,  0.5f,  0.5f, -1f, 0f, 0f,
             -0.5f,  0.5f, -0.5f, -1f, 0f, 0f,
-            // Right (+X)
              0.5f, -0.5f,  0.5f,  1f, 0f, 0f,
              0.5f, -0.5f, -0.5f,  1f, 0f, 0f,
              0.5f,  0.5f, -0.5f,  1f, 0f, 0f,
              0.5f, -0.5f,  0.5f,  1f, 0f, 0f,
              0.5f,  0.5f, -0.5f,  1f, 0f, 0f,
              0.5f,  0.5f,  0.5f,  1f, 0f, 0f,
-            // Top (+Y)
             -0.5f,  0.5f,  0.5f,  0f, 1f, 0f,
              0.5f,  0.5f,  0.5f,  0f, 1f, 0f,
              0.5f,  0.5f, -0.5f,  0f, 1f, 0f,
             -0.5f,  0.5f,  0.5f,  0f, 1f, 0f,
              0.5f,  0.5f, -0.5f,  0f, 1f, 0f,
             -0.5f,  0.5f, -0.5f,  0f, 1f, 0f,
-            // Bottom (-Y)
             -0.5f, -0.5f, -0.5f,  0f, -1f, 0f,
              0.5f, -0.5f, -0.5f,  0f, -1f, 0f,
              0.5f, -0.5f,  0.5f,  0f, -1f, 0f,

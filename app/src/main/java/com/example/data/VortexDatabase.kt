@@ -32,7 +32,12 @@ data class UserProfileEntity(
     val headshots: Int = 312,
     val title: String = "Apex Marksman",
     val lastDailyClaimTimestamp: Long = 0L,
-    val selectedCharacterId: String = "vortex_ghost"
+    val selectedCharacterId: String = "vortex_ghost",
+    val selectedPetId: String = "draco_flame",
+    val petLevel: Int = 3,
+    val likesCount: Int = 128,
+    val signatureBio: String = "Battle in Style!",
+    val seasonId: String = "S54"
 ) {
     val kdRatio: Float
         get() = if (deaths > 0) kills.toFloat() / deaths.toFloat() else kills.toFloat()
@@ -189,7 +194,7 @@ interface VortexDao {
         GameSettingsEntity::class,
         MissionEntity::class
     ],
-    version = 5,
+    version = 6,
     exportSchema = false
 )
 abstract class VortexDatabase : RoomDatabase() {

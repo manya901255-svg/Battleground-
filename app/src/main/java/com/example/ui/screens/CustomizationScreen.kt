@@ -80,9 +80,9 @@ fun CustomizationScreen(
     var selectedCategory by remember { mutableIntStateOf(0) }
     var inspectingItem by remember { androidx.compose.runtime.mutableStateOf<com.example.data.InventoryItemEntity?>(null) }
 
-    val categories = listOf("CHARACTER", "WEAPON_SKIN", "OUTFIT", "HELMET", "BACKPACK", "VEHICLE")
+    val categories = listOf("CHARACTER", "PET", "WEAPON_SKIN", "OUTFIT", "HELMET", "BACKPACK", "VEHICLE")
 
-    val filteredItems = if (selectedCategory == 0) emptyList() else items.filter { it.type == categories[selectedCategory] }
+    val filteredItems = if (selectedCategory <= 1) emptyList() else items.filter { it.type == categories[selectedCategory] }
 
     Column(
         modifier = Modifier
@@ -104,7 +104,7 @@ fun CustomizationScreen(
                 Spacer(modifier = Modifier.width(8.dp))
                 Column {
                     Text("TACTICAL ARMORY & WARDROBE", color = CyberOrange, fontWeight = FontWeight.Black, fontSize = 16.sp)
-                    Text("EQUIP WEAPONS, SKINS & GEAR", color = TextSecondary, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    Text("EQUIP CHARACTERS, BATTLE PETS, WEAPONS & GEAR", color = TextSecondary, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                 }
             }
         }
@@ -118,11 +118,12 @@ fun CustomizationScreen(
             contentColor = CyberOrange
         ) {
             Tab(selected = selectedCategory == 0, onClick = { selectedCategory = 0 }, text = { Text("CHARACTERS", fontSize = 10.sp, fontWeight = FontWeight.Bold) })
-            Tab(selected = selectedCategory == 1, onClick = { selectedCategory = 1 }, text = { Text("GUNS", fontSize = 10.sp, fontWeight = FontWeight.Bold) })
-            Tab(selected = selectedCategory == 2, onClick = { selectedCategory = 2 }, text = { Text("SUITS", fontSize = 10.sp, fontWeight = FontWeight.Bold) })
-            Tab(selected = selectedCategory == 3, onClick = { selectedCategory = 3 }, text = { Text("HELMETS", fontSize = 10.sp, fontWeight = FontWeight.Bold) })
-            Tab(selected = selectedCategory == 4, onClick = { selectedCategory = 4 }, text = { Text("PACKS", fontSize = 10.sp, fontWeight = FontWeight.Bold) })
-            Tab(selected = selectedCategory == 5, onClick = { selectedCategory = 5 }, text = { Text("VEHICLES", fontSize = 10.sp, fontWeight = FontWeight.Bold) })
+            Tab(selected = selectedCategory == 1, onClick = { selectedCategory = 1 }, text = { Text("PETS", fontSize = 10.sp, fontWeight = FontWeight.Bold) })
+            Tab(selected = selectedCategory == 2, onClick = { selectedCategory = 2 }, text = { Text("GUNS", fontSize = 10.sp, fontWeight = FontWeight.Bold) })
+            Tab(selected = selectedCategory == 3, onClick = { selectedCategory = 3 }, text = { Text("SUITS", fontSize = 10.sp, fontWeight = FontWeight.Bold) })
+            Tab(selected = selectedCategory == 4, onClick = { selectedCategory = 4 }, text = { Text("HELMETS", fontSize = 10.sp, fontWeight = FontWeight.Bold) })
+            Tab(selected = selectedCategory == 5, onClick = { selectedCategory = 5 }, text = { Text("PACKS", fontSize = 10.sp, fontWeight = FontWeight.Bold) })
+            Tab(selected = selectedCategory == 6, onClick = { selectedCategory = 6 }, text = { Text("VEHICLES", fontSize = 10.sp, fontWeight = FontWeight.Bold) })
         }
 
         Spacer(modifier = Modifier.height(14.dp))
@@ -173,6 +174,66 @@ fun CustomizationScreen(
                                     text = if (isSelected) "DEPLOYED ✓" else "SELECT OPERATIVE",
                                     color = if (isSelected) Color.White else Color.Black,
                                     fontSize = 10.sp,
+                                    fontWeight = FontWeight.Black
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        } else if (selectedCategory == 1) {
+            val activePetId = profile?.selectedPetId ?: "draco_flame"
+            val petLvl = profile?.petLevel ?: 3
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(2),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier.fillMaxSize()
+            ) {
+                items(com.example.game.model.PetPreset.entries) { pet ->
+                    val isSelected = pet.id == activePetId
+                    val glowCol = Color(pet.glowRgb.first, pet.glowRgb.second, pet.glowRgb.third)
+                    val bodyCol = Color(pet.bodyRgb.first, pet.bodyRgb.second, pet.bodyRgb.third)
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { scope.launch { repository.updateSelectedPet(pet.id) } }
+                            .testTag("select_pet_${pet.id}"),
+                        shape = RoundedCornerShape(14.dp),
+                        colors = CardDefaults.cardColors(containerColor = TacticalSurface),
+                        border = if (isSelected) androidx.compose.foundation.BorderStroke(2.dp, HazardYellow) else null
+                    ) {
+                        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(26.dp)
+                                            .clip(androidx.compose.foundation.shape.CircleShape)
+                                            .background(bodyCol)
+                                            .border(2.dp, glowCol, androidx.compose.foundation.shape.CircleShape)
+                                    )
+                                    Text("${pet.displayName} (Lv.$petLvl)", color = TextPrimary, fontWeight = FontWeight.Black, fontSize = 14.sp)
+                                }
+                                if (isSelected) {
+                                    Text("EQUIPPED", color = HazardYellow, fontSize = 10.sp, fontWeight = FontWeight.Black)
+                                }
+                            }
+                            Text("SKILL: ${pet.skillTitle}", color = glowCol, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            Text(pet.skillDesc, color = TextSecondary, fontSize = 10.sp)
+                            Button(
+                                onClick = { scope.launch { repository.updateSelectedPet(pet.id) } },
+                                colors = ButtonDefaults.buttonColors(containerColor = if (isSelected) Color.DarkGray else HazardYellow),
+                                modifier = Modifier.fillMaxWidth().height(34.dp)
+                            ) {
+                                Text(
+                                    text = if (isSelected) "COMPANION ACTIVE ✓" else "EQUIP PET",
+                                    color = if (isSelected) Color.White else Color.Black,
+                                    fontSize = 11.sp,
                                     fontWeight = FontWeight.Black
                                 )
                             }

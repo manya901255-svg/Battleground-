@@ -1207,6 +1207,54 @@ private fun GearLevelBadge(label: String, isHelmet: Boolean) {
 }
 
 @Composable
+fun LeftHandFireButton(
+    isFiring: Boolean,
+    sizeDp: Dp,
+    onFireChange: (Boolean) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .size(sizeDp)
+            .clip(CircleShape)
+            .background(
+                if (isFiring) RedZoneBombardment.copy(alpha = 0.72f)
+                else Color.Black.copy(alpha = 0.40f)
+            )
+            .border(1.8.dp, if (isFiring) HazardYellow else Color.White.copy(alpha = 0.78f), CircleShape)
+            .pointerInput(Unit) {
+                detectDragGestures(
+                    onDragStart = { onFireChange(true) },
+                    onDragEnd = { onFireChange(false) },
+                    onDragCancel = { onFireChange(false) },
+                    onDrag = { change, _ ->
+                        change.consume()
+                        onFireChange(true)
+                    }
+                )
+            }
+            .clickable {
+                onFireChange(!isFiring)
+            }
+            .testTag("left_hand_fire_button"),
+        contentAlignment = Alignment.Center
+    ) {
+        Canvas(modifier = Modifier.size(sizeDp * 0.58f)) {
+            val c = Color.White
+            rotate(degrees = -42f) {
+                drawRoundRect(
+                    color = c,
+                    topLeft = Offset(size.width * 0.30f, size.height * 0.36f),
+                    size = Size(size.width * 0.42f, size.height * 0.24f),
+                    cornerRadius = CornerRadius(6f, 6f)
+                )
+                drawLine(c, Offset(size.width * 0.14f, size.height * 0.48f), Offset(size.width * 0.28f, size.height * 0.48f), strokeWidth = 2.5f, cap = StrokeCap.Round)
+            }
+        }
+    }
+}
+
+@Composable
 fun RightCombatCluster(
     isFiring: Boolean,
     onFireChange: (Boolean) -> Unit,
@@ -1219,6 +1267,8 @@ fun RightCombatCluster(
     onProneToggle: () -> Unit,
     onReload: () -> Unit,
     isReloading: Boolean,
+    onDeployShield: () -> Unit = {},
+    shieldCooldownSec: Float = 0f,
     uiScale: Float,
     modifier: Modifier = Modifier
 ) {
@@ -1346,6 +1396,32 @@ fun RightCombatCluster(
                 tint = if (isReloading) Color.Black else Color.White,
                 modifier = Modifier.size(18.dp)
             )
+        }
+
+        // 7. Quick Gloo Shield Deploy Orb (Upper-Center-Left of Fire)
+        ArcActionCircle(
+            size = (36.dp * uiScale).coerceIn(32.dp, 42.dp),
+            isActive = shieldCooldownSec <= 0f,
+            activeColor = Color.Black.copy(alpha = 0.52f),
+            testTag = "gloo_shield_quick_button",
+            modifier = Modifier.align(Alignment.TopCenter).offset(x = (-10).dp, y = 6.dp),
+            onClick = onDeployShield
+        ) {
+            if (shieldCooldownSec <= 0f) {
+                Icon(
+                    Icons.Default.Shield,
+                    contentDescription = "Deploy Gloo Shield",
+                    tint = ElectricBlueSafe,
+                    modifier = Modifier.size(18.dp)
+                )
+            } else {
+                Text(
+                    text = "${shieldCooldownSec.roundToInt()}",
+                    color = TextSecondary,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Black
+                )
+            }
         }
     }
 }

@@ -340,4 +340,21 @@ object MapCatalog {
         }
         return vehicles
     }
+
+    fun generateBarrels(mapConfig: MapConfig): List<com.example.game.model.ExplosiveBarrel> {
+        val barrels = mutableListOf<com.example.game.model.ExplosiveBarrel>()
+        // Central compound explosive hazard drums (matching reference arena layout)
+        barrels.add(com.example.game.model.ExplosiveBarrel(x = 2685f, y = 2430f))
+        barrels.add(com.example.game.model.ExplosiveBarrel(x = 2420f, y = 2360f))
+        barrels.add(com.example.game.model.ExplosiveBarrel(x = 2595f, y = 2590f))
+        mapConfig.zones.forEach { zone ->
+            barrels.add(
+                com.example.game.model.ExplosiveBarrel(
+                    x = zone.x + (Random.nextFloat() - 0.5f) * zone.radius * 0.9f,
+                    y = zone.y + (Random.nextFloat() - 0.5f) * zone.radius * 0.9f
+                )
+            )
+        }
+        return barrels
+    }
 }

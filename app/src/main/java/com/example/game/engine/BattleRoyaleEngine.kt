@@ -11,10 +11,12 @@ import com.example.game.model.BulletProjectile
 import com.example.game.model.ConsumableType
 import com.example.game.model.DamagePopup
 import com.example.game.model.DeployableShield
+import com.example.game.model.ExplosiveBarrel
 import com.example.game.model.GameModeType
 import com.example.game.model.GroundLoot
 import com.example.game.model.KillFeedEntry
 import com.example.game.model.MatchPhase
+import com.example.game.model.PetPreset
 import com.example.game.model.Player
 import com.example.game.model.PlayerStance
 import com.example.game.model.RedZoneState
@@ -106,10 +108,12 @@ data class MatchEngineState(
     val reloadProgress: Float = 0f,
     val medkitCount: Int = 5,
     val throwableCount: Int = 3,
+    val activePetId: String = "draco_flame",
     val playersSnapshot: List<Player> = emptyList(),
     val groundLootSnapshot: List<GroundLoot> = emptyList(),
     val vehiclesSnapshot: List<VehicleInstance> = emptyList(),
-    val bulletsSnapshot: List<BulletProjectile> = emptyList()
+    val bulletsSnapshot: List<BulletProjectile> = emptyList(),
+    val explosiveBarrelsSnapshot: List<ExplosiveBarrel> = emptyList()
 )
 
 class BattleRoyaleEngine(
@@ -120,6 +124,7 @@ class BattleRoyaleEngine(
     private val aimAssistEnabled: Boolean = true,
     val teamSize: Int = 4,
     val characterPresetId: String = "vortex_ghost",
+    val activePetId: String = "draco_flame",
     @Volatile var cameraSensitivity: Float = 1.0f,
     @Volatile var adsSensitivity: Float = 0.85f,
     private val onMatchFinished: (placement: Int, kills: Int, damage: Float, durationSec: Int) -> Unit
@@ -147,6 +152,7 @@ class BattleRoyaleEngine(
     val damagePopups = mutableListOf<DamagePopup>()
     val airdrops = mutableListOf<AirdropCrate>()
     val killFeed = mutableListOf<KillFeedEntry>()
+    val explosiveBarrels = mutableListOf<ExplosiveBarrel>()
 
     // Flight path
     private val planeStartX = 400f
@@ -221,10 +227,12 @@ class BattleRoyaleEngine(
         damagePopups.clear()
         airdrops.clear()
         killFeed.clear()
+        explosiveBarrels.clear()
         elapsedCombatSec = 0f
 
         groundLoot.addAll(MapCatalog.generateInitialLoot(mapConfig))
         vehicles.addAll(MapCatalog.generateVehicles(mapConfig))
+        explosiveBarrels.addAll(MapCatalog.generateBarrels(mapConfig))
 
         val isInstantCombat = gameMode == GameModeType.TRAINING_GROUND ||
             gameMode == GameModeType.TEAM_DEATHMATCH ||
@@ -241,6 +249,7 @@ class BattleRoyaleEngine(
             else -> null
         }
 
+        val petMaxShieldBonus = if (activePetId == PetPreset.FROST_OWL.id) 15f else 0f
         userPlayer = Player(
             id = "user_player_0",
             name = "VortexGhost",
@@ -252,8 +261,8 @@ class BattleRoyaleEngine(
             backpackLevel = 2,
             armorLevel = if (isInstantCombat) 2 else 1,
             helmetLevel = if (isInstantCombat) 2 else 1,
-            shield = 100f,
-            maxShield = 100f,
+            shield = 100f + petMaxShieldBonus,
+            maxShield = 100f + petMaxShieldBonus,
             characterPresetId = characterPresetId,
             primaryWeapon1 = startPrimary1,
             primaryWeapon2 = startPrimary2
@@ -354,10 +363,12 @@ class BattleRoyaleEngine(
             cameraPitchDegrees = cameraPitchDegrees,
             medkitCount = totalMedkitsCount(),
             throwableCount = totalThrowableCount(),
+            activePetId = activePetId,
             playersSnapshot = players.toList(),
             groundLootSnapshot = groundLoot.toList(),
             vehiclesSnapshot = vehicles.toList(),
-            bulletsSnapshot = bullets.toList()
+            bulletsSnapshot = bullets.toList(),
+            explosiveBarrelsSnapshot = explosiveBarrels.toList()
         )
     }
 
@@ -539,6 +550,10 @@ class BattleRoyaleEngine(
             dashActiveSec = 5.0f
             dashCooldownSec = 18.0f
             soundSynthesizer?.playNitroBoost()
+            _engineState.value = _engineState.value.copy(
+                dashActiveSec = dashActiveSec,
+                dashCooldownSec = dashCooldownSec
+            )
             sendQuickComms("Overdrive Dash Active!")
         }
     }
@@ -550,15 +565,24 @@ class BattleRoyaleEngine(
             userPlayer.health = (userPlayer.health + 20f).coerceAtMost(userPlayer.maxHealth)
             medicCooldownSec = 15.0f
             soundSynthesizer?.playShieldDeploy()
+            _engineState.value = _engineState.value.copy(
+                userHealth = userPlayer.health,
+                userEp = userPlayer.ep,
+                medicCooldownSec = medicCooldownSec
+            )
         }
     }
 
     fun activateRadarScan() {
         synchronized(worldLock) {
             if (!userPlayer.isAlive || scanCooldownSec > 0f) return
-            radarScanActiveSec = 6.0f
+            radarScanActiveSec = if (activePetId == PetPreset.CYBER_PUP.id) 8.5f else 6.0f
             scanCooldownSec = 14.0f
             soundSynthesizer?.playRadioChirp()
+            _engineState.value = _engineState.value.copy(
+                radarScanActiveSec = radarScanActiveSec,
+                scanCooldownSec = scanCooldownSec
+            )
             sendQuickComms("Tactical Pulse Scanning Area!")
         }
     }
@@ -776,10 +800,12 @@ class BattleRoyaleEngine(
             reloadProgress = reloadProgressVal,
             medkitCount = totalMedkitsCount(),
             throwableCount = totalThrowableCount(),
+            activePetId = activePetId,
             playersSnapshot = players.toList(),
             groundLootSnapshot = groundLoot.toList(),
             vehiclesSnapshot = vehicles.toList(),
-            bulletsSnapshot = bullets.toList()
+            bulletsSnapshot = bullets.toList(),
+            explosiveBarrelsSnapshot = explosiveBarrels.toList()
         )
     }
 
@@ -1090,6 +1116,34 @@ class BattleRoyaleEngine(
                 continue
             }
 
+            // Check Explosive Barrel Collision
+            val hitBarrel = explosiveBarrels.firstOrNull { barrel ->
+                !barrel.isExploded && sqrt((b.x - barrel.x) * (b.x - barrel.x) + (b.y - barrel.y) * (b.y - barrel.y)) < 22f
+            }
+            if (hitBarrel != null) {
+                hitBarrel.health -= b.damage
+                val barrelShooter = players.find { it.id == b.shooterId }
+                if (barrelShooter?.isUser == true) {
+                    lastHitTimestampMs = System.currentTimeMillis()
+                    lastHitWasHeadshot = hitBarrel.health <= 0f
+                    damagePopups.add(
+                        DamagePopup(
+                            worldX = hitBarrel.x,
+                            worldY = hitBarrel.y,
+                            worldZ = 18f,
+                            amount = b.damage.toInt(),
+                            isHeadshot = hitBarrel.health <= 0f,
+                            isShieldHit = false
+                        )
+                    )
+                }
+                if (hitBarrel.health <= 0f) {
+                    detonateExplosiveBarrel(hitBarrel, barrelShooter)
+                }
+                bulletIterator.remove()
+                continue
+            }
+
             if (isCollidingWithBuildings(b.x, b.y, 4f)) {
                 bulletIterator.remove()
                 continue
@@ -1231,13 +1285,14 @@ class BattleRoyaleEngine(
         killer?.kills = (killer?.kills ?: 0) + 1
         if (killer?.isUser == true) {
             matchCoins += 150
-            killer.ep = (killer.ep + 25f).coerceAtMost(killer.maxEp)
+            val petEpBonus = if (activePetId == PetPreset.DRACO_FLAME.id) 15f else 0f
+            killer.ep = (killer.ep + 25f + petEpBonus).coerceAtMost(killer.maxEp)
             val k = killer.kills
             activeTakedownText = when {
                 k >= 5 -> "UNSTOPPABLE! ($k KILLS)"
                 k >= 3 -> "TAKEDOWN SPREE! ($k KILLS)"
-                k == 2 -> "DOUBLE TAKEDOWN!"
-                else -> "TAKEDOWN!"
+                k == 2 -> "DOUBLE KILL!"
+                else -> "FIRST BLOOD!"
             }
             takedownBannerTimerSec = 2.6f
             soundSynthesizer?.playHeadshotDing()
@@ -1259,6 +1314,40 @@ class BattleRoyaleEngine(
                 consumable = ConsumableType.FIRST_AID
             )
         )
+    }
+
+    private fun detonateExplosiveBarrel(barrel: ExplosiveBarrel, shooter: Player?) {
+        if (barrel.isExploded) return
+        barrel.isExploded = true
+        val blastRadius = 210f
+        soundSynthesizer?.playExplosion()
+        explosions.add(ExplosionEffect(x = barrel.x, y = barrel.y, maxRadius = blastRadius))
+        players.filter { it.isAlive }.forEach { p ->
+            val dist = sqrt((p.x - barrel.x) * (p.x - barrel.x) + (p.y - barrel.y) * (p.y - barrel.y))
+            if (dist < blastRadius) {
+                val falloff = (1f - (dist / blastRadius)).coerceAtLeast(0.25f)
+                val dmg = 115f * falloff
+                p.health = (p.health - dmg).coerceAtLeast(0f)
+                if (shooter != null && p.id != shooter.id) {
+                    shooter.damageDealt += dmg
+                    if (shooter.isUser) {
+                        damagePopups.add(
+                            DamagePopup(
+                                worldX = p.x,
+                                worldY = p.y,
+                                worldZ = p.z + 26f,
+                                amount = dmg.toInt(),
+                                isHeadshot = true,
+                                isShieldHit = false
+                            )
+                        )
+                    }
+                }
+                if (p.health <= 0f) {
+                    handlePlayerElimination(p, shooter, true)
+                }
+            }
+        }
     }
 
     private fun detonateThrowable(t: ThrowableProjectile) {
@@ -1322,7 +1411,8 @@ class BattleRoyaleEngine(
             if (availableAmmo <= 0) return
 
             player.isReloading = true
-            val reloadDur = 1.65f / weapon.equippedMag.reloadSpeedMultiplier
+            val petReloadMul = if (player.isUser && activePetId == PetPreset.VORTEX_ROBO.id) 1.15f else 1.0f
+            val reloadDur = 1.65f / (weapon.equippedMag.reloadSpeedMultiplier * petReloadMul)
             player.reloadTimerSec = reloadDur
             if (player.isUser) {
                 reloadTotalSec = reloadDur

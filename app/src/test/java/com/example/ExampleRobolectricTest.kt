@@ -283,4 +283,54 @@ class ExampleRobolectricTest {
         assertEquals(8, com.example.ui.theme.LobbyWallpaperTheme.entries.size)
         assertEquals(5, MapCatalog.getAllMaps().size)
     }
+
+    @Test
+    fun `test companion pet persistence, profile likes, and signature bio`() = kotlinx.coroutines.runBlocking {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val repository = com.example.data.GameRepository.create(context)
+        repository.initializeDefaultDataIfEmpty()
+
+        repository.updateSelectedPet(com.example.game.model.PetPreset.FROST_OWL.id)
+        repository.updateSignatureBio("Booyah Champion S54!")
+        val likesBefore = repository.userProfile.first()?.likesCount ?: 0
+        repository.incrementProfileLikes()
+
+        val updated = repository.userProfile.first()
+        assertNotNull(updated)
+        assertEquals(com.example.game.model.PetPreset.FROST_OWL.id, updated!!.selectedPetId)
+        assertEquals("Booyah Champion S54!", updated.signatureBio)
+        assertEquals(likesBefore + 1, updated.likesCount)
+    }
+
+    @Test
+    fun `test pet passive skills and explosive barrels snapshot`() {
+        val kavala = MapCatalog.getKavalaIsland()
+        val generatedBarrels = MapCatalog.generateBarrels(kavala)
+        assertTrue(generatedBarrels.isNotEmpty())
+
+        val frostEngine = BattleRoyaleEngine(
+            gameMode = GameModeType.OFFLINE_PRACTICE,
+            mapConfig = kavala,
+            soundSynthesizer = null,
+            teamSize = 4,
+            activePetId = com.example.game.model.PetPreset.FROST_OWL.id,
+            onMatchFinished = { _, _, _, _ -> }
+        )
+        assertEquals(115f, frostEngine.userPlayer.maxShield, 0.1f)
+        assertEquals(115f, frostEngine.userPlayer.shield, 0.1f)
+        assertTrue(frostEngine.explosiveBarrels.isNotEmpty())
+        assertTrue(frostEngine.engineState.value.explosiveBarrelsSnapshot.isNotEmpty())
+        assertEquals(com.example.game.model.PetPreset.FROST_OWL.id, frostEngine.engineState.value.activePetId)
+
+        val pupEngine = BattleRoyaleEngine(
+            gameMode = GameModeType.OFFLINE_PRACTICE,
+            mapConfig = kavala,
+            soundSynthesizer = null,
+            teamSize = 4,
+            activePetId = com.example.game.model.PetPreset.CYBER_PUP.id,
+            onMatchFinished = { _, _, _, _ -> }
+        )
+        pupEngine.activateRadarScan()
+        assertEquals(8.5f, pupEngine.engineState.value.radarScanActiveSec, 0.1f)
+    }
 }
