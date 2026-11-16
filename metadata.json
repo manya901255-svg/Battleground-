@@ -1,5 +1,5 @@
 {
-  "name": "Vortex Strike",
+  "name": "WarX Battleground",
   "description": "Next-Gen Mobile Battle Royale game with realistic safe zones, 100-player tactical matches, vehicles, weapons, and diverse game modes.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]

@@ -3,6 +3,6 @@
     <item
         android:width="66dp"
         android:height="66dp"
-        android:drawable="@drawable/vortex_game_icon_1794457264483"
+        android:drawable="@drawable/warx_battleground_icon"
         android:gravity="center" />
 </layer-list>

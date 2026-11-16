@@ -26,7 +26,7 @@ class ExampleRobolectricTest {
     fun `read string from context`() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val appName = context.getString(R.string.app_name)
-        assertEquals("Vortex Strike", appName)
+        assertEquals("WarX Battleground", appName)
     }
 
     @Test
@@ -285,6 +285,7 @@ class ExampleRobolectricTest {
             R.drawable.vortex_theme_snow_1794458598409,
             R.drawable.vortex_hero_soldier_1794458613075,
             R.drawable.vortex_game_icon_1794457264483,
+            R.drawable.warx_battleground_icon,
             R.mipmap.ic_launcher,
             R.mipmap.ic_launcher_round
         )

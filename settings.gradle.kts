@@ -22,6 +22,6 @@ dependencyResolutionManagement {
   }
 }
 
-rootProject.name = "Vortex Strike"
+rootProject.name = "WarX Battleground"
 
 include(":app")

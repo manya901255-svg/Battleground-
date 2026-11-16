@@ -99,7 +99,7 @@ fun AuthScreen(
     ) {
         Image(
             painter = painterResource(id = R.drawable.vortex_lobby_banner_1794457279200),
-            contentDescription = "Vortex Strike Tactical Dropzone",
+            contentDescription = "WarX Battleground Tactical Dropzone",
             contentScale = ContentScale.Crop,
             modifier = Modifier.fillMaxSize()
         )
@@ -154,7 +154,7 @@ fun AuthScreen(
                                 .background(CyberOrange),
                             contentAlignment = Alignment.Center
                         ) {
-                            Text("V", color = Color.Black, fontWeight = FontWeight.Black, fontSize = 20.sp)
+                            Text("W", color = Color.Black, fontWeight = FontWeight.Black, fontSize = 20.sp)
                         }
                         Text(
                             "SEASON 54 • CLOUD MULTIPLAYER",
@@ -166,11 +166,11 @@ fun AuthScreen(
                     }
 
                     Text(
-                        text = "VORTEX STRIKE",
+                        text = "WARX BATTLEGROUND",
                         style = MaterialTheme.typography.displayLarge,
                         color = TextPrimary,
                         fontWeight = FontWeight.Black,
-                        fontSize = 36.sp
+                        fontSize = 32.sp
                     )
                     Text(
                         text = "100-Player Tactical Survival • Ranked Battle Royale & 4v4 Clash Squad",
