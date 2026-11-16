@@ -165,10 +165,17 @@ fun MainApp(
     val cloudMissions by cloudMissionsFlow.collectAsState(initial = emptyList())
 
     var currentScreen by remember { mutableStateOf(ScreenState.LOBBY) }
+    var socialInitialTab by remember { mutableStateOf(0) }
+    var customizationInitialTab by remember { mutableStateOf(0) }
+    var shopInitialTab by remember { mutableStateOf(0) }
     var selectedMode by remember { mutableStateOf(GameModeType.CLASSIC_BR) }
     var selectedTeamSize by remember { mutableStateOf(4) }
     var selectedMap by remember { mutableStateOf(MapCatalog.getKavalaIsland()) }
     var activeEngine by remember { mutableStateOf<BattleRoyaleEngine?>(null) }
+
+    val lobbyGraphicsConfig = remember(settings) {
+        com.example.game.graphics.GraphicsConfig.fromSettings(settings)
+    }
 
     val currentTheme = remember(settings?.selectedWallpaperTheme) {
         LobbyWallpaperTheme.fromId(settings?.selectedWallpaperTheme ?: "DARK_TACTICAL")
@@ -264,6 +271,7 @@ fun MainApp(
                 onSelectWeather = { weather ->
                     scope.launch { repository.updateSelectedWeather(weather.name) }
                 },
+                graphicsConfig = lobbyGraphicsConfig,
                 announcements = cloudAnnouncements,
                 mailList = cloudMail,
                 onClaimMail = { mail ->
@@ -316,9 +324,12 @@ fun MainApp(
                     currentScreen = ScreenState.BATTLE
                 },
                 onNavigateToBattlePass = { soundSynthesizer.playUiClick(); currentScreen = ScreenState.BATTLE_PASS },
-                onNavigateToShop = { soundSynthesizer.playUiClick(); currentScreen = ScreenState.SHOP },
-                onNavigateToCustomization = { soundSynthesizer.playUiClick(); currentScreen = ScreenState.CUSTOMIZATION },
-                onNavigateToSocial = { soundSynthesizer.playUiClick(); currentScreen = ScreenState.SOCIAL },
+                onNavigateToShop = { soundSynthesizer.playUiClick(); shopInitialTab = 0; currentScreen = ScreenState.SHOP },
+                onNavigateToCustomization = { soundSynthesizer.playUiClick(); customizationInitialTab = 0; currentScreen = ScreenState.CUSTOMIZATION },
+                onNavigateToSocial = { soundSynthesizer.playUiClick(); socialInitialTab = 0; currentScreen = ScreenState.SOCIAL },
+                onNavigateToSocialTab = { tab -> soundSynthesizer.playUiClick(); socialInitialTab = tab; currentScreen = ScreenState.SOCIAL },
+                onNavigateToCustomizationTab = { tab -> soundSynthesizer.playUiClick(); customizationInitialTab = tab; currentScreen = ScreenState.CUSTOMIZATION },
+                onNavigateToShopTab = { tab -> soundSynthesizer.playUiClick(); shopInitialTab = tab; currentScreen = ScreenState.SHOP },
                 onNavigateToSettings = { soundSynthesizer.playUiClick(); currentScreen = ScreenState.SETTINGS },
                 onNavigateToAdmin = { soundSynthesizer.playUiClick(); currentScreen = ScreenState.ADMIN },
                 onPlayEmote = { soundSynthesizer.playVictoryFanfare() }
@@ -370,6 +381,7 @@ fun MainApp(
                 cloudRepository = cloudRepository,
                 cloudTransactions = cloudTransactions,
                 cloudProfile = cloudProfile,
+                initialTab = shopInitialTab,
                 onBack = { currentScreen = ScreenState.LOBBY }
             )
         }
@@ -378,6 +390,7 @@ fun MainApp(
             CustomizationScreen(
                 repository = repository,
                 cloudRepository = cloudRepository,
+                initialTab = customizationInitialTab,
                 onBack = { currentScreen = ScreenState.LOBBY }
             )
         }
@@ -387,6 +400,7 @@ fun MainApp(
                 repository = repository,
                 cloudRepository = cloudRepository,
                 cloudProfile = cloudProfile,
+                initialTab = socialInitialTab,
                 onBack = { currentScreen = ScreenState.LOBBY }
             )
         }

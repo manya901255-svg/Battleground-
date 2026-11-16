@@ -78,6 +78,7 @@ import kotlinx.coroutines.launch
 fun CustomizationScreen(
     repository: GameRepository,
     cloudRepository: CloudGameRepository? = null,
+    initialTab: Int = 0,
     onBack: () -> Unit
 ) {
     BackHandler { onBack() }
@@ -85,7 +86,7 @@ fun CustomizationScreen(
     val items by repository.inventory.collectAsState(initial = emptyList())
     val profile by repository.userProfile.collectAsState(initial = null)
     val scope = rememberCoroutineScope()
-    var selectedCategory by remember { mutableIntStateOf(0) }
+    var selectedCategory by remember(initialTab) { mutableIntStateOf(initialTab.coerceIn(0, 7)) }
     var genderFilter by remember { androidx.compose.runtime.mutableStateOf("ALL") }
     var inspectingItem by remember { androidx.compose.runtime.mutableStateOf<com.example.data.InventoryItemEntity?>(null) }
 

@@ -83,6 +83,7 @@ fun ShopScreen(
     cloudRepository: CloudGameRepository? = null,
     cloudTransactions: List<CloudTransaction> = emptyList(),
     cloudProfile: CloudUserProfile? = null,
+    initialTab: Int = 0,
     onBack: () -> Unit
 ) {
     BackHandler { onBack() }
@@ -92,7 +93,7 @@ fun ShopScreen(
     val ownedIds = remember(ownedInventory) { ownedInventory.map { it.id }.toSet() }
     val scope = rememberCoroutineScope()
 
-    var selectedTab by remember { mutableIntStateOf(0) }
+    var selectedTab by remember(initialTab) { mutableIntStateOf(initialTab.coerceIn(0, 1)) }
     var previewItem by remember { mutableStateOf<InventoryItemEntity?>(null) }
     var shopBannerMsg by remember { mutableStateOf<String?>(null) }
     var isProcessing by remember { mutableStateOf(false) }

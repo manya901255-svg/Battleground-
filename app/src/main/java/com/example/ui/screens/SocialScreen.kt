@@ -140,6 +140,7 @@ fun SocialScreen(
     repository: GameRepository,
     cloudRepository: CloudGameRepository? = null,
     cloudProfile: CloudUserProfile? = null,
+    initialTab: Int = 0,
     onBack: () -> Unit
 ) {
     BackHandler { onBack() }
@@ -187,7 +188,7 @@ fun SocialScreen(
     }
     val guildMessages by guildMessagesFlow.collectAsState(initial = emptyList())
 
-    var selectedTab by remember { mutableIntStateOf(0) }
+    var selectedTab by remember(initialTab) { mutableIntStateOf(initialTab.coerceIn(0, 5)) }
     var statusBanner by remember { mutableStateOf<String?>(null) }
 
     val allFriends = remember {
