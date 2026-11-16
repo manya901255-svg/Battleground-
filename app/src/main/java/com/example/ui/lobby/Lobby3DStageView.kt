@@ -20,7 +20,6 @@ import com.example.game.graphics.EnvironmentRenderer
 import com.example.game.graphics.GraphicsConfig
 import com.example.game.graphics.MaterialId
 import com.example.game.graphics.MeshLibrary
-import com.example.game.graphics.ParticleKind
 import com.example.game.graphics.PbrShaderProgram
 import com.example.game.graphics.PbrTextureAtlas
 import com.example.game.graphics.TerrainHeightfield
@@ -46,6 +45,8 @@ fun Lobby3DStageView(
     characterPresetId: String,
     petPresetId: String,
     petVisible: Boolean,
+    equippedWeaponId: String = "m416",
+    equippedWeaponSkin: String = "Tactical Slate",
     soldierYawOffset: Float,
     emoteTriggerTick: Int,
     wallpaperTheme: LobbyWallpaperTheme,
@@ -68,6 +69,8 @@ fun Lobby3DStageView(
         characterPresetId,
         petPresetId,
         petVisible,
+        equippedWeaponId,
+        equippedWeaponSkin,
         soldierYawOffset,
         wallpaperTheme,
         weatherType,
@@ -77,6 +80,8 @@ fun Lobby3DStageView(
         renderer.characterPresetId = characterPresetId
         renderer.petPresetId = petPresetId
         renderer.petVisible = petVisible
+        renderer.equippedWeaponId = equippedWeaponId
+        renderer.equippedWeaponSkin = equippedWeaponSkin
         renderer.soldierYawOffset = soldierYawOffset
         renderer.wallpaperTheme = wallpaperTheme
         renderer.weatherType = weatherType
@@ -161,11 +166,15 @@ private class Lobby3DRenderer(
     @Volatile var characterPresetId: String = "vortex_ghost"
     @Volatile var petPresetId: String = "draco_flame"
     @Volatile var petVisible: Boolean = true
+    @Volatile var equippedWeaponId: String = "m416"
+    @Volatile var equippedWeaponSkin: String = "Tactical Slate"
     @Volatile var soldierYawOffset: Float = 0f
     @Volatile var emoteRemainingSec: Float = 0f
     @Volatile var wallpaperTheme: LobbyWallpaperTheme = LobbyWallpaperTheme.DARK_TACTICAL
     @Volatile var weatherType: WeatherType = WeatherType.CLEAR
     @Volatile var mapConfig: MapConfig = MapCatalog.getKavalaIsland()
+
+    private var cachedWeaponKey: String = ""
 
     private val shader = PbrShaderProgram()
     private val textures = PbrTextureAtlas()
@@ -324,6 +333,11 @@ private class Lobby3DRenderer(
         actorRenderer.renderVehicle3D(parkedVehicle, uazGround, frameTimeSec, cfg.shadowQuality)
 
         // Prominent Animated 3D Playable Operative
+        val wKey = "${equippedWeaponId}_${equippedWeaponSkin}"
+        if (wKey != cachedWeaponKey) {
+            cachedWeaponKey = wKey
+            showcasePlayer.primaryWeapon1 = WeaponCatalog.createById(equippedWeaponId, equippedWeaponSkin)
+        }
         showcasePlayer.characterPresetId = characterPresetId
         showcasePlayer.angle = 98f + soldierYawOffset + sin(frameTimeSec * 0.7f) * 3.5f
         showcasePlayer.emoteAnimSec = emoteRemainingSec

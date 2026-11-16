@@ -6,6 +6,11 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -16,6 +21,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -28,6 +34,7 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.credentials.CredentialManager
 import com.example.data.GameRepository
+import com.example.data.StoreCategory
 import com.example.data.cloud.CloudGameRepository
 import com.example.data.cloud.GoogleAuthHelper
 import com.example.game.audio.SoundSynthesizer
@@ -39,12 +46,15 @@ import com.example.game.ui.BattleScreen
 import com.example.ui.screens.AdminScreen
 import com.example.ui.screens.AuthScreen
 import com.example.ui.screens.BattlePassScreen
+import com.example.ui.screens.CharacterSelectionScreen
 import com.example.ui.screens.CustomizationScreen
 import com.example.ui.screens.HudCustomizerScreen
+import com.example.ui.screens.InventoryScreen
 import com.example.ui.screens.LobbyScreen
 import com.example.ui.screens.SettingsScreen
 import com.example.ui.screens.ShopScreen
 import com.example.ui.screens.SocialScreen
+import com.example.ui.screens.WeaponCollectionScreen
 import com.example.ui.theme.CyberOrange
 import com.example.ui.theme.LobbyWallpaperTheme
 import com.example.ui.theme.MyApplicationTheme
@@ -61,6 +71,9 @@ enum class ScreenState {
     BATTLE,
     BATTLE_PASS,
     SHOP,
+    CHARACTERS,
+    WEAPONS,
+    INVENTORY,
     CUSTOMIZATION,
     SOCIAL,
     SETTINGS,
@@ -140,6 +153,7 @@ fun MainApp(
     val cloudRepository = remember(context) { CloudGameRepository(context) }
 
     val profile by repository.userProfile.collectAsState(initial = null)
+    val allInventory by repository.allInventory.collectAsState(initial = emptyList())
     val settings by repository.settings.collectAsState(initial = null)
 
     val cloudProfileFlow = remember(cloudRepository, user.uid) {
@@ -165,11 +179,12 @@ fun MainApp(
     val cloudMissions by cloudMissionsFlow.collectAsState(initial = emptyList())
 
     var currentScreen by remember { mutableStateOf(ScreenState.LOBBY) }
-    var socialInitialTab by remember { mutableStateOf(0) }
-    var customizationInitialTab by remember { mutableStateOf(0) }
-    var shopInitialTab by remember { mutableStateOf(0) }
+    var socialInitialTab by remember { mutableIntStateOf(0) }
+    var customizationInitialTab by remember { mutableIntStateOf(0) }
+    var shopInitialTab by remember { mutableIntStateOf(0) }
+    var shopInitialCategory by remember { mutableStateOf<StoreCategory?>(null) }
     var selectedMode by remember { mutableStateOf(GameModeType.CLASSIC_BR) }
-    var selectedTeamSize by remember { mutableStateOf(4) }
+    var selectedTeamSize by remember { mutableIntStateOf(4) }
     var selectedMap by remember { mutableStateOf(MapCatalog.getKavalaIsland()) }
     var activeEngine by remember { mutableStateOf<BattleRoyaleEngine?>(null) }
 
@@ -220,10 +235,31 @@ fun MainApp(
             wins = cp.wins.toInt(),
             kills = cp.kills.toInt(),
             deaths = cp.deaths.toInt(),
+            selectedCharacterId = cp.selectedCharacterId.ifBlank { local.selectedCharacterId },
+            selectedPetId = cp.selectedPetId.ifBlank { local.selectedPetId },
             petLevel = cp.petLevel.toInt().coerceAtLeast(1),
             petVisible = cp.petVisible,
             signatureBio = cp.bio.ifBlank { local.signatureBio }
         )
+    }
+
+    val weaponSkinMap = remember(allInventory) {
+        allInventory
+            .filter { it.type == "WEAPON_SKIN" && it.isOwned && it.isEquipped }
+            .associate { it.targetItemId.lowercase() to it.name.substringAfter(" - ").trim() }
+    }
+    val weaponUpgradeMap = remember(allInventory) {
+        allInventory
+            .filter { it.type == "GUN" && it.isOwned }
+            .associate { it.targetItemId.lowercase() to it.upgradeLevel.coerceIn(1, 5) }
+    }
+    val equippedWeaponId = remember(effectiveProfile, allInventory) {
+        effectiveProfile?.equippedWeaponId?.ifBlank { null }
+            ?: allInventory.firstOrNull { it.type == "GUN" && it.isOwned && it.isEquipped }?.targetItemId
+            ?: "m416"
+    }
+    val equippedWeaponSkin = remember(weaponSkinMap, equippedWeaponId) {
+        weaponSkinMap[equippedWeaponId.lowercase()] ?: "Tactical Slate"
     }
 
     if (effectiveProfile == null) {
@@ -252,197 +288,257 @@ fun MainApp(
         }
     }
 
-    when (currentScreen) {
-        ScreenState.LOBBY -> {
-            LobbyScreen(
-                profile = effectiveProfile,
-                repository = repository,
-                selectedMode = selectedMode,
-                selectedMap = selectedMap,
-                onSelectMap = { selectedMap = it },
-                currentTheme = currentTheme,
-                onSelectTheme = { theme ->
-                    scope.launch { repository.updateWallpaperTheme(theme.id) }
-                },
-                onSelectMode = { selectedMode = it },
-                selectedTeamSize = selectedTeamSize,
-                onSelectTeamSize = { selectedTeamSize = it },
-                selectedWeather = selectedWeather,
-                onSelectWeather = { weather ->
-                    scope.launch { repository.updateSelectedWeather(weather.name) }
-                },
-                graphicsConfig = lobbyGraphicsConfig,
-                announcements = cloudAnnouncements,
-                mailList = cloudMail,
-                onClaimMail = { mail ->
-                    scope.launch { cloudRepository.claimMailReward(mail) }
-                },
-                onSubmitSupportTicket = { subject, msg ->
-                    scope.launch { cloudRepository.submitSupportTicket("PLAYER_SUPPORT", subject, msg) }
-                },
-                onStartMatch = {
-                    soundSynthesizer.playUiClick()
-                    lateinit var createdEngine: BattleRoyaleEngine
-                    createdEngine = BattleRoyaleEngine(
-                        gameMode = selectedMode,
-                        mapConfig = selectedMap,
-                        soundSynthesizer = soundSynthesizer,
-                        autoPickupEnabled = settings?.autoPickupEnabled ?: true,
-                        aimAssistEnabled = settings?.aimAssistEnabled ?: true,
-                        teamSize = selectedTeamSize,
-                        characterPresetId = effectiveProfile.selectedCharacterId,
-                        activePetId = effectiveProfile.selectedPetId,
-                        weatherType = selectedWeather,
-                        petVisible = effectiveProfile.petVisible,
-                        cameraSensitivity = settings?.cameraSensitivity ?: 1.0f,
-                        adsSensitivity = settings?.adsSensitivity ?: 0.85f,
-                        onMatchFinished = { placement, kills, damage, durationSec ->
-                            val assists = createdEngine.engineState.value.userAssists
-                            scope.launch {
-                                repository.recordMatchFinished(
-                                    mode = selectedMode.title,
-                                    map = selectedMap.name,
-                                    placement = placement,
-                                    kills = kills,
-                                    damage = damage,
-                                    durationSec = durationSec
-                                )
-                                cloudRepository.recordCloudMatch(
-                                    gameMode = selectedMode.title,
-                                    mapName = selectedMap.name,
-                                    placement = placement,
-                                    kills = kills,
-                                    assists = assists,
-                                    damage = damage,
-                                    durationSec = durationSec
-                                )
+    AnimatedContent(
+        targetState = currentScreen,
+        transitionSpec = {
+            fadeIn(animationSpec = tween(220)) togetherWith fadeOut(animationSpec = tween(180))
+        },
+        label = "warx_screen_navigation"
+    ) { targetScreen ->
+        when (targetScreen) {
+            ScreenState.LOBBY -> {
+                LobbyScreen(
+                    profile = effectiveProfile,
+                    repository = repository,
+                    selectedMode = selectedMode,
+                    selectedMap = selectedMap,
+                    onSelectMap = { selectedMap = it },
+                    currentTheme = currentTheme,
+                    onSelectTheme = { theme ->
+                        scope.launch { repository.updateWallpaperTheme(theme.id) }
+                    },
+                    onSelectMode = { selectedMode = it },
+                    selectedTeamSize = selectedTeamSize,
+                    onSelectTeamSize = { selectedTeamSize = it },
+                    selectedWeather = selectedWeather,
+                    onSelectWeather = { weather ->
+                        scope.launch { repository.updateSelectedWeather(weather.name) }
+                    },
+                    graphicsConfig = lobbyGraphicsConfig,
+                    announcements = cloudAnnouncements,
+                    mailList = cloudMail,
+                    onClaimMail = { mail ->
+                        scope.launch { cloudRepository.claimMailReward(mail) }
+                    },
+                    onSubmitSupportTicket = { subject, msg ->
+                        scope.launch { cloudRepository.submitSupportTicket("PLAYER_SUPPORT", subject, msg) }
+                    },
+                    onStartMatch = {
+                        soundSynthesizer.playUiClick()
+                        lateinit var createdEngine: BattleRoyaleEngine
+                        createdEngine = BattleRoyaleEngine(
+                            gameMode = selectedMode,
+                            mapConfig = selectedMap,
+                            soundSynthesizer = soundSynthesizer,
+                            autoPickupEnabled = settings?.autoPickupEnabled ?: true,
+                            aimAssistEnabled = settings?.aimAssistEnabled ?: true,
+                            teamSize = selectedTeamSize,
+                            characterPresetId = effectiveProfile.selectedCharacterId,
+                            activePetId = effectiveProfile.selectedPetId,
+                            weatherType = selectedWeather,
+                            petVisible = effectiveProfile.petVisible,
+                            cameraSensitivity = settings?.cameraSensitivity ?: 1.0f,
+                            adsSensitivity = settings?.adsSensitivity ?: 0.85f,
+                            equippedPrimaryWeaponId = equippedWeaponId,
+                            weaponSkinMap = weaponSkinMap,
+                            weaponUpgradeMap = weaponUpgradeMap,
+                            onMatchFinished = { placement, kills, damage, durationSec ->
+                                val assists = createdEngine.engineState.value.userAssists
+                                scope.launch {
+                                    repository.recordMatchFinished(
+                                        mode = selectedMode.title,
+                                        map = selectedMap.name,
+                                        placement = placement,
+                                        kills = kills,
+                                        damage = damage,
+                                        durationSec = durationSec
+                                    )
+                                    cloudRepository.recordCloudMatch(
+                                        gameMode = selectedMode.title,
+                                        mapName = selectedMap.name,
+                                        placement = placement,
+                                        kills = kills,
+                                        assists = assists,
+                                        damage = damage,
+                                        durationSec = durationSec
+                                    )
+                                }
                             }
+                        )
+                        activeEngine = createdEngine
+                        createdEngine.start()
+                        currentScreen = ScreenState.BATTLE
+                    },
+                    onNavigateToBattlePass = { soundSynthesizer.playUiClick(); currentScreen = ScreenState.BATTLE_PASS },
+                    onNavigateToShop = {
+                        soundSynthesizer.playUiClick()
+                        shopInitialTab = 0
+                        shopInitialCategory = null
+                        currentScreen = ScreenState.SHOP
+                    },
+                    onNavigateToCustomization = { soundSynthesizer.playUiClick(); customizationInitialTab = 0; currentScreen = ScreenState.CUSTOMIZATION },
+                    onNavigateToSocial = { soundSynthesizer.playUiClick(); socialInitialTab = 0; currentScreen = ScreenState.SOCIAL },
+                    onNavigateToSocialTab = { tab -> soundSynthesizer.playUiClick(); socialInitialTab = tab; currentScreen = ScreenState.SOCIAL },
+                    onNavigateToCustomizationTab = { tab -> soundSynthesizer.playUiClick(); customizationInitialTab = tab; currentScreen = ScreenState.CUSTOMIZATION },
+                    onNavigateToShopTab = { tab ->
+                        soundSynthesizer.playUiClick()
+                        shopInitialTab = tab
+                        shopInitialCategory = null
+                        currentScreen = ScreenState.SHOP
+                    },
+                    onNavigateToCharacters = { soundSynthesizer.playUiClick(); currentScreen = ScreenState.CHARACTERS },
+                    onNavigateToWeapons = { soundSynthesizer.playUiClick(); currentScreen = ScreenState.WEAPONS },
+                    onNavigateToInventory = { soundSynthesizer.playUiClick(); currentScreen = ScreenState.INVENTORY },
+                    equippedWeaponId = equippedWeaponId,
+                    equippedWeaponSkin = equippedWeaponSkin,
+                    onNavigateToSettings = { soundSynthesizer.playUiClick(); currentScreen = ScreenState.SETTINGS },
+                    onNavigateToAdmin = { soundSynthesizer.playUiClick(); currentScreen = ScreenState.ADMIN },
+                    onPlayEmote = { soundSynthesizer.playVictoryFanfare() }
+                )
+            }
+
+            ScreenState.CHARACTERS -> {
+                CharacterSelectionScreen(
+                    repository = repository,
+                    cloudRepository = cloudRepository,
+                    cloudProfile = cloudProfile,
+                    equippedWeaponId = equippedWeaponId,
+                    equippedWeaponSkin = equippedWeaponSkin,
+                    onBack = { currentScreen = ScreenState.LOBBY }
+                )
+            }
+
+            ScreenState.WEAPONS -> {
+                WeaponCollectionScreen(
+                    repository = repository,
+                    cloudRepository = cloudRepository,
+                    cloudProfile = cloudProfile,
+                    onBack = { currentScreen = ScreenState.LOBBY }
+                )
+            }
+
+            ScreenState.INVENTORY -> {
+                InventoryScreen(
+                    repository = repository,
+                    cloudRepository = cloudRepository,
+                    onOpenStoreCategory = { category ->
+                        shopInitialTab = 0
+                        shopInitialCategory = category
+                        currentScreen = ScreenState.SHOP
+                    },
+                    onBack = { currentScreen = ScreenState.LOBBY }
+                )
+            }
+
+            ScreenState.BATTLE -> {
+                val engine = activeEngine
+                if (engine != null) {
+                    DisposableEffect(engine) {
+                        onDispose {
+                            engine.stop()
+                        }
+                    }
+                    BattleScreen(
+                        engine = engine,
+                        hudScale = settings?.hudScale ?: 1.0f,
+                        hudOpacity = settings?.hudOpacity ?: 0.90f,
+                        hudLayoutJson = settings?.hudLayoutJson ?: "",
+                        graphicsQuality = settings?.graphicsQuality ?: "High",
+                        graphicsConfig = com.example.game.graphics.GraphicsConfig.fromSettings(settings),
+                        leftHandFireEnabled = settings?.leftHandFireEnabled ?: true,
+                        onUpdateGraphicsQuality = { q ->
+                            scope.launch { repository.updateGraphicsQuality(q) }
+                        },
+                        onExitToLobby = {
+                            engine.stop()
+                            activeEngine = null
+                            currentScreen = ScreenState.LOBBY
                         }
                     )
-                    activeEngine = createdEngine
-                    createdEngine.start()
-                    currentScreen = ScreenState.BATTLE
-                },
-                onNavigateToBattlePass = { soundSynthesizer.playUiClick(); currentScreen = ScreenState.BATTLE_PASS },
-                onNavigateToShop = { soundSynthesizer.playUiClick(); shopInitialTab = 0; currentScreen = ScreenState.SHOP },
-                onNavigateToCustomization = { soundSynthesizer.playUiClick(); customizationInitialTab = 0; currentScreen = ScreenState.CUSTOMIZATION },
-                onNavigateToSocial = { soundSynthesizer.playUiClick(); socialInitialTab = 0; currentScreen = ScreenState.SOCIAL },
-                onNavigateToSocialTab = { tab -> soundSynthesizer.playUiClick(); socialInitialTab = tab; currentScreen = ScreenState.SOCIAL },
-                onNavigateToCustomizationTab = { tab -> soundSynthesizer.playUiClick(); customizationInitialTab = tab; currentScreen = ScreenState.CUSTOMIZATION },
-                onNavigateToShopTab = { tab -> soundSynthesizer.playUiClick(); shopInitialTab = tab; currentScreen = ScreenState.SHOP },
-                onNavigateToSettings = { soundSynthesizer.playUiClick(); currentScreen = ScreenState.SETTINGS },
-                onNavigateToAdmin = { soundSynthesizer.playUiClick(); currentScreen = ScreenState.ADMIN },
-                onPlayEmote = { soundSynthesizer.playVictoryFanfare() }
-            )
-        }
-
-        ScreenState.BATTLE -> {
-            val engine = activeEngine
-            if (engine != null) {
-                DisposableEffect(engine) {
-                    onDispose {
-                        engine.stop()
-                    }
+                } else {
+                    currentScreen = ScreenState.LOBBY
                 }
-                BattleScreen(
-                    engine = engine,
-                    hudScale = settings?.hudScale ?: 1.0f,
-                    hudOpacity = settings?.hudOpacity ?: 0.90f,
-                    hudLayoutJson = settings?.hudLayoutJson ?: "",
-                    graphicsQuality = settings?.graphicsQuality ?: "High",
-                    graphicsConfig = com.example.game.graphics.GraphicsConfig.fromSettings(settings),
-                    leftHandFireEnabled = settings?.leftHandFireEnabled ?: true,
-                    onUpdateGraphicsQuality = { q ->
-                        scope.launch { repository.updateGraphicsQuality(q) }
-                    },
-                    onExitToLobby = {
-                        engine.stop()
-                        activeEngine = null
-                        currentScreen = ScreenState.LOBBY
-                    }
-                )
-            } else {
-                currentScreen = ScreenState.LOBBY
             }
-        }
 
-        ScreenState.BATTLE_PASS -> {
-            BattlePassScreen(
-                repository = repository,
-                cloudRepository = cloudRepository,
-                cloudMissions = cloudMissions,
-                onBack = { currentScreen = ScreenState.LOBBY }
-            )
-        }
+            ScreenState.BATTLE_PASS -> {
+                BattlePassScreen(
+                    repository = repository,
+                    cloudRepository = cloudRepository,
+                    cloudMissions = cloudMissions,
+                    onBack = { currentScreen = ScreenState.LOBBY }
+                )
+            }
 
-        ScreenState.SHOP -> {
-            ShopScreen(
-                repository = repository,
-                cloudRepository = cloudRepository,
-                cloudTransactions = cloudTransactions,
-                cloudProfile = cloudProfile,
-                initialTab = shopInitialTab,
-                onBack = { currentScreen = ScreenState.LOBBY }
-            )
-        }
+            ScreenState.SHOP -> {
+                ShopScreen(
+                    repository = repository,
+                    cloudRepository = cloudRepository,
+                    cloudTransactions = cloudTransactions,
+                    cloudProfile = cloudProfile,
+                    initialTab = shopInitialTab,
+                    initialCategory = shopInitialCategory,
+                    onBack = { currentScreen = ScreenState.LOBBY }
+                )
+            }
 
-        ScreenState.CUSTOMIZATION -> {
-            CustomizationScreen(
-                repository = repository,
-                cloudRepository = cloudRepository,
-                initialTab = customizationInitialTab,
-                onBack = { currentScreen = ScreenState.LOBBY }
-            )
-        }
+            ScreenState.CUSTOMIZATION -> {
+                CustomizationScreen(
+                    repository = repository,
+                    cloudRepository = cloudRepository,
+                    initialTab = customizationInitialTab,
+                    onBack = { currentScreen = ScreenState.LOBBY }
+                )
+            }
 
-        ScreenState.SOCIAL -> {
-            SocialScreen(
-                repository = repository,
-                cloudRepository = cloudRepository,
-                cloudProfile = cloudProfile,
-                initialTab = socialInitialTab,
-                onBack = { currentScreen = ScreenState.LOBBY }
-            )
-        }
+            ScreenState.SOCIAL -> {
+                SocialScreen(
+                    repository = repository,
+                    cloudRepository = cloudRepository,
+                    cloudProfile = cloudProfile,
+                    initialTab = socialInitialTab,
+                    onBack = { currentScreen = ScreenState.LOBBY }
+                )
+            }
 
-        ScreenState.SETTINGS -> {
-            SettingsScreen(
-                repository = repository,
-                userEmail = user.email,
-                onOpenHudCustomizer = { currentScreen = ScreenState.HUD_CUSTOMIZER },
-                onSignOut = {
-                    soundSynthesizer.stopBackgroundMusic()
-                    GoogleAuthHelper.signOut(credentialManager, scope)
-                },
-                onBack = { currentScreen = ScreenState.LOBBY }
-            )
-        }
+            ScreenState.SETTINGS -> {
+                SettingsScreen(
+                    repository = repository,
+                    userEmail = user.email,
+                    onOpenHudCustomizer = { currentScreen = ScreenState.HUD_CUSTOMIZER },
+                    onSignOut = {
+                        soundSynthesizer.stopBackgroundMusic()
+                        GoogleAuthHelper.signOut(credentialManager, scope)
+                    },
+                    onBack = { currentScreen = ScreenState.LOBBY }
+                )
+            }
 
-        ScreenState.HUD_CUSTOMIZER -> {
-            HudCustomizerScreen(
-                initialPreset = settings?.hudLayoutPreset ?: 1,
-                initialLayoutJson = settings?.hudLayoutJson ?: "",
-                onSaveLayout = { presetId, json ->
-                    scope.launch {
-                        repository.saveHudLayout(presetId, json)
-                        currentScreen = ScreenState.SETTINGS
-                    }
-                },
-                onResetLayout = { presetId ->
-                    scope.launch {
-                        repository.resetHudLayout(presetId)
-                    }
-                },
-                onBack = { currentScreen = ScreenState.SETTINGS }
-            )
-        }
+            ScreenState.HUD_CUSTOMIZER -> {
+                HudCustomizerScreen(
+                    initialPreset = settings?.hudLayoutPreset ?: 1,
+                    initialLayoutJson = settings?.hudLayoutJson ?: "",
+                    onSaveLayout = { presetId, json ->
+                        scope.launch {
+                            repository.saveHudLayout(presetId, json)
+                            currentScreen = ScreenState.SETTINGS
+                        }
+                    },
+                    onResetLayout = { presetId ->
+                        scope.launch {
+                            repository.resetHudLayout(presetId)
+                        }
+                    },
+                    onBack = { currentScreen = ScreenState.SETTINGS }
+                )
+            }
 
-        ScreenState.ADMIN -> {
-            AdminScreen(
-                repository = repository,
-                cloudRepository = cloudRepository,
-                onBack = { currentScreen = ScreenState.LOBBY }
-            )
+            ScreenState.ADMIN -> {
+                AdminScreen(
+                    repository = repository,
+                    cloudRepository = cloudRepository,
+                    onBack = { currentScreen = ScreenState.LOBBY }
+                )
+            }
         }
     }
 }

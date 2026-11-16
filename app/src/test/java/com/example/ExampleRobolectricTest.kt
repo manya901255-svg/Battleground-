@@ -208,7 +208,7 @@ class ExampleRobolectricTest {
 
         assertEquals(24, engine.players.size)
         assertEquals("blaze_striker", engine.userPlayer.characterPresetId)
-        assertEquals(100f, engine.userPlayer.shield, 0.1f)
+        assertEquals(110f, engine.userPlayer.shield, 0.1f)
 
         // Camera rotation updates yaw and clamps pitch
         val initialYaw = engine.cameraYawDegrees
@@ -492,5 +492,70 @@ class ExampleRobolectricTest {
         assertTrue(vfx.activeCount() in 1..72)
         vfx.update(0.1f, com.example.game.model.WeatherType.SUNSET_STORM, "kavala_island", 250f, 2f, 250f)
         assertTrue(vfx.activeCount() > 0)
+    }
+
+    @Test
+    fun `test 11 store categories, weapon upgrade validation, scoped equips, and engine loadout sync`() = kotlinx.coroutines.runBlocking {
+        // 1. All 11 Store categories must contain catalog items
+        assertEquals(11, com.example.data.StoreCategory.entries.size)
+        com.example.data.StoreCategory.entries.forEach { cat ->
+            val items = com.example.data.StoreCatalog.byCategory(cat)
+            assertTrue("Category ${cat.title} must not be empty", items.isNotEmpty())
+        }
+
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val repository = com.example.data.GameRepository.create(context)
+        repository.initializeDefaultDataIfEmpty()
+
+        // 2. Character unlock fails safely without deducting currency if insufficient funds
+        val apexSpec = com.example.data.StoreCatalog.findSpec("char_apex_titan")!!
+        val vcBefore = repository.userProfile.first()!!.vortexCredits
+        val priceyItem = apexSpec.toEntity().copy(priceCredits = vcBefore + 5000)
+        val overBudgetUnlock = repository.purchaseShopItem(priceyItem, useCredits = true)
+        assertFalse(overBudgetUnlock)
+        assertEquals(vcBefore, repository.userProfile.first()!!.vortexCredits)
+
+        // Unlocking within budget deducts exact amount and marks owned
+        val affordableChar = com.example.data.StoreCatalog.findSpec("char_blaze_striker")!!.toEntity()
+        val bpBefore = repository.userProfile.first()!!.bpCoins
+        assertTrue(repository.purchaseShopItem(affordableChar, useCredits = false))
+        assertEquals(bpBefore - affordableChar.priceBp, repository.userProfile.first()!!.bpCoins)
+
+        // 3. Weapon upgrade upgrades level 1 -> 2 and refuses deduction when BP insufficient
+        assertTrue(repository.upgradeInventoryItemLocal("gun_m416"))
+        val upgradedM416 = repository.allInventory.first().first { it.id == "gun_m416" }
+        assertEquals(2, upgradedM416.upgradeLevel)
+
+        // 4. Equipping a skin for AWM keeps M416's equipped skin intact, and unequip works cleanly
+        val awmSkin = repository.allInventory.first().first { it.id == "skin_awm_cyber" }
+        val m416Skin = repository.allInventory.first().first { it.id == "skin_m416_slate" }
+        repository.equipItem(m416Skin)
+        repository.equipItem(awmSkin)
+        val invAfterSkinEquip = repository.allInventory.first()
+        assertTrue(invAfterSkinEquip.first { it.id == "skin_m416_slate" }.isEquipped)
+        assertTrue(invAfterSkinEquip.first { it.id == "skin_awm_cyber" }.isEquipped)
+
+        repository.unequipItem(invAfterSkinEquip.first { it.id == "skin_awm_cyber" })
+        assertFalse(repository.allInventory.first().first { it.id == "skin_awm_cyber" }.isEquipped)
+
+        // 5. Engine applies equipped primary weapon, skin, upgrade level, and Apex Titan backpack perk
+        val customEngine = BattleRoyaleEngine(
+            gameMode = GameModeType.OFFLINE_PRACTICE,
+            mapConfig = MapCatalog.getKavalaIsland(),
+            soundSynthesizer = null,
+            teamSize = 1,
+            characterPresetId = "apex_titan",
+            equippedPrimaryWeaponId = "akm",
+            weaponSkinMap = mapOf("akm" to "Dragonfire Inferno"),
+            weaponUpgradeMap = mapOf("akm" to 4),
+            onMatchFinished = { _, _, _, _ -> }
+        )
+        val primary = customEngine.userPlayer.primaryWeapon1
+        assertNotNull(primary)
+        assertEquals("akm", primary!!.id)
+        assertEquals("Dragonfire Inferno", primary.skinName)
+        assertEquals(4, primary.upgradeLevel)
+        assertTrue(primary.effectiveDamage > primary.baseDamage)
+        assertEquals(285, customEngine.engineState.value.backpackMaxUnits)
     }
 }

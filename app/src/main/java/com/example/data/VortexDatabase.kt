@@ -39,7 +39,8 @@ data class UserProfileEntity(
     val signatureBio: String = "Battle in Style!",
     val seasonId: String = "S54",
     val petVisible: Boolean = true,
-    val voiceCalloutsEnabled: Boolean = true
+    val voiceCalloutsEnabled: Boolean = true,
+    val equippedWeaponId: String = "m416"
 ) {
     val kdRatio: Float
         get() = if (deaths > 0) kills.toFloat() / deaths.toFloat() else kills.toFloat()
@@ -69,13 +70,14 @@ data class MatchHistoryEntity(
 data class InventoryItemEntity(
     @PrimaryKey val id: String,
     val name: String,
-    val type: String, // WEAPON_SKIN, OUTFIT, HELMET, BACKPACK, PARACHUTE, VEHICLE
-    val targetItemId: String, // e.g. "m416", "player_male", "uaz"
+    val type: String, // CHARACTER, GUN, WEAPON_SKIN, OUTFIT, HELMET, BACKPACK, PARACHUTE, VEHICLE, EMOTE, PET, BUNDLE
+    val targetItemId: String, // e.g. "m416", "player", "uaz"
     val rarity: String, // COMMON, RARE, EPIC, LEGENDARY, MYTHIC
     val isEquipped: Boolean = false,
     val isOwned: Boolean = true,
     val priceBp: Int = 0,
-    val priceCredits: Int = 0
+    val priceCredits: Int = 0,
+    val upgradeLevel: Int = 1
 )
 
 @Entity(tableName = "battle_pass_tiers")
@@ -157,7 +159,13 @@ interface VortexDao {
     fun getOwnedInventory(): Flow<List<InventoryItemEntity>>
 
     @Query("SELECT * FROM inventory_items")
+    fun getAllInventoryItemsFlow(): Flow<List<InventoryItemEntity>>
+
+    @Query("SELECT * FROM inventory_items")
     suspend fun getAllInventoryItems(): List<InventoryItemEntity>
+
+    @Query("SELECT * FROM inventory_items WHERE id = :id LIMIT 1")
+    suspend fun getInventoryItemById(id: String): InventoryItemEntity?
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertInventoryItems(items: List<InventoryItemEntity>)
@@ -167,6 +175,9 @@ interface VortexDao {
 
     @Query("UPDATE inventory_items SET isEquipped = 0 WHERE type = :type")
     suspend fun unequipAllOfType(type: String)
+
+    @Query("UPDATE inventory_items SET isEquipped = 0 WHERE type = :type AND targetItemId = :targetItemId")
+    suspend fun unequipAllOfTypeAndTarget(type: String, targetItemId: String)
 
     @Query("SELECT * FROM battle_pass_tiers ORDER BY tier ASC")
     fun getBattlePassTiers(): Flow<List<BattlePassTierEntity>>
@@ -205,7 +216,7 @@ interface VortexDao {
         GameSettingsEntity::class,
         MissionEntity::class
     ],
-    version = 8,
+    version = 9,
     exportSchema = false
 )
 abstract class VortexDatabase : RoomDatabase() {

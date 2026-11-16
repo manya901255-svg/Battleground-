@@ -786,6 +786,101 @@ class CloudGameRepository(
         }
     }
 
+    suspend fun setInventoryItemEquipped(itemId: String, equipped: Boolean): Result<Unit> {
+        return runCatching {
+            val uid = requireUserId()
+            val invRef = db.collection("users").document(uid)
+                .collection("inventory").document(itemId)
+            val snap = invRef.get().await()
+            if (snap.exists()) {
+                invRef.update(
+                    mapOf(
+                        "isEquipped" to equipped,
+                        "updatedAt" to FieldValue.serverTimestamp()
+                    )
+                ).await()
+            }
+            Unit
+        }.onFailure { e ->
+            handleFirestoreError(e, OperationType.UPDATE, "users/${auth.currentUser?.uid}/inventory/$itemId")
+        }
+    }
+
+    suspend fun upgradeInventoryItem(
+        itemId: String,
+        itemName: String,
+        type: String,
+        targetItemId: String,
+        rarity: String,
+        costBp: Long
+    ): Result<Long> {
+        return runCatching {
+            val uid = requireUserId()
+            require(itemId.isNotBlank() && costBp > 0L) { "Invalid weapon upgrade request." }
+            val userRef = db.collection("users").document(uid)
+            val invRef = userRef.collection("inventory").document(itemId)
+            val txRef = userRef.collection("transactions").document("tx_upg_${UUID.randomUUID().toString().replace("-", "").take(14)}")
+
+            db.runTransaction { tx ->
+                val pSnap = tx.get(userRef)
+                check(pSnap.exists()) { "Profile missing." }
+                val invSnap = tx.get(invRef)
+                val curLevel = if (invSnap.exists()) (invSnap.getLong("level") ?: 1L) else 1L
+                if (curLevel >= 5L) throw IllegalStateException("$itemName is already Max Level (Lv.5).")
+
+                val curBp = pSnap.getLong("bpCoins") ?: 0L
+                if (curBp < costBp) throw IllegalStateException("Need $costBp BP Coins to upgrade $itemName.")
+
+                val nextLevel = curLevel + 1L
+                tx.update(
+                    userRef,
+                    mapOf(
+                        "bpCoins" to (curBp - costBp),
+                        "updatedAt" to FieldValue.serverTimestamp()
+                    )
+                )
+                if (invSnap.exists()) {
+                    tx.update(
+                        invRef,
+                        mapOf(
+                            "level" to nextLevel,
+                            "updatedAt" to FieldValue.serverTimestamp()
+                        )
+                    )
+                } else {
+                    tx.set(
+                        invRef,
+                        mapOf(
+                            "name" to itemName.take(80),
+                            "type" to type,
+                            "targetItemId" to targetItemId,
+                            "rarity" to rarity,
+                            "isEquipped" to true,
+                            "level" to nextLevel,
+                            "createdAt" to FieldValue.serverTimestamp(),
+                            "updatedAt" to FieldValue.serverTimestamp()
+                        )
+                    )
+                }
+                tx.set(
+                    txRef,
+                    mapOf(
+                        "txType" to "WEAPON_UPGRADE",
+                        "itemId" to itemId,
+                        "itemName" to "$itemName Lv.$nextLevel".take(80),
+                        "bpDelta" to -costBp,
+                        "creditsDelta" to 0L,
+                        "status" to "COMPLETED",
+                        "createdAt" to FieldValue.serverTimestamp()
+                    )
+                )
+                nextLevel
+            }.await()
+        }.onFailure { e ->
+            handleFirestoreError(e, OperationType.WRITE, "users/${auth.currentUser?.uid}/inventory/$itemId")
+        }
+    }
+
     suspend fun updateLoadoutSelection(
         characterId: String,
         petId: String,

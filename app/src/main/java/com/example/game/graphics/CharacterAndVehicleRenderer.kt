@@ -64,6 +64,7 @@ class CharacterAndVehicleRenderer(
 
         val preset = CharacterPreset.fromId(player.characterPresetId)
         val isTeammate = player.teamId == userTeamId
+        val isFemale = preset.gender.equals("Female", ignoreCase = true)
         val (armorR, armorG, armorB) = if (player.isUser || isTeammate) preset.armorRgb else Triple(0.46f, 0.14f, 0.14f)
         val (accR, accG, accB) = if (player.isUser || isTeammate) preset.accentRgb else Triple(0.95f, 0.25f, 0.15f)
         val (visR, visG, visB) = if (player.isUser || isTeammate) preset.visorRgb else Triple(1.0f, 0.15f, 0.15f)
@@ -75,9 +76,10 @@ class CharacterAndVehicleRenderer(
             else -> Triple(0.76f, 0.60f, 0.48f)
         }
         val hairRgb = when (preset) {
-            CharacterPreset.NOVA_VALKYRIE -> Triple(0.72f, 0.16f, 0.38f)
-            CharacterPreset.CYBER_VIPER -> Triple(0.12f, 0.58f, 0.72f)
+            CharacterPreset.NOVA_VALKYRIE -> Triple(0.78f, 0.18f, 0.44f)
+            CharacterPreset.CYBER_VIPER -> Triple(0.10f, 0.64f, 0.78f)
             CharacterPreset.FROST_RECON -> Triple(0.86f, 0.88f, 0.92f)
+            CharacterPreset.SERAPH_ECHO -> Triple(0.92f, 0.76f, 0.28f)
             else -> Triple(0.12f, 0.10f, 0.10f)
         }
 
@@ -179,12 +181,14 @@ class CharacterAndVehicleRenderer(
         }
         Matrix.rotateM(modelMatrix, 0, torsoLean, 0f, 0f, -1f)
 
-        // Anatomical Waist/Chest Torso (jacket/combat shirt)
+        // Anatomical Waist/Chest Torso (slim-tailored silhouette for Female operatives)
+        val torsoWidthScale = if (isFemale) 0.48f else 0.56f
+        val torsoDepthScale = if (isFemale) 0.31f else 0.34f
         drawLocalMesh(
             meshes.chestTorso, MaterialId.TACTICAL_FABRIC,
             tx = 0f, ty = 0.36f, tz = 0f,
             rx = 0f, ry = 0f, rz = 0f,
-            sx = 0.34f, sy = 0.62f, sz = 0.56f,
+            sx = torsoDepthScale, sy = 0.62f, sz = torsoWidthScale,
             r = armorR, g = armorG, b = armorB,
             roughness = 0.68f, metallic = 0.12f
         )
@@ -331,51 +335,77 @@ class CharacterAndVehicleRenderer(
         renderArm(+0.27f, leftArmRaise, 28f, armorR, armorG, armorB, skinTone)
         renderArm(-0.27f, rightArmRaise, 22f, armorR, armorG, armorB, skinTone)
 
-        // Equipped Held Weapon + Muzzle Flash
-        if (player.activeWeapon != null && !isDriving && !isSwimming && !isSkydiving && !isEmoting) {
+        // Equipped Held Weapon (distinct silhouette + skin accent per WeaponCategory) + Muzzle Flash
+        val heldWeapon = player.activeWeapon
+        if (heldWeapon != null && !isDriving && !isSwimming && !isSkydiving && !isEmoting) {
             pushMatrix(modelMatrix)
             Matrix.translateM(modelMatrix, 0, 0.32f, 0.44f, 0.18f)
+            val weaponLenScale = when (heldWeapon.category) {
+                com.example.game.model.WeaponCategory.SNIPER_RIFLE -> 1.48f
+                com.example.game.model.WeaponCategory.SHOTGUN -> 1.12f
+                com.example.game.model.WeaponCategory.SMG -> 0.78f
+                com.example.game.model.WeaponCategory.PISTOL -> 0.42f
+                else -> 1.0f
+            }
+            val (skinR, skinG, skinB) = resolveWeaponSkinColor(heldWeapon.skinName, accR, accG, accB)
+
             // Receiver
             drawLocalMesh(
                 meshes.bevelPack, MaterialId.CORRUGATED_METAL,
-                tx = 0.12f, ty = 0f, tz = 0f,
+                tx = 0.12f * weaponLenScale, ty = 0f, tz = 0f,
                 rx = 0f, ry = 0f, rz = 0f,
-                sx = 0.52f, sy = 0.14f, sz = 0.10f,
+                sx = 0.48f * weaponLenScale.coerceAtLeast(0.55f), sy = 0.14f, sz = 0.10f,
                 r = 0.16f, g = 0.18f, b = 0.22f,
-                roughness = 0.32f, metallic = 0.82f
+                roughness = 0.30f, metallic = 0.84f
             )
             // Cylindrical Fluted Barrel
             drawLocalMesh(
                 meshes.rifleBarrel, MaterialId.CORRUGATED_METAL,
-                tx = 0.52f, ty = 0.02f, tz = 0f,
+                tx = 0.48f * weaponLenScale, ty = 0.02f, tz = 0f,
                 rx = 0f, ry = 0f, rz = 0f,
-                sx = 0.48f, sy = 0.055f, sz = 0.055f,
+                sx = 0.46f * weaponLenScale, sy = 0.055f, sz = 0.055f,
                 r = 0.22f, g = 0.24f, b = 0.28f,
-                roughness = 0.22f, metallic = 0.90f
+                roughness = 0.20f, metallic = 0.92f
             )
-            // Accent Skin Rail + Magazine + Optic Scope
+            // Skin Accent Shroud Rail + Magazine
             drawLocalMesh(
                 meshes.unitBox, MaterialId.VEHICLE_COAT,
-                tx = 0.18f, ty = 0.075f, tz = 0f,
+                tx = 0.18f * weaponLenScale, ty = 0.075f, tz = 0f,
                 rx = 0f, ry = 0f, rz = 0f,
-                sx = 0.38f, sy = 0.035f, sz = 0.075f,
-                r = accR, g = accG, b = accB,
-                roughness = 0.20f, metallic = 0.7f, emissive = 0.65f
+                sx = 0.38f * weaponLenScale.coerceAtLeast(0.55f), sy = 0.038f, sz = 0.08f,
+                r = skinR, g = skinG, b = skinB,
+                roughness = 0.18f, metallic = 0.74f, emissive = 0.68f
             )
             drawLocalMesh(
                 meshes.unitBox, MaterialId.CORRUGATED_METAL,
-                tx = 0.16f, ty = -0.11f, tz = 0f,
+                tx = 0.14f, ty = -0.11f, tz = 0f,
                 rx = 0f, ry = 0f, rz = -12f,
-                sx = 0.09f, sy = 0.20f, sz = 0.06f,
-                r = 0.14f, g = 0.15f, b = 0.18f,
-                roughness = 0.4f, metallic = 0.7f
+                sx = if (heldWeapon.category == com.example.game.model.WeaponCategory.SHOTGUN) 0.14f else 0.09f,
+                sy = if (heldWeapon.category == com.example.game.model.WeaponCategory.PISTOL) 0.14f else 0.21f,
+                sz = 0.06f,
+                r = skinR * 0.65f, g = skinG * 0.65f, b = skinB * 0.65f,
+                roughness = 0.38f, metallic = 0.72f
             )
+            // Top Optic Scope cylinder for Rifles / Snipers
+            if (heldWeapon.category == com.example.game.model.WeaponCategory.SNIPER_RIFLE ||
+                heldWeapon.equippedScope != com.example.game.model.ScopeType.IRON_SIGHT
+            ) {
+                drawLocalMesh(
+                    meshes.rifleBarrel, MaterialId.CORRUGATED_METAL,
+                    tx = 0.14f, ty = 0.13f, tz = 0f,
+                    rx = 0f, ry = 0f, rz = 0f,
+                    sx = if (heldWeapon.category == com.example.game.model.WeaponCategory.SNIPER_RIFLE) 0.34f else 0.18f,
+                    sy = 0.06f, sz = 0.06f,
+                    r = 0.10f, g = 0.12f, b = 0.16f,
+                    roughness = 0.15f, metallic = 0.90f
+                )
+            }
 
             // Muzzle Flash Star Burst
             if (System.currentTimeMillis() - player.lastFireTimestampMs < 90L) {
                 drawLocalMesh(
                     meshes.boulderRock, MaterialId.SKIN_DETAIL,
-                    tx = 0.84f, ty = 0.02f, tz = 0f,
+                    tx = 0.78f * weaponLenScale + 0.08f, ty = 0.02f, tz = 0f,
                     rx = frameTimeSec * 400f, ry = 0f, rz = 0f,
                     sx = 0.42f, sy = 0.28f, sz = 0.28f,
                     r = 1.0f, g = 0.78f, b = 0.15f,
@@ -699,5 +729,22 @@ class CharacterAndVehicleRenderer(
         GLES20.glUniform2f(shader.uUvScale, 1f, 1f)
         GLES20.glUniform2f(shader.uUvOffset, 0f, 0f)
         GLES20.glDrawArrays(GLES20.GL_TRIANGLES, 0, mesh.vertexCount)
+    }
+
+    private fun resolveWeaponSkinColor(
+        skinName: String,
+        fallbackR: Float,
+        fallbackG: Float,
+        fallbackB: Float
+    ): Triple<Float, Float, Float> {
+        val lower = skinName.lowercase()
+        return when {
+            lower.contains("glacier") || lower.contains("arctic") || lower.contains("frost") -> Triple(0.15f, 0.86f, 1.0f)
+            lower.contains("dragon") || lower.contains("crimson") || lower.contains("inferno") -> Triple(1.0f, 0.22f, 0.14f)
+            lower.contains("gold") || lower.contains("royal") || lower.contains("solar") -> Triple(1.0f, 0.82f, 0.18f)
+            lower.contains("neon") || lower.contains("cyber") -> Triple(0.05f, 0.92f, 0.85f)
+            lower.contains("cobalt") -> Triple(0.24f, 0.54f, 1.0f)
+            else -> Triple(fallbackR, fallbackG, fallbackB)
+        }
     }
 }

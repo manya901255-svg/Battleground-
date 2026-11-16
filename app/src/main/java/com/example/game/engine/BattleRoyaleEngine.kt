@@ -143,6 +143,9 @@ class BattleRoyaleEngine(
     val petVisible: Boolean = true,
     @Volatile var cameraSensitivity: Float = 1.0f,
     @Volatile var adsSensitivity: Float = 0.85f,
+    val equippedPrimaryWeaponId: String = "m416",
+    val weaponSkinMap: Map<String, String> = emptyMap(),
+    val weaponUpgradeMap: Map<String, Int> = emptyMap(),
     private val onMatchFinished: (placement: Int, kills: Int, damage: Float, durationSec: Int) -> Unit
 ) {
     private val scope = CoroutineScope(Dispatchers.Default)
@@ -267,18 +270,29 @@ class BattleRoyaleEngine(
             gameMode == GameModeType.TEAM_DEATHMATCH ||
             gameMode == GameModeType.OFFLINE_PRACTICE
 
-        // Give starter weapons in instant-action modes and a tactical rifle + sidearm in Classic BR for immediate engagement
+        fun buildConfiguredWeapon(id: String): com.example.game.model.Weapon {
+            val cleanId = id.lowercase()
+            return WeaponCatalog.createById(
+                id = cleanId,
+                skin = weaponSkinMap[cleanId],
+                upgradeLevel = weaponUpgradeMap[cleanId] ?: 1
+            )
+        }
+
+        // Apply player's equipped weapon + unlocked skins/upgrades in combat (preserving sniper training rule)
+        val chosenId = equippedPrimaryWeaponId.lowercase()
         val startPrimary1 = when (gameMode) {
-            GameModeType.SNIPER_TRAINING -> WeaponCatalog.createKar98k()
-            else -> WeaponCatalog.createM416()
+            GameModeType.SNIPER_TRAINING -> buildConfiguredWeapon(if (chosenId == "awm") "awm" else "kar98k")
+            else -> if (chosenId == "deagle") buildConfiguredWeapon("m416") else buildConfiguredWeapon(chosenId)
         }
         val startPrimary2 = when (gameMode) {
-            GameModeType.TRAINING_GROUND, GameModeType.SNIPER_TRAINING -> WeaponCatalog.createAWM()
-            GameModeType.OFFLINE_PRACTICE, GameModeType.TEAM_DEATHMATCH -> WeaponCatalog.createUMP45()
+            GameModeType.TRAINING_GROUND, GameModeType.SNIPER_TRAINING -> buildConfiguredWeapon("awm")
+            GameModeType.OFFLINE_PRACTICE, GameModeType.TEAM_DEATHMATCH -> buildConfiguredWeapon("ump45")
             else -> null
         }
 
         val petMaxShieldBonus = if (activePetId == PetPreset.FROST_OWL.id) 15f else 0f
+        val charShieldBonus = if (characterPresetId == "blaze_striker") 10f else 0f
         userPlayer = Player(
             id = "user_player_0",
             name = "VortexGhost",
@@ -290,11 +304,14 @@ class BattleRoyaleEngine(
             backpackLevel = 2,
             armorLevel = if (isInstantCombat) 2 else 1,
             helmetLevel = if (isInstantCombat) 2 else 1,
-            shield = 100f + petMaxShieldBonus,
-            maxShield = 100f + petMaxShieldBonus,
+            shield = 100f + petMaxShieldBonus + charShieldBonus,
+            maxShield = 100f + petMaxShieldBonus + charShieldBonus,
             characterPresetId = characterPresetId,
             primaryWeapon1 = startPrimary1,
-            primaryWeapon2 = startPrimary2
+            primaryWeapon2 = startPrimary2,
+            pistol = buildConfiguredWeapon("deagle"),
+            melee = buildConfiguredWeapon("pan"),
+            activeSlot = if (chosenId == "deagle" && gameMode != GameModeType.SNIPER_TRAINING) 3 else 1
         )
         userPlayer.ammoInventory[AmmoType.AMMO_556] = 150
         userPlayer.ammoInventory[AmmoType.AMMO_45ACP] = 120
@@ -397,7 +414,7 @@ class BattleRoyaleEngine(
             weatherType = weatherType,
             userAssists = userPlayer.assists,
             backpackUsedUnits = computeBackpackWeight(),
-            backpackMaxUnits = userPlayer.backpackLevel * 90 + 60,
+            backpackMaxUnits = userPlayer.backpackLevel * 90 + 60 + (if (characterPresetId == "apex_titan") 45 else 0),
             playersSnapshot = players.toList(),
             groundLootSnapshot = groundLoot.toList(),
             vehiclesSnapshot = vehicles.toList(),
@@ -896,7 +913,7 @@ class BattleRoyaleEngine(
             trainingDummyDamage = trainingDummyDamage,
             latencyMs = 22 + ((duration % 5)),
             backpackUsedUnits = computeBackpackWeight(),
-            backpackMaxUnits = userPlayer.backpackLevel * 90 + 60,
+            backpackMaxUnits = userPlayer.backpackLevel * 90 + 60 + (if (characterPresetId == "apex_titan") 45 else 0),
             playersSnapshot = players.toList(),
             groundLootSnapshot = groundLoot.toList(),
             vehiclesSnapshot = vehicles.toList(),
@@ -1066,7 +1083,7 @@ class BattleRoyaleEngine(
         if (isFiringInput && !userPlayer.isReloading) {
             val weapon = userPlayer.activeWeapon
             val now = System.currentTimeMillis()
-            if (weapon != null && (now - lastUserFireTimeMs) >= weapon.fireRateMs) {
+            if (weapon != null && (now - lastUserFireTimeMs) >= weapon.effectiveFireRateMs) {
                 lastUserFireTimeMs = now
                 userPlayer.angle = targetAimYaw
                 fireWeapon(userPlayer, targetAimYaw)
@@ -1192,7 +1209,8 @@ class BattleRoyaleEngine(
             PlayerStance.CROUCH -> 0.72f
             else -> 1.0f
         }
-        val spread = (Random.nextFloat() - 0.5f) * weapon.effectiveRecoil * stanceSpreadMul *
+        val charRecoilMul = if (shooter.isUser && shooter.characterPresetId == "vortex_ghost") 0.90f else 1.0f
+        val spread = (Random.nextFloat() - 0.5f) * weapon.effectiveRecoil * stanceSpreadMul * charRecoilMul *
             (if (isAimingDownSights && shooter.isUser) 4.0f else 9.5f)
         val finalAngle = aimAngle + spread
         val rad = Math.toRadians(finalAngle.toDouble())
@@ -1206,7 +1224,7 @@ class BattleRoyaleEngine(
                 y = shooter.y + (sin(rad) * 22f).toFloat(),
                 vx = vx,
                 vy = vy,
-                damage = weapon.baseDamage,
+                damage = weapon.effectiveDamage,
                 maxDistance = 1350f,
                 isSniper = weapon.category == com.example.game.model.WeaponCategory.SNIPER_RIFLE
             )
@@ -1372,7 +1390,12 @@ class BattleRoyaleEngine(
 
     private fun applyBulletDamage(bullet: BulletProjectile, victim: Player) {
         val isHeadshot = Random.nextFloat() < 0.28f
-        val headMultiplier = if (isHeadshot) 2.25f else 1.0f
+        val shooterObj = players.find { it.id == bullet.shooterId }
+        val headMultiplier = when {
+            !isHeadshot -> 1.0f
+            shooterObj?.characterPresetId == "frost_recon" -> 2.52f
+            else -> 2.25f
+        }
 
         val armorReduction = when (victim.armorLevel) {
             1 -> 0.25f
@@ -1457,6 +1480,9 @@ class BattleRoyaleEngine(
             matchCoins += 150
             val petEpBonus = if (activePetId == PetPreset.DRACO_FLAME.id) 15f else 0f
             killer.ep = (killer.ep + 25f + petEpBonus).coerceAtMost(killer.maxEp)
+            if (killer.characterPresetId == "nova_valkyrie") {
+                killer.health = (killer.health + 15f).coerceAtMost(killer.maxHealth)
+            }
             val k = killer.kills
             activeTakedownText = when {
                 k >= 5 -> "UNSTOPPABLE! ($k KILLS)"
@@ -1582,7 +1608,8 @@ class BattleRoyaleEngine(
 
             player.isReloading = true
             val petReloadMul = if (player.isUser && activePetId == PetPreset.VORTEX_ROBO.id) 1.15f else 1.0f
-            val reloadDur = 1.65f / (weapon.equippedMag.reloadSpeedMultiplier * petReloadMul)
+            val charReloadMul = if (player.isUser && player.characterPresetId == "seraph_echo") 1.12f else 1.0f
+            val reloadDur = 1.65f / (weapon.equippedMag.reloadSpeedMultiplier * petReloadMul * charReloadMul)
             player.reloadTimerSec = reloadDur
             if (player.isUser) {
                 reloadTotalSec = reloadDur

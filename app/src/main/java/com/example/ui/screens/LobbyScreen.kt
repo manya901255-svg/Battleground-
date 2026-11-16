@@ -113,6 +113,11 @@ fun LobbyScreen(
     onNavigateToSocialTab: (Int) -> Unit = { onNavigateToSocial() },
     onNavigateToCustomizationTab: (Int) -> Unit = { onNavigateToCustomization() },
     onNavigateToShopTab: (Int) -> Unit = { onNavigateToShop() },
+    onNavigateToCharacters: () -> Unit = { onNavigateToCustomizationTab(0) },
+    onNavigateToWeapons: () -> Unit = { onNavigateToCustomizationTab(2) },
+    onNavigateToInventory: () -> Unit = { onNavigateToCustomizationTab(3) },
+    equippedWeaponId: String = profile.equippedWeaponId,
+    equippedWeaponSkin: String = "Tactical Slate",
     onNavigateToSettings: () -> Unit,
     onNavigateToAdmin: () -> Unit,
     onPlayEmote: () -> Unit = {}
@@ -217,6 +222,8 @@ fun LobbyScreen(
             characterPresetId = profile.selectedCharacterId,
             petPresetId = profile.selectedPetId,
             petVisible = profile.petVisible,
+            equippedWeaponId = equippedWeaponId,
+            equippedWeaponSkin = equippedWeaponSkin,
             soldierYawOffset = soldierYaw,
             emoteTriggerTick = emoteTriggerTick,
             wallpaperTheme = currentTheme,
@@ -304,13 +311,13 @@ fun LobbyScreen(
                     .clip(RoundedCornerShape(12.dp))
                     .background(Color(0xBF0B111E))
                     .border(1.dp, currentTheme.accentColor.copy(alpha = 0.55f), RoundedCornerShape(12.dp))
-                    .clickable { onNavigateToCustomizationTab(0) }
+                    .clickable { onNavigateToCharacters() }
                     .padding(horizontal = 10.dp, vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(activeCharacter.displayName.uppercase(), color = TextPrimary, fontSize = 9.sp, fontWeight = FontWeight.Black)
                 Spacer(modifier = Modifier.width(6.dp))
-                Text("• ${activeCharacter.activeSkillName}", color = currentTheme.accentColor, fontSize = 8.sp, fontWeight = FontWeight.Bold)
+                Text("• ${equippedWeaponId.uppercase()} • ${activeCharacter.activeSkillName}", color = currentTheme.accentColor, fontSize = 8.sp, fontWeight = FontWeight.Bold)
             }
 
             if (profile.petVisible) {
@@ -392,12 +399,12 @@ fun LobbyScreen(
             selectedEmote = selectedEmote,
             isMatchmaking = isMatchmaking,
             startPulse = startButtonPulse,
-            onOpenCharacter = { onNavigateToCustomizationTab(0) },
-            onOpenInventory = { onNavigateToCustomizationTab(3) },
-            onOpenWeapons = { onNavigateToCustomizationTab(2) },
+            onOpenCharacter = onNavigateToCharacters,
+            onOpenInventory = onNavigateToInventory,
+            onOpenWeapons = onNavigateToWeapons,
             onOpenStore = { onNavigateToShopTab(0) },
             onOpenPets = { onNavigateToCustomizationTab(1) },
-            onOpenCustomization = { onNavigateToCustomizationTab(4) },
+            onOpenCustomization = { onNavigateToCustomizationTab(3) },
             onCycleWeather = {
                 val entries = WeatherType.entries
                 onSelectWeather(entries[(selectedWeather.ordinal + 1) % entries.size])

@@ -9,6 +9,7 @@ class GameRepository(private val dao: VortexDao) {
     val userProfile: Flow<UserProfileEntity?> = dao.getUserProfile()
     val matchHistory: Flow<List<MatchHistoryEntity>> = dao.getMatchHistory()
     val inventory: Flow<List<InventoryItemEntity>> = dao.getOwnedInventory()
+    val allInventory: Flow<List<InventoryItemEntity>> = dao.getAllInventoryItemsFlow()
     val battlePassTiers: Flow<List<BattlePassTierEntity>> = dao.getBattlePassTiers()
     val settings: Flow<GameSettingsEntity?> = dao.getSettings()
     val missions: Flow<List<MissionEntity>> = dao.getMissions()
@@ -18,23 +19,13 @@ class GameRepository(private val dao: VortexDao) {
             dao.insertOrUpdateProfile(UserProfileEntity())
         }
 
-        val items = dao.getAllInventoryItems()
-        if (items.isEmpty()) {
-            val starterItems = listOf(
-                InventoryItemEntity("skin_m416_slate", "M416 - Tactical Slate", "WEAPON_SKIN", "m416", "COMMON", isEquipped = true, isOwned = true),
-                InventoryItemEntity("skin_m416_glacier", "M416 - Glacier Frost", "WEAPON_SKIN", "m416", "MYTHIC", isEquipped = false, isOwned = false, priceCredits = 1200),
-                InventoryItemEntity("skin_akm_dragon", "AKM - Dragonfire Inferno", "WEAPON_SKIN", "akm", "LEGENDARY", isEquipped = true, isOwned = true),
-                InventoryItemEntity("skin_awm_cyber", "AWM - Cyber Gold", "WEAPON_SKIN", "awm", "MYTHIC", isEquipped = true, isOwned = true),
-                InventoryItemEntity("skin_pan_gold", "Crowbar Pan - Golden Winner", "WEAPON_SKIN", "pan", "EPIC", isEquipped = true, isOwned = true),
-                InventoryItemEntity("outfit_operative", "Stealth Operative Suit", "OUTFIT", "player", "RARE", isEquipped = true, isOwned = true),
-                InventoryItemEntity("outfit_cyber_assassin", "Cyber Assassin Cyberwear", "OUTFIT", "player", "LEGENDARY", isEquipped = false, isOwned = false, priceCredits = 850),
-                InventoryItemEntity("outfit_ghillie", "Full Arctic Ghillie Suit", "OUTFIT", "player", "EPIC", isEquipped = false, isOwned = true),
-                InventoryItemEntity("helmet_cyber_vis", "Cybernetic Visor Helmet L3", "HELMET", "helmet", "LEGENDARY", isEquipped = true, isOwned = true),
-                InventoryItemEntity("backpack_tactical", "Spectre Military Pack L3", "BACKPACK", "backpack", "RARE", isEquipped = true, isOwned = true),
-                InventoryItemEntity("para_flame", "Inferno Streak Parachute", "PARACHUTE", "parachute", "EPIC", isEquipped = true, isOwned = true),
-                InventoryItemEntity("vehicle_uaz_camo", "UAZ - Desert Camo Armor", "VEHICLE", "uaz", "RARE", isEquipped = true, isOwned = true)
-            )
-            dao.insertInventoryItems(starterItems)
+        val existingItems = dao.getAllInventoryItems()
+        val existingIds = existingItems.map { it.id }.toSet()
+        val missingCatalogItems = StoreCatalog.allCatalogItems
+            .filter { it.id !in existingIds }
+            .map { it.toEntity() }
+        if (missingCatalogItems.isNotEmpty()) {
+            dao.insertInventoryItems(missingCatalogItems)
         }
 
         val tiers = dao.getBattlePassTiers().firstOrNull()
@@ -203,8 +194,27 @@ class GameRepository(private val dao: VortexDao) {
     }
 
     suspend fun equipItem(item: InventoryItemEntity) {
-        dao.unequipAllOfType(item.type)
+        if (!item.isOwned) return
+        if (item.type == "WEAPON_SKIN") {
+            dao.unequipAllOfTypeAndTarget(item.type, item.targetItemId)
+        } else {
+            dao.unequipAllOfType(item.type)
+        }
         dao.updateInventoryItem(item.copy(isEquipped = true))
+
+        val profile = dao.getUserProfileOnce()
+        if (profile != null) {
+            when (item.type) {
+                "CHARACTER" -> dao.insertOrUpdateProfile(profile.copy(selectedCharacterId = item.targetItemId))
+                "PET" -> dao.insertOrUpdateProfile(profile.copy(selectedPetId = item.targetItemId))
+                "GUN" -> dao.insertOrUpdateProfile(profile.copy(equippedWeaponId = item.targetItemId))
+            }
+        }
+    }
+
+    suspend fun unequipItem(item: InventoryItemEntity) {
+        if (!item.isOwned || !item.isEquipped) return
+        dao.updateInventoryItem(item.copy(isEquipped = false))
     }
 
     suspend fun purchaseShopItem(item: InventoryItemEntity, useCredits: Boolean): Boolean {
@@ -226,6 +236,32 @@ class GameRepository(private val dao: VortexDao) {
             }
         }
         return false
+    }
+
+    suspend fun syncCloudUnlockedItem(item: InventoryItemEntity) {
+        dao.insertInventoryItems(listOf(item.copy(isOwned = true)))
+    }
+
+    suspend fun upgradeInventoryItemLocal(itemId: String): Boolean {
+        val current = dao.getInventoryItemById(itemId) ?: return false
+        if (!current.isOwned || current.upgradeLevel >= 5) return false
+        val costBp = StoreCatalog.upgradeCostBp(current.upgradeLevel)
+        val profile = dao.getUserProfileOnce() ?: return false
+        if (profile.bpCoins < costBp) return false
+
+        dao.insertOrUpdateProfile(profile.copy(bpCoins = profile.bpCoins - costBp))
+        dao.updateInventoryItem(current.copy(upgradeLevel = (current.upgradeLevel + 1).coerceAtMost(5)))
+        return true
+    }
+
+    suspend fun updateEquippedWeapon(weaponId: String) {
+        val profile = dao.getUserProfileOnce() ?: UserProfileEntity()
+        dao.insertOrUpdateProfile(profile.copy(equippedWeaponId = weaponId))
+        val gunItem = dao.getInventoryItemById("gun_${weaponId.lowercase()}")
+        if (gunItem != null && gunItem.isOwned) {
+            dao.unequipAllOfType("GUN")
+            dao.updateInventoryItem(gunItem.copy(isEquipped = true))
+        }
     }
 
     suspend fun claimAllEligibleMissions(): Int {

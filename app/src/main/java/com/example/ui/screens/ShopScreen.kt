@@ -1,8 +1,10 @@
 package com.example.ui.screens
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,6 +21,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
@@ -55,14 +58,23 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import com.example.data.CatalogItemSpec
 import com.example.data.GameRepository
-import com.example.data.InventoryItemEntity
+import com.example.data.StoreCatalog
+import com.example.data.StoreCategory
 import com.example.data.cloud.CloudGameRepository
 import com.example.data.cloud.CloudTransaction
 import com.example.data.cloud.CloudUserProfile
+import com.example.game.model.MagType
+import com.example.game.model.MuzzleType
+import com.example.game.model.ScopeType
+import com.example.game.model.WeaponCatalog
+import com.example.ui.components.Character3DShowcaseView
+import com.example.ui.components.Weapon3DShowcaseView
 import com.example.ui.theme.CyberOrange
 import com.example.ui.theme.ElectricBlueSafe
 import com.example.ui.theme.HazardYellow
@@ -70,6 +82,7 @@ import com.example.ui.theme.HealthGreen
 import com.example.ui.theme.RarityEpic
 import com.example.ui.theme.RarityLegendary
 import com.example.ui.theme.RarityMythic
+import com.example.ui.theme.RedZoneBombardment
 import com.example.ui.theme.TacticalDarkBg
 import com.example.ui.theme.TacticalSurface
 import com.example.ui.theme.TacticalSurfaceVariant
@@ -84,6 +97,7 @@ fun ShopScreen(
     cloudTransactions: List<CloudTransaction> = emptyList(),
     cloudProfile: CloudUserProfile? = null,
     initialTab: Int = 0,
+    initialCategory: StoreCategory? = null,
     onBack: () -> Unit
 ) {
     BackHandler { onBack() }
@@ -94,33 +108,29 @@ fun ShopScreen(
     val scope = rememberCoroutineScope()
 
     var selectedTab by remember(initialTab) { mutableIntStateOf(initialTab.coerceIn(0, 1)) }
-    var previewItem by remember { mutableStateOf<InventoryItemEntity?>(null) }
+    var selectedCategory by remember(initialCategory) {
+        mutableStateOf(initialCategory ?: StoreCategory.CHARACTER_STORE)
+    }
+    var previewSpec by remember { mutableStateOf<CatalogItemSpec?>(null) }
     var shopBannerMsg by remember { mutableStateOf<String?>(null) }
     var isProcessing by remember { mutableStateOf(false) }
 
     val displayBp = cloudProfile?.bpCoins ?: profile?.bpCoins?.toLong() ?: 0L
     val displayVc = cloudProfile?.vortexCredits ?: profile?.vortexCredits?.toLong() ?: 0L
 
-    val directBundles = remember {
-        listOf(
-            InventoryItemEntity("skin_m416_glacier", "M416 - Glacier Frost", "WEAPON_SKIN", "m416", "MYTHIC", priceCredits = 1200),
-            InventoryItemEntity("outfit_cyber_assassin", "Cyber Assassin Cyberwear", "OUTFIT", "player", "LEGENDARY", priceCredits = 850),
-            InventoryItemEntity("para_matrix", "Matrix Neon Parachute", "PARACHUTE", "parachute", "EPIC", priceBp = 6500),
-            InventoryItemEntity("vehicle_buggy_neon", "Offroad Buggy - Neon Beast", "VEHICLE", "buggy", "LEGENDARY", priceCredits = 950),
-            InventoryItemEntity("skin_pan_gold", "Golden Pan Supreme", "WEAPON_SKIN", "pan", "EPIC", priceBp = 8000),
-            InventoryItemEntity("outfit_desert_spec", "Desert Spec-Ops Camo", "OUTFIT", "player", "RARE", priceBp = 4500),
-            InventoryItemEntity("skin_awm_nova", "AWM - Solar Flare Direct Pack", "WEAPON_SKIN", "awm", "LEGENDARY", priceBp = 9200),
-            InventoryItemEntity("helmet_titan_gold", "Titan Command Visor L3", "HELMET", "helmet", "EPIC", priceBp = 5400)
-        )
+    val categoryItems = remember(selectedCategory) {
+        StoreCatalog.byCategory(selectedCategory)
     }
 
-    fun executeDirectPurchase(item: InventoryItemEntity) {
+    fun executeDirectPurchase(spec: CatalogItemSpec) {
         if (isProcessing) return
-        if (ownedIds.contains(item.id)) {
-            shopBannerMsg = "${item.name} is already in your armory."
+        if (ownedIds.contains(spec.id)) {
+            shopBannerMsg = "${spec.name} is already owned."
             return
         }
-        val useCredits = item.priceCredits > 0
+        val item = spec.toEntity()
+        val useCredits = spec.priceCredits > 0
+
         scope.launch {
             isProcessing = true
             val cloudResult = if (cloudRepository != null && cloudProfile != null) {
@@ -137,19 +147,19 @@ fun ShopScreen(
 
             if (cloudResult != null) {
                 cloudResult.onSuccess { msg ->
-                    repository.purchaseShopItem(item, useCredits = useCredits)
+                    repository.syncCloudUnlockedItem(item)
                     shopBannerMsg = msg
-                    previewItem = null
+                    previewSpec = null
                 }.onFailure { err ->
-                    shopBannerMsg = err.message ?: "Purchase failed."
+                    shopBannerMsg = err.message ?: "Purchase validation failed."
                 }
             } else {
                 val ok = repository.purchaseShopItem(item, useCredits = useCredits)
                 shopBannerMsg = if (ok) {
-                    previewItem = null
+                    previewSpec = null
                     "Purchased ${item.name}!"
                 } else {
-                    "Insufficient funds for ${item.name}"
+                    "Insufficient balance for ${item.name}."
                 }
             }
             isProcessing = false
@@ -161,7 +171,7 @@ fun ShopScreen(
             .fillMaxSize()
             .background(TacticalDarkBg)
             .windowInsetsPadding(WindowInsets.safeDrawing)
-            .padding(16.dp)
+            .padding(horizontal = 14.dp, vertical = 10.dp)
             .testTag("shop_screen")
     ) {
         // Top Header
@@ -174,25 +184,46 @@ fun ShopScreen(
                 IconButton(onClick = onBack, modifier = Modifier.testTag("shop_back_button")) {
                     Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Color.White)
                 }
-                Spacer(modifier = Modifier.width(8.dp))
+                Spacer(modifier = Modifier.width(6.dp))
                 Column {
-                    Text("DIRECT ARMORY STORE", color = CyberOrange, fontWeight = FontWeight.Black, fontSize = 16.sp)
-                    Text("FIXED-PRICE BUNDLES & SERVER TRANSACTION LEDGER", color = TextSecondary, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    Text("WARX ADVANCED ARMORY STORE", color = CyberOrange, fontWeight = FontWeight.Black, fontSize = 15.sp)
+                    Text("11 CATEGORIES • BACKEND-VALIDATED DIRECT UNLOCKS", color = TextSecondary, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                 }
             }
 
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                if (shopBannerMsg != null) {
-                    Text(shopBannerMsg!!, color = HealthGreen, fontWeight = FontWeight.Bold, fontSize = 11.sp)
-                    Spacer(modifier = Modifier.width(12.dp))
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                shopBannerMsg?.let { msg ->
+                    Text(
+                        text = msg,
+                        color = if (msg.contains("Insufficient") || msg.contains("failed", true)) RedZoneBombardment else HealthGreen,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 11.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
                 }
-                Text("BP: $displayBp", color = HazardYellow, fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                Spacer(modifier = Modifier.width(12.dp))
-                Text("VC: $displayVc", color = ElectricBlueSafe, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(TacticalSurface)
+                        .border(1.dp, HazardYellow.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
+                        .padding(horizontal = 9.dp, vertical = 4.dp)
+                ) {
+                    Text("BP: $displayBp", color = HazardYellow, fontWeight = FontWeight.Black, fontSize = 11.sp)
+                }
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(TacticalSurface)
+                        .border(1.dp, ElectricBlueSafe.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
+                        .padding(horizontal = 9.dp, vertical = 4.dp)
+                ) {
+                    Text("VC: $displayVc", color = ElectricBlueSafe, fontWeight = FontWeight.Black, fontSize = 11.sp)
+                }
             }
         }
 
-        Spacer(modifier = Modifier.height(10.dp))
+        Spacer(modifier = Modifier.height(6.dp))
 
         TabRow(
             selectedTabIndex = selectedTab,
@@ -203,83 +234,137 @@ fun ShopScreen(
                 selected = selectedTab == 0,
                 onClick = { selectedTab = 0 },
                 modifier = Modifier.testTag("shop_tab_bundles"),
-                text = { Text("DIRECT BUNDLES & COSMETICS", fontWeight = FontWeight.Bold) }
+                text = { Text("STORE CATALOG (11 CATEGORIES)", fontWeight = FontWeight.Bold, fontSize = 11.sp) }
             )
             Tab(
                 selected = selectedTab == 1,
                 onClick = { selectedTab = 1 },
                 modifier = Modifier.testTag("shop_tab_history"),
-                text = { Text("TRANSACTION HISTORY (${cloudTransactions.size})", fontWeight = FontWeight.Bold) }
+                text = { Text("TRANSACTION HISTORY (${cloudTransactions.size})", fontWeight = FontWeight.Bold, fontSize = 11.sp) }
             )
         }
 
-        Spacer(modifier = Modifier.height(12.dp))
+        Spacer(modifier = Modifier.height(8.dp))
 
         if (selectedTab == 0) {
+            // 11 Store Categories Strip
+            LazyRow(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                items(StoreCategory.entries, key = { it.name }) { cat ->
+                    val isSelected = selectedCategory == cat
+                    val accent = if (isSelected) Color.Black else TextPrimary
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(if (isSelected) CyberOrange else TacticalSurface)
+                            .border(
+                                1.dp,
+                                if (isSelected) HazardYellow else Color.White.copy(alpha = 0.12f),
+                                RoundedCornerShape(8.dp)
+                            )
+                            .clickable { selectedCategory = cat }
+                            .padding(horizontal = 10.dp, vertical = 6.dp)
+                            .testTag("store_cat_${cat.name.lowercase()}")
+                    ) {
+                        Text(cat.title.uppercase(), color = accent, fontSize = 9.sp, fontWeight = FontWeight.Black)
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
             LazyVerticalGrid(
-                columns = GridCells.Fixed(2),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
+                columns = GridCells.Fixed(3),
+                horizontalArrangement = Arrangement.spacedBy(9.dp),
+                verticalArrangement = Arrangement.spacedBy(9.dp),
                 modifier = Modifier.fillMaxSize()
             ) {
-                items(directBundles, key = { it.id }) { item ->
-                    val isOwned = ownedIds.contains(item.id)
-                    val rarityColor = when (item.rarity) {
+                items(categoryItems, key = { it.id }) { spec ->
+                    val isOwned = ownedIds.contains(spec.id) || spec.starterOwned
+                    val rarityColor = when (spec.rarity) {
                         "MYTHIC" -> RarityMythic
                         "LEGENDARY" -> RarityLegendary
                         "EPIC" -> RarityEpic
-                        else -> ElectricBlueSafe
+                        "RARE" -> ElectricBlueSafe
+                        else -> TextSecondary
                     }
+                    val accentColor = Color(spec.accentHex)
+
                     Card(
-                        modifier = Modifier.fillMaxWidth().testTag("shop_item_${item.id}"),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("shop_item_${spec.id}"),
                         shape = RoundedCornerShape(12.dp),
                         colors = CardDefaults.cardColors(containerColor = TacticalSurface),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, rarityColor.copy(alpha = 0.4f))
+                        border = BorderStroke(1.2.dp, rarityColor.copy(alpha = 0.48f))
                     ) {
-                        Column(modifier = Modifier.padding(12.dp)) {
+                        Column(
+                            modifier = Modifier.padding(10.dp),
+                            verticalArrangement = Arrangement.spacedBy(5.dp)
+                        ) {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text(item.rarity, color = rarityColor, fontSize = 9.sp, fontWeight = FontWeight.Black)
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(4.dp))
+                                        .background(rarityColor.copy(alpha = 0.16f))
+                                        .padding(horizontal = 5.dp, vertical = 2.dp)
+                                ) {
+                                    Text(spec.rarity, color = rarityColor, fontSize = 8.sp, fontWeight = FontWeight.Black)
+                                }
                                 if (isOwned) {
                                     Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Icon(Icons.Default.CheckCircle, contentDescription = "Owned", tint = HealthGreen, modifier = Modifier.size(13.dp))
+                                        Icon(Icons.Default.CheckCircle, contentDescription = "Owned", tint = HealthGreen, modifier = Modifier.size(12.dp))
                                         Spacer(modifier = Modifier.width(3.dp))
-                                        Text("OWNED", color = HealthGreen, fontSize = 9.sp, fontWeight = FontWeight.Black)
+                                        Text("OWNED", color = HealthGreen, fontSize = 8.sp, fontWeight = FontWeight.Black)
                                     }
                                 }
                             }
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(item.name, color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 12.sp, maxLines = 1)
-                            Text("${item.type} • Guaranteed Direct Unlock", color = TextSecondary, fontSize = 10.sp)
 
-                            Spacer(modifier = Modifier.height(10.dp))
+                            Text(spec.name, color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(
+                                text = spec.description,
+                                color = TextSecondary,
+                                fontSize = 9.sp,
+                                maxLines = 2,
+                                lineHeight = 11.sp,
+                                overflow = TextOverflow.Ellipsis
+                            )
 
-                            val cost = if (item.priceCredits > 0) "${item.priceCredits} VC" else "${item.priceBp} BP"
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            val cost = when {
+                                spec.priceCredits > 0 -> "${spec.priceCredits} VC"
+                                spec.priceBp > 0 -> "${spec.priceBp} BP"
+                                else -> "STARTER"
+                            }
+
+                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(top = 4.dp)) {
                                 OutlinedButton(
-                                    onClick = { previewItem = item },
-                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp),
-                                    modifier = Modifier.height(34.dp).testTag("inspect_${item.id}")
+                                    onClick = { previewSpec = spec },
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                    modifier = Modifier.height(32.dp).testTag("inspect_${spec.id}")
                                 ) {
-                                    Icon(Icons.Default.Visibility, contentDescription = "Inspect", tint = TextPrimary, modifier = Modifier.size(14.dp))
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text("INSPECT", color = TextPrimary, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                                    Icon(Icons.Default.Visibility, contentDescription = "Inspect", tint = accentColor, modifier = Modifier.size(13.dp))
+                                    Spacer(modifier = Modifier.width(3.dp))
+                                    Text("3D", color = TextPrimary, fontSize = 9.sp, fontWeight = FontWeight.Black)
                                 }
                                 Button(
                                     enabled = !isOwned && !isProcessing,
-                                    onClick = { executeDirectPurchase(item) },
+                                    onClick = { executeDirectPurchase(spec) },
                                     colors = ButtonDefaults.buttonColors(
-                                        containerColor = if (item.priceCredits > 0) ElectricBlueSafe else CyberOrange,
+                                        containerColor = if (spec.priceCredits > 0) ElectricBlueSafe else CyberOrange,
                                         disabledContainerColor = TacticalSurfaceVariant
                                     ),
-                                    modifier = Modifier.weight(1f).height(34.dp).testTag("buy_${item.id}")
+                                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
+                                    modifier = Modifier.weight(1f).height(32.dp).testTag("buy_${spec.id}")
                                 ) {
                                     Text(
                                         text = if (isOwned) "OWNED ✓" else cost,
-                                        fontSize = 10.sp,
+                                        fontSize = 9.sp,
                                         fontWeight = FontWeight.Black,
                                         color = if (isOwned) HealthGreen else Color.Black
                                     )
@@ -341,48 +426,92 @@ fun ShopScreen(
         }
     }
 
-    // Item Inspection & Confirmation Modal
-    val itemToPreview = previewItem
+    // Interactive 3D Preview & Verified Purchase Modal
+    val itemToPreview = previewSpec
     if (itemToPreview != null) {
-        val isOwned = ownedIds.contains(itemToPreview.id)
-        val priceLabel = if (itemToPreview.priceCredits > 0) "${itemToPreview.priceCredits} Vortex Credits" else "${itemToPreview.priceBp} BP Coins"
-        Dialog(onDismissRequest = { previewItem = null }) {
+        val isOwned = ownedIds.contains(itemToPreview.id) || itemToPreview.starterOwned
+        val priceLabel = when {
+            itemToPreview.priceCredits > 0 -> "${itemToPreview.priceCredits} Vortex Credits"
+            itemToPreview.priceBp > 0 -> "${itemToPreview.priceBp} BP Coins"
+            else -> "Starter Unlock"
+        }
+
+        Dialog(onDismissRequest = { previewSpec = null }) {
             Card(
                 modifier = Modifier.fillMaxWidth().testTag("shop_preview_dialog"),
                 shape = RoundedCornerShape(16.dp),
                 colors = CardDefaults.cardColors(containerColor = TacticalDarkBg),
-                border = androidx.compose.foundation.BorderStroke(2.dp, CyberOrange)
+                border = BorderStroke(2.dp, CyberOrange)
             ) {
-                Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.ShoppingBag, contentDescription = "Bundle", tint = CyberOrange, modifier = Modifier.size(20.dp))
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("BUNDLE INSPECTION", color = CyberOrange, fontWeight = FontWeight.Black, fontSize = 14.sp)
+                            Icon(Icons.Default.ShoppingBag, contentDescription = "Inspect Item", tint = CyberOrange, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("3D ITEM INSPECTION", color = CyberOrange, fontWeight = FontWeight.Black, fontSize = 14.sp)
                         }
-                        IconButton(onClick = { previewItem = null }) {
+                        IconButton(onClick = { previewSpec = null }) {
                             Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.White)
                         }
                     }
 
-                    Text(itemToPreview.name, color = TextPrimary, fontWeight = FontWeight.Black, fontSize = 16.sp)
-                    Text("Category: ${itemToPreview.type} • Rarity: ${itemToPreview.rarity}", color = ElectricBlueSafe, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    // Contextual 3D Preview Viewport
+                    when (itemToPreview.type) {
+                        "GUN", "WEAPON_SKIN" -> {
+                            val wModel = remember(itemToPreview.id) {
+                                WeaponCatalog.createById(itemToPreview.targetItemId, itemToPreview.name.substringAfter(" - "))
+                            }
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(175.dp)
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .border(1.dp, Color.White.copy(alpha = 0.14f), RoundedCornerShape(10.dp))
+                            ) {
+                                Weapon3DShowcaseView(
+                                    weapon = wModel,
+                                    skinName = itemToPreview.name.substringAfter(" - "),
+                                    scopeType = ScopeType.SCOPE_4X,
+                                    muzzleType = MuzzleType.COMPENSATOR,
+                                    magType = MagType.EXTENDED_QUICKDRAW,
+                                    autoInspect = true,
+                                    modifier = Modifier.fillMaxSize()
+                                )
+                            }
+                        }
+                        "CHARACTER", "OUTFIT", "BUNDLE" -> {
+                            val charId = if (itemToPreview.type == "CHARACTER") itemToPreview.targetItemId else (profile?.selectedCharacterId ?: "vortex_ghost")
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(175.dp)
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .border(1.dp, Color.White.copy(alpha = 0.14f), RoundedCornerShape(10.dp))
+                            ) {
+                                Character3DShowcaseView(
+                                    characterPresetId = charId,
+                                    animMode = "VICTORY",
+                                    autoRotate = true,
+                                    modifier = Modifier.fillMaxSize()
+                                )
+                            }
+                        }
+                    }
+
+                    Text(itemToPreview.name, color = TextPrimary, fontWeight = FontWeight.Black, fontSize = 15.sp)
+                    Text("${itemToPreview.category.title} • Rarity: ${itemToPreview.rarity}", color = ElectricBlueSafe, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clip(RoundedCornerShape(10.dp))
+                            .clip(RoundedCornerShape(8.dp))
                             .background(TacticalSurface)
-                            .padding(12.dp)
+                            .padding(10.dp)
                     ) {
-                        Text(
-                            "Fixed-price direct cosmetic unlock for slot '${itemToPreview.targetItemId}'. Equip immediately inside Armory after unlocking. Zero randomized drops.",
-                            color = TextSecondary,
-                            fontSize = 11.sp
-                        )
+                        Text(itemToPreview.description, color = TextSecondary, fontSize = 11.sp)
                     }
 
                     Text("Price: $priceLabel", color = HazardYellow, fontWeight = FontWeight.Black, fontSize = 13.sp)

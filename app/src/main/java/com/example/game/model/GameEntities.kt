@@ -67,13 +67,24 @@ data class Weapon(
     var equippedScope: ScopeType = ScopeType.IRON_SIGHT,
     var equippedMuzzle: MuzzleType = MuzzleType.NONE,
     var equippedMag: MagType = MagType.STANDARD,
-    val skinName: String = "Standard Military"
+    val skinName: String = "Standard Military",
+    val upgradeLevel: Int = 1
 ) {
+    val clampedLevel: Int
+        get() = upgradeLevel.coerceIn(1, 5)
+
     val totalCapacity: Int
         get() = maxCapacity + equippedMag.extraCapacity
 
+    val effectiveDamage: Float
+        get() = baseDamage * (1f + (clampedLevel - 1) * 0.06f)
+
+    val effectiveFireRateMs: Long
+        get() = (fireRateMs * (1f - (clampedLevel - 1) * 0.025f)).toLong().coerceAtLeast(50L)
+
     val effectiveRecoil: Float
-        get() = (baseRecoil * (1f - equippedMuzzle.recoilReduction)).coerceAtLeast(0.1f)
+        get() = (baseRecoil * (1f - equippedMuzzle.recoilReduction) * (1f - (clampedLevel - 1) * 0.04f))
+            .coerceAtLeast(0.08f)
 }
 
 object WeaponCatalog {
@@ -176,7 +187,7 @@ object WeaponCatalog {
         skinName = skin
     )
 
-    fun createDesertEagle(): Weapon = Weapon(
+    fun createDesertEagle(skin: String = "Chrome Plated", upgradeLevel: Int = 1): Weapon = Weapon(
         id = "deagle",
         name = "Desert Eagle",
         category = WeaponCategory.PISTOL,
@@ -188,10 +199,12 @@ object WeaponCatalog {
         maxCapacity = 7,
         currentAmmo = 7,
         supportedFireModes = listOf(FireMode.SINGLE),
-        activeFireMode = FireMode.SINGLE
+        activeFireMode = FireMode.SINGLE,
+        skinName = skin,
+        upgradeLevel = upgradeLevel
     )
 
-    fun createPan(): Weapon = Weapon(
+    fun createPan(skin: String = "Golden Winner"): Weapon = Weapon(
         id = "pan",
         name = "Cast Iron Pan",
         category = WeaponCategory.MELEE,
@@ -203,7 +216,32 @@ object WeaponCatalog {
         maxCapacity = 0,
         currentAmmo = 0,
         supportedFireModes = listOf(FireMode.SINGLE),
-        activeFireMode = FireMode.SINGLE
+        activeFireMode = FireMode.SINGLE,
+        skinName = skin
+    )
+
+    fun createById(id: String, skin: String? = null, upgradeLevel: Int = 1): Weapon {
+        val base = when (id.lowercase()) {
+            "akm" -> createAKM(skin ?: "Dragonfire")
+            "awm" -> createAWM(skin ?: "Cyber Gold")
+            "kar98k" -> createKar98k(skin ?: "Vintage Walnut")
+            "ump45" -> createUMP45(skin ?: "Arctic Camo")
+            "s12k" -> createS12K(skin ?: "Breacher Steel")
+            "deagle" -> createDesertEagle(skin ?: "Chrome Plated", upgradeLevel)
+            "pan" -> createPan(skin ?: "Golden Winner")
+            else -> createM416(skin ?: "Tactical Slate")
+        }
+        return base.copy(upgradeLevel = upgradeLevel.coerceIn(1, 5))
+    }
+
+    fun primaryFirearms(): List<Weapon> = listOf(
+        createM416(),
+        createAKM(),
+        createUMP45(),
+        createS12K(),
+        createAWM(),
+        createKar98k(),
+        createDesertEagle()
     )
 }
 
@@ -357,7 +395,13 @@ enum class CharacterPreset(
     val passiveSkillDesc: String,
     val armorRgb: Triple<Float, Float, Float>,
     val accentRgb: Triple<Float, Float, Float>,
-    val visorRgb: Triple<Float, Float, Float>
+    val visorRgb: Triple<Float, Float, Float>,
+    val starterUnlocked: Boolean = false,
+    val unlockBp: Int = 0,
+    val unlockCredits: Int = 0,
+    val mobilityStat: Int = 80,
+    val combatStat: Int = 80,
+    val survivalStat: Int = 80
 ) {
     VORTEX_GHOST(
         id = "vortex_ghost",
@@ -370,7 +414,11 @@ enum class CharacterPreset(
         passiveSkillDesc = "-10% weapon recoil dispersion",
         armorRgb = Triple(0.18f, 0.22f, 0.28f),
         accentRgb = Triple(1.0f, 0.48f, 0.0f),
-        visorRgb = Triple(1.0f, 0.84f, 0.0f)
+        visorRgb = Triple(1.0f, 0.84f, 0.0f),
+        starterUnlocked = true,
+        mobilityStat = 88,
+        combatStat = 90,
+        survivalStat = 78
     ),
     NOVA_VALKYRIE(
         id = "nova_valkyrie",
@@ -383,7 +431,11 @@ enum class CharacterPreset(
         passiveSkillDesc = "Recovers +15 HP after eliminating an enemy",
         armorRgb = Triple(0.26f, 0.14f, 0.34f),
         accentRgb = Triple(0.96f, 0.32f, 0.72f),
-        visorRgb = Triple(0.35f, 1.0f, 0.90f)
+        visorRgb = Triple(0.35f, 1.0f, 0.90f),
+        starterUnlocked = true,
+        mobilityStat = 86,
+        combatStat = 76,
+        survivalStat = 94
     ),
     BLAZE_STRIKER(
         id = "blaze_striker",
@@ -396,7 +448,12 @@ enum class CharacterPreset(
         passiveSkillDesc = "+10 Max Tactical Shield",
         armorRgb = Triple(0.22f, 0.14f, 0.16f),
         accentRgb = Triple(0.95f, 0.16f, 0.22f),
-        visorRgb = Triple(1.0f, 0.65f, 0.1f)
+        visorRgb = Triple(1.0f, 0.65f, 0.1f),
+        starterUnlocked = false,
+        unlockBp = 6000,
+        mobilityStat = 78,
+        combatStat = 94,
+        survivalStat = 86
     ),
     CYBER_VIPER(
         id = "cyber_viper",
@@ -409,7 +466,12 @@ enum class CharacterPreset(
         passiveSkillDesc = "+8% crouch & flank agility",
         armorRgb = Triple(0.12f, 0.18f, 0.28f),
         accentRgb = Triple(0.0f, 0.85f, 1.0f),
-        visorRgb = Triple(0.0f, 1.0f, 0.65f)
+        visorRgb = Triple(0.0f, 1.0f, 0.65f),
+        starterUnlocked = false,
+        unlockBp = 7500,
+        mobilityStat = 95,
+        combatStat = 84,
+        survivalStat = 80
     ),
     FROST_RECON(
         id = "frost_recon",
@@ -422,7 +484,12 @@ enum class CharacterPreset(
         passiveSkillDesc = "+12% headshot critical multiplier",
         armorRgb = Triple(0.75f, 0.82f, 0.88f),
         accentRgb = Triple(0.20f, 0.60f, 0.95f),
-        visorRgb = Triple(0.45f, 0.92f, 1.0f)
+        visorRgb = Triple(0.45f, 0.92f, 1.0f),
+        starterUnlocked = false,
+        unlockCredits = 480,
+        mobilityStat = 82,
+        combatStat = 96,
+        survivalStat = 76
     ),
     SERAPH_ECHO(
         id = "seraph_echo",
@@ -435,7 +502,12 @@ enum class CharacterPreset(
         passiveSkillDesc = "+12% faster reload speed",
         armorRgb = Triple(0.84f, 0.86f, 0.90f),
         accentRgb = Triple(1.0f, 0.72f, 0.18f),
-        visorRgb = Triple(0.25f, 0.85f, 1.0f)
+        visorRgb = Triple(0.25f, 0.85f, 1.0f),
+        starterUnlocked = false,
+        unlockCredits = 550,
+        mobilityStat = 84,
+        combatStat = 86,
+        survivalStat = 92
     ),
     APEX_TITAN(
         id = "apex_titan",
@@ -448,7 +520,12 @@ enum class CharacterPreset(
         passiveSkillDesc = "+25% backpack supply capacity",
         armorRgb = Triple(0.16f, 0.16f, 0.18f),
         accentRgb = Triple(1.0f, 0.78f, 0.12f),
-        visorRgb = Triple(1.0f, 0.35f, 0.1f)
+        visorRgb = Triple(1.0f, 0.35f, 0.1f),
+        starterUnlocked = false,
+        unlockCredits = 680,
+        mobilityStat = 72,
+        combatStat = 90,
+        survivalStat = 98
     );
 
     companion object {
