@@ -64,6 +64,7 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseUser
 import com.google.firebase.auth.auth
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 
 enum class ScreenState {
@@ -96,11 +97,14 @@ class MainActivity : ComponentActivity() {
         val repository = GameRepository.create(this)
         val soundSynthesizer = SoundSynthesizer(this)
 
+        val initialIncomingLink = intent?.data?.toString()
+
         setContent {
             MyApplicationTheme {
                 VortexRootApp(
                     repository = repository,
-                    soundSynthesizer = soundSynthesizer
+                    soundSynthesizer = soundSynthesizer,
+                    incomingEmailLink = initialIncomingLink
                 )
             }
         }
@@ -110,32 +114,66 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun VortexRootApp(
     repository: GameRepository,
-    soundSynthesizer: SoundSynthesizer
+    soundSynthesizer: SoundSynthesizer,
+    incomingEmailLink: String? = null
 ) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val auth = remember { Firebase.auth }
     var currentUser by remember { mutableStateOf<FirebaseUser?>(auth.currentUser) }
+    var isGuestMode by remember { mutableStateOf(false) }
+    var selectedServerId by remember { mutableStateOf("in") }
+
+    LaunchedEffect(incomingEmailLink) {
+        if (!incomingEmailLink.isNullOrBlank() && auth.isSignInWithEmailLink(incomingEmailLink)) {
+            val savedEmail = GoogleAuthHelper.getPendingEmail(context)
+            if (savedEmail.isNotBlank()) {
+                GoogleAuthHelper.completeEmailLinkSignIn(
+                    context = context,
+                    email = savedEmail,
+                    emailLink = incomingEmailLink,
+                    onAuthSuccess = {
+                        isGuestMode = false
+                        currentUser = auth.currentUser
+                    },
+                    onAuthError = {},
+                    scope = scope
+                )
+            }
+        }
+    }
 
     DisposableEffect(auth) {
         val listener = FirebaseAuth.AuthStateListener { firebaseAuth ->
             currentUser = firebaseAuth.currentUser
+            if (firebaseAuth.currentUser != null) {
+                isGuestMode = false
+            }
         }
         auth.addAuthStateListener(listener)
         onDispose { auth.removeAuthStateListener(listener) }
     }
 
     val signedInUser = currentUser
-    if (signedInUser == null) {
+    if (signedInUser == null && !isGuestMode) {
         AuthScreen(
+            repository = repository,
+            soundSynthesizer = soundSynthesizer,
+            selectedServerId = selectedServerId,
+            onSelectServer = { selectedServerId = it },
+            onGuestLogin = { isGuestMode = true },
             onAuthenticated = {
+                isGuestMode = false
                 currentUser = auth.currentUser
             }
         )
     } else {
-        key(signedInUser.uid) {
+        key(signedInUser?.uid ?: "guest_local_session") {
             MainApp(
                 user = signedInUser,
                 repository = repository,
-                soundSynthesizer = soundSynthesizer
+                soundSynthesizer = soundSynthesizer,
+                onRequestSignIn = { isGuestMode = false }
             )
         }
     }
@@ -143,33 +181,50 @@ fun VortexRootApp(
 
 @Composable
 fun MainApp(
-    user: FirebaseUser,
+    user: FirebaseUser?,
     repository: GameRepository,
-    soundSynthesizer: SoundSynthesizer
+    soundSynthesizer: SoundSynthesizer,
+    onRequestSignIn: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val credentialManager = remember(context) { CredentialManager.create(context) }
-    val cloudRepository = remember(context) { CloudGameRepository(context) }
+    val cloudRepository = remember(context, user?.uid) {
+        if (user != null) CloudGameRepository(context) else null
+    }
 
     val profile by repository.userProfile.collectAsState(initial = null)
     val allInventory by repository.allInventory.collectAsState(initial = emptyList())
     val settings by repository.settings.collectAsState(initial = null)
 
-    val cloudProfileFlow = remember(cloudRepository, user.uid) {
-        cloudRepository.observeProfile(user.uid).catch { emit(null) }
+    val cloudProfileFlow = remember(cloudRepository, user?.uid) {
+        val uid = user?.uid
+        if (cloudRepository != null && uid != null) {
+            cloudRepository.observeProfile(uid).catch { emit(null) }
+        } else flowOf(null)
     }
-    val cloudAnnouncementsFlow = remember(cloudRepository) {
-        cloudRepository.observeAnnouncements().catch { emit(emptyList()) }
+    val cloudAnnouncementsFlow = remember(cloudRepository, user?.uid) {
+        if (cloudRepository != null && user != null) {
+            cloudRepository.observeAnnouncements().catch { emit(emptyList()) }
+        } else flowOf(emptyList())
     }
-    val cloudMailFlow = remember(cloudRepository, user.uid) {
-        cloudRepository.observeMail(user.uid).catch { emit(emptyList()) }
+    val cloudMailFlow = remember(cloudRepository, user?.uid) {
+        val uid = user?.uid
+        if (cloudRepository != null && uid != null) {
+            cloudRepository.observeMail(uid).catch { emit(emptyList()) }
+        } else flowOf(emptyList())
     }
-    val cloudTransactionsFlow = remember(cloudRepository, user.uid) {
-        cloudRepository.observeTransactions(user.uid).catch { emit(emptyList()) }
+    val cloudTransactionsFlow = remember(cloudRepository, user?.uid) {
+        val uid = user?.uid
+        if (cloudRepository != null && uid != null) {
+            cloudRepository.observeTransactions(uid).catch { emit(emptyList()) }
+        } else flowOf(emptyList())
     }
-    val cloudMissionsFlow = remember(cloudRepository, user.uid) {
-        cloudRepository.observeMissions(user.uid).catch { emit(emptyList()) }
+    val cloudMissionsFlow = remember(cloudRepository, user?.uid) {
+        val uid = user?.uid
+        if (cloudRepository != null && uid != null) {
+            cloudRepository.observeMissions(uid).catch { emit(emptyList()) }
+        } else flowOf(emptyList())
     }
 
     val cloudProfile by cloudProfileFlow.collectAsState(initial = null)
@@ -199,9 +254,11 @@ fun MainApp(
         WeatherType.entries.find { it.name == settings?.selectedWeather } ?: WeatherType.CLEAR
     }
 
-    LaunchedEffect(user.uid) {
+    LaunchedEffect(user?.uid) {
         repository.initializeDefaultDataIfEmpty()
-        cloudRepository.ensureUserInitialized(user.displayName)
+        if (user != null) {
+            cloudRepository?.ensureUserInitialized(user.displayName)
+        }
         soundSynthesizer.startBackgroundMusic()
     }
 
@@ -318,10 +375,10 @@ fun MainApp(
                     announcements = cloudAnnouncements,
                     mailList = cloudMail,
                     onClaimMail = { mail ->
-                        scope.launch { cloudRepository.claimMailReward(mail) }
+                        scope.launch { cloudRepository?.claimMailReward(mail) }
                     },
                     onSubmitSupportTicket = { subject, msg ->
-                        scope.launch { cloudRepository.submitSupportTicket("PLAYER_SUPPORT", subject, msg) }
+                        scope.launch { cloudRepository?.submitSupportTicket("PLAYER_SUPPORT", subject, msg) }
                     },
                     onStartMatch = {
                         soundSynthesizer.playUiClick()
@@ -353,7 +410,7 @@ fun MainApp(
                                         damage = damage,
                                         durationSec = durationSec
                                     )
-                                    cloudRepository.recordCloudMatch(
+                                    cloudRepository?.recordCloudMatch(
                                         gameMode = selectedMode.title,
                                         mapName = selectedMap.name,
                                         placement = placement,
@@ -503,11 +560,16 @@ fun MainApp(
             ScreenState.SETTINGS -> {
                 SettingsScreen(
                     repository = repository,
-                    userEmail = user.email,
+                    userEmail = user?.email,
+                    isGuestMode = user == null,
                     onOpenHudCustomizer = { currentScreen = ScreenState.HUD_CUSTOMIZER },
                     onSignOut = {
                         soundSynthesizer.stopBackgroundMusic()
-                        GoogleAuthHelper.signOut(credentialManager, scope)
+                        if (user == null) {
+                            onRequestSignIn()
+                        } else {
+                            GoogleAuthHelper.signOut(credentialManager, scope)
+                        }
                     },
                     onBack = { currentScreen = ScreenState.LOBBY }
                 )

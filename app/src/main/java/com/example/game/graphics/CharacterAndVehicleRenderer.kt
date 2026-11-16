@@ -55,7 +55,14 @@ class CharacterAndVehicleRenderer(
         userTeamId: Int,
         shadowQuality: Int,
         radarActive: Boolean,
-        frameTimeSec: Float
+        frameTimeSec: Float,
+        armorRgbOverride: Triple<Float, Float, Float>? = null,
+        accentRgbOverride: Triple<Float, Float, Float>? = null,
+        hairRgbOverride: Triple<Float, Float, Float>? = null,
+        showHelmetAndVisor: Boolean = true,
+        halfMaskRgb: Triple<Float, Float, Float>? = null,
+        halfMaskAccentRgb: Triple<Float, Float, Float>? = null,
+        hasPonytailHair: Boolean = false
     ) {
         val px = player.x * TerrainHeightfield.WORLD_SCALE
         val py = groundY + player.z * TerrainHeightfield.WORLD_SCALE
@@ -65,8 +72,10 @@ class CharacterAndVehicleRenderer(
         val preset = CharacterPreset.fromId(player.characterPresetId)
         val isTeammate = player.teamId == userTeamId
         val isFemale = preset.gender.equals("Female", ignoreCase = true)
-        val (armorR, armorG, armorB) = if (player.isUser || isTeammate) preset.armorRgb else Triple(0.46f, 0.14f, 0.14f)
-        val (accR, accG, accB) = if (player.isUser || isTeammate) preset.accentRgb else Triple(0.95f, 0.25f, 0.15f)
+        val (armorR, armorG, armorB) = armorRgbOverride
+            ?: if (player.isUser || isTeammate) preset.armorRgb else Triple(0.46f, 0.14f, 0.14f)
+        val (accR, accG, accB) = accentRgbOverride
+            ?: if (player.isUser || isTeammate) preset.accentRgb else Triple(0.95f, 0.25f, 0.15f)
         val (visR, visG, visB) = if (player.isUser || isTeammate) preset.visorRgb else Triple(1.0f, 0.15f, 0.15f)
 
         val skinTone = when (preset) {
@@ -75,7 +84,7 @@ class CharacterAndVehicleRenderer(
             CharacterPreset.BLAZE_STRIKER -> Triple(0.56f, 0.38f, 0.28f)
             else -> Triple(0.76f, 0.60f, 0.48f)
         }
-        val hairRgb = when (preset) {
+        val hairRgb = hairRgbOverride ?: when (preset) {
             CharacterPreset.NOVA_VALKYRIE -> Triple(0.78f, 0.18f, 0.44f)
             CharacterPreset.CYBER_VIPER -> Triple(0.10f, 0.64f, 0.78f)
             CharacterPreset.FROST_RECON -> Triple(0.86f, 0.88f, 0.92f)
@@ -266,7 +275,7 @@ class CharacterAndVehicleRenderer(
             r = skinTone.first, g = skinTone.second, b = skinTone.third,
             roughness = 0.55f, metallic = 0.02f
         )
-        // Hair Crown
+        // Hair Crown + Optional High Ponytail or Spiky Crest
         drawLocalMesh(
             meshes.humanHair, MaterialId.TACTICAL_FABRIC,
             tx = -0.01f, ty = 0.24f, tz = 0f,
@@ -275,8 +284,28 @@ class CharacterAndVehicleRenderer(
             r = hairRgb.first, g = hairRgb.second, b = hairRgb.third,
             roughness = 0.72f, metallic = 0.08f
         )
+        if (hasPonytailHair) {
+            val sway = sin(frameTimeSec * 3.1f) * 5f
+            drawLocalMesh(
+                meshes.limbCapsule, MaterialId.TACTICAL_FABRIC,
+                tx = -0.22f, ty = 0.24f, tz = 0f,
+                rx = 0f, ry = 0f, rz = -42f + sway,
+                sx = 0.14f, sy = 0.38f, sz = 0.14f,
+                r = hairRgb.first, g = hairRgb.second, b = hairRgb.third,
+                roughness = 0.68f, metallic = 0.1f
+            )
+            // Crimson hair tip accent
+            drawLocalMesh(
+                meshes.limbCapsule, MaterialId.VEHICLE_COAT,
+                tx = -0.34f, ty = 0.12f, tz = 0f,
+                rx = 0f, ry = 0f, rz = -56f + sway,
+                sx = 0.11f, sy = 0.24f, sz = 0.11f,
+                r = 0.88f, g = 0.14f, b = 0.18f,
+                roughness = 0.58f, metallic = 0.12f, emissive = 0.18f
+            )
+        }
         // Eyes / Facial Brow Detail (when no full-face visor hides it)
-        if (player.helmetLevel < 3) {
+        if (!showHelmetAndVisor || player.helmetLevel < 3) {
             drawLocalMesh(
                 meshes.unitBox, MaterialId.SKIN_DETAIL,
                 tx = 0.15f, ty = 0.21f, tz = 0.06f,
@@ -294,26 +323,48 @@ class CharacterAndVehicleRenderer(
                 roughness = 0.2f, metallic = 0.2f, useTex = 0f
             )
         }
-        // Tactical Helmet + Reflective Curved Visor
-        if (player.helmetLevel > 0) {
+        // Sleek Tactical Half-Mask over lower face
+        if (halfMaskRgb != null) {
             drawLocalMesh(
-                meshes.helmetShell, MaterialId.CORRUGATED_METAL,
-                tx = -0.01f, ty = 0.23f, tz = 0f,
+                meshes.bevelPack, MaterialId.TACTICAL_FABRIC,
+                tx = 0.07f, ty = 0.11f, tz = 0f,
                 rx = 0f, ry = 0f, rz = 0f,
-                sx = 0.39f, sy = 0.32f, sz = 0.36f,
-                r = armorR * 0.85f, g = armorG * 0.85f, b = armorB * 0.85f,
-                roughness = 0.32f, metallic = 0.55f
+                sx = 0.24f, sy = 0.16f, sz = 0.27f,
+                r = halfMaskRgb.first, g = halfMaskRgb.second, b = halfMaskRgb.third,
+                roughness = 0.48f, metallic = 0.25f
+            )
+            val mAcc = halfMaskAccentRgb ?: Triple(0.95f, 0.12f, 0.16f)
+            drawLocalMesh(
+                meshes.unitBox, MaterialId.VEHICLE_COAT,
+                tx = 0.19f, ty = 0.12f, tz = 0f,
+                rx = 0f, ry = 0f, rz = 0f,
+                sx = 0.03f, sy = 0.04f, sz = 0.18f,
+                r = mAcc.first, g = mAcc.second, b = mAcc.third,
+                roughness = 0.25f, metallic = 0.45f, emissive = 0.55f, useTex = 0f
             )
         }
-        if (player.helmetLevel >= 2 || player.isUser) {
-            drawLocalMesh(
-                meshes.curvedVisor, MaterialId.VEHICLE_COAT,
-                tx = 0.04f, ty = 0.21f, tz = 0f,
-                rx = 0f, ry = 0f, rz = 0f,
-                sx = 0.32f, sy = 0.24f, sz = 0.30f,
-                r = visR, g = visG, b = visB,
-                roughness = 0.12f, metallic = 0.88f, emissive = 0.55f
-            )
+        // Tactical Helmet + Reflective Curved Visor
+        if (showHelmetAndVisor) {
+            if (player.helmetLevel > 0) {
+                drawLocalMesh(
+                    meshes.helmetShell, MaterialId.CORRUGATED_METAL,
+                    tx = -0.01f, ty = 0.23f, tz = 0f,
+                    rx = 0f, ry = 0f, rz = 0f,
+                    sx = 0.39f, sy = 0.32f, sz = 0.36f,
+                    r = armorR * 0.85f, g = armorG * 0.85f, b = armorB * 0.85f,
+                    roughness = 0.32f, metallic = 0.55f
+                )
+            }
+            if (player.helmetLevel >= 2 || player.isUser) {
+                drawLocalMesh(
+                    meshes.curvedVisor, MaterialId.VEHICLE_COAT,
+                    tx = 0.04f, ty = 0.21f, tz = 0f,
+                    rx = 0f, ry = 0f, rz = 0f,
+                    sx = 0.32f, sy = 0.24f, sz = 0.30f,
+                    r = visR, g = visG, b = visB,
+                    roughness = 0.12f, metallic = 0.88f, emissive = 0.55f
+                )
+            }
         }
         popMatrix(modelMatrix)
 

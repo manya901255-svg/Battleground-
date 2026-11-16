@@ -67,6 +67,7 @@ import kotlinx.coroutines.launch
 fun SettingsScreen(
     repository: GameRepository,
     userEmail: String? = null,
+    isGuestMode: Boolean = false,
     onOpenHudCustomizer: () -> Unit = {},
     onSignOut: () -> Unit = {},
     onBack: () -> Unit
@@ -565,16 +566,34 @@ fun SettingsScreen(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Column {
-                    Text("GOOGLE ACCOUNT AUTHENTICATION", color = TextSecondary, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                    Text(userEmail ?: "Signed In via Google Credential Manager", color = TextPrimary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                Column(modifier = Modifier.weight(1f).padding(end = 10.dp)) {
+                    Text(
+                        if (isGuestMode) "GUEST OPERATIVE SESSION (LOCAL ONLY)" else "WARX ACCOUNT AUTHENTICATION",
+                        color = TextSecondary,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        if (isGuestMode) "Progress saved locally. Sign in anytime to sync across devices."
+                        else (userEmail ?: "Signed In via Firebase Authentication"),
+                        color = TextPrimary,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
                 }
                 Button(
                     onClick = onSignOut,
-                    colors = ButtonDefaults.buttonColors(containerColor = RedZoneBombardment),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (isGuestMode) HazardYellow else RedZoneBombardment
+                    ),
                     modifier = Modifier.height(38.dp).testTag("sign_out_button")
                 ) {
-                    Text("SIGN OUT", color = Color.White, fontWeight = FontWeight.Black, fontSize = 11.sp)
+                    Text(
+                        text = if (isGuestMode) "SIGN IN / LINK" else "SIGN OUT",
+                        color = if (isGuestMode) Color.Black else Color.White,
+                        fontWeight = FontWeight.Black,
+                        fontSize = 11.sp
+                    )
                 }
             }
         }

@@ -1,6 +1,10 @@
 package com.example
 
 import android.content.Context
+import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performClick
 import androidx.test.core.app.ApplicationProvider
 import com.example.game.engine.BattleRoyaleEngine
 import com.example.game.map.MapCatalog
@@ -13,6 +17,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
+import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -21,6 +26,9 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class ExampleRobolectricTest {
+
+    @get:Rule
+    val composeTestRule = createComposeRule()
 
     @Test
     fun `read string from context`() {
@@ -557,5 +565,87 @@ class ExampleRobolectricTest {
         assertEquals(4, primary.upgradeLevel)
         assertTrue(primary.effectiveDamage > primary.baseDamage)
         assertEquals(285, customEngine.engineState.value.backpackMaxUnits)
+    }
+
+    @Test
+    @Config(sdk = [34], qualifiers = "w840dp-h410dp-land")
+    fun `test warx login localization, server list, email validation, and interactive login ui`() {
+        // 1. Verify all 5 languages provide localized strings & server list has regional entries
+        assertEquals(5, com.example.ui.auth.AuthLanguage.entries.size)
+        com.example.ui.auth.AuthLanguage.entries.forEach { lang ->
+            val copy = com.example.ui.auth.authCopyFor(lang)
+            assertTrue(copy.loginHeader.isNotBlank())
+            assertTrue(copy.continueGoogle.isNotBlank())
+            assertTrue(copy.continueApple.isNotBlank())
+            assertTrue(copy.loginEmail.isNotBlank())
+            assertTrue(copy.continueFacebook.isNotBlank())
+            assertTrue(copy.playGuest.isNotBlank())
+        }
+        assertTrue(com.example.ui.auth.WarXServerRegions.any { it.label == "India" })
+
+        // 2. Email validation rejects invalid formats and accepts standard emails
+        assertFalse(com.example.data.cloud.GoogleAuthHelper.isValidEmail(""))
+        assertFalse(com.example.data.cloud.GoogleAuthHelper.isValidEmail("invalid-email"))
+        assertTrue(com.example.data.cloud.GoogleAuthHelper.isValidEmail("soldier@warx.gg"))
+
+        // 3. Compose UI verification of all 5 login options, top controls, footer modals, and Guest flow
+        var guestEntered = false
+        var selectedServer = "in"
+        composeTestRule.setContent {
+            com.example.ui.theme.MyApplicationTheme {
+                com.example.ui.screens.AuthScreen(
+                    selectedServerId = selectedServer,
+                    onSelectServer = { selectedServer = it },
+                    onGuestLogin = { guestEntered = true },
+                    onAuthenticated = {}
+                )
+            }
+        }
+
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag("auth_screen").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("server_selector_button").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("language_selector_button").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("sound_toggle_button").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("auth_settings_button").assertIsDisplayed()
+
+        composeTestRule.onNodeWithTag("google_sign_in_button").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("apple_sign_in_button").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("email_sign_in_button").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("facebook_sign_in_button").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("guest_sign_in_button").assertIsDisplayed()
+
+        composeTestRule.onNodeWithTag("privacy_policy_link").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("terms_of_service_link").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("forgot_password_link").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("welcome_soldier_badge").assertIsDisplayed()
+
+        // Interactive modal checks: Email Sign-In, Forgot Password, Privacy Policy, Terms of Service
+        composeTestRule.onNodeWithTag("email_sign_in_button").performClick()
+        composeTestRule.onNodeWithTag("email_sign_in_dialog").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("email_dialog_close_btn").performClick()
+        composeTestRule.waitForIdle()
+
+        composeTestRule.onNodeWithTag("forgot_password_link").performClick()
+        composeTestRule.onNodeWithTag("forgot_password_dialog").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("forgot_dialog_close_btn").performClick()
+        composeTestRule.waitForIdle()
+
+        composeTestRule.onNodeWithTag("privacy_policy_link").performClick()
+        composeTestRule.onNodeWithTag("privacy_policy_dialog").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("legal_dialog_close_btn").performClick()
+        composeTestRule.waitForIdle()
+
+        composeTestRule.onNodeWithTag("terms_of_service_link").performClick()
+        composeTestRule.onNodeWithTag("terms_of_service_dialog").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("legal_dialog_close_btn").performClick()
+        composeTestRule.waitForIdle()
+
+        // Sound mute toggle works
+        composeTestRule.onNodeWithTag("sound_toggle_button").performClick()
+
+        // Guest login triggers onGuestLogin cleanly
+        composeTestRule.onNodeWithTag("guest_sign_in_button").performClick()
+        assertTrue(guestEntered)
     }
 }
