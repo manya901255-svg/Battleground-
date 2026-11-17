@@ -17,6 +17,7 @@ import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.viewinterop.AndroidView
 import com.example.game.graphics.CharacterAndVehicleRenderer
 import com.example.game.graphics.EnvironmentRenderer
+import com.example.game.graphics.GlResolutionScaler
 import com.example.game.graphics.GraphicsConfig
 import com.example.game.graphics.MaterialId
 import com.example.game.graphics.MeshLibrary
@@ -115,46 +116,19 @@ fun Lobby3DStageView(
 
     AndroidView(
         factory = { surfaceView },
-        update = { view ->
-            view.applyResolutionScale(graphicsConfig.resolutionScale)
-        },
         modifier = modifier.fillMaxSize()
     )
 }
 
 private class Lobby3DSurfaceView(
     context: Context,
-    val renderer: Lobby3DRenderer
+    renderer: Lobby3DRenderer
 ) : GLSurfaceView(context) {
-    private var baseWidth = 0
-    private var baseHeight = 0
-    private var lastScale = -1f
-
     init {
         setEGLContextClientVersion(2)
+        preserveEGLContextOnPause = true
         setRenderer(renderer)
         renderMode = RENDERMODE_CONTINUOUSLY
-    }
-
-    override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
-        super.onSizeChanged(w, h, oldw, oldh)
-        if (w > 0 && h > 0 && baseWidth == 0) {
-            baseWidth = w
-            baseHeight = h
-        }
-        applyResolutionScale(renderer.graphicsConfig.resolutionScale)
-    }
-
-    fun applyResolutionScale(scale: Float) {
-        val clamped = scale.coerceIn(0.60f, 1.00f)
-        if (baseWidth > 0 && baseHeight > 0 && kotlin.math.abs(clamped - lastScale) > 0.03f) {
-            lastScale = clamped
-            val targetW = (baseWidth * clamped).toInt().coerceAtLeast(320)
-            val targetH = (baseHeight * clamped).toInt().coerceAtLeast(180)
-            post {
-                holder.setFixedSize(targetW, targetH)
-            }
-        }
     }
 }
 
@@ -178,6 +152,7 @@ private class Lobby3DRenderer(
 
     private val shader = PbrShaderProgram()
     private val textures = PbrTextureAtlas()
+    private val resolutionScaler = GlResolutionScaler()
     private lateinit var meshes: MeshLibrary
     private lateinit var envRenderer: EnvironmentRenderer
     private lateinit var actorRenderer: CharacterAndVehicleRenderer
@@ -222,6 +197,7 @@ private class Lobby3DRenderer(
         GLES20.glEnable(GLES20.GL_BLEND)
         GLES20.glBlendFunc(GLES20.GL_SRC_ALPHA, GLES20.GL_ONE_MINUS_SRC_ALPHA)
 
+        resolutionScaler.reset()
         shader.init()
         meshes = MeshLibrary()
         textures.ensureInitialized(
@@ -277,6 +253,7 @@ private class Lobby3DRenderer(
         Matrix.multiplyMM(vpMatrix, 0, projectionMatrix, 0, viewMatrix, 0)
 
         val palette = computeLobbyPalette(activeTheme, activeWeather)
+        resolutionScaler.beginScaledPass(viewportWidth, viewportHeight, cfg.resolutionScale)
         GLES20.glClearColor(palette.horizonR, palette.horizonG, palette.horizonB, 1f)
         GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT or GLES20.GL_DEPTH_BUFFER_BIT)
 
@@ -304,7 +281,15 @@ private class Lobby3DRenderer(
         actorRenderer.setViewProjection(vpMatrix)
 
         // Terrain, mountains, conifers & environment backdrop
-        envRenderer.renderWorldEnvironment(activeMap, px, pz, drawDist, cfg, frameTimeSec)
+        envRenderer.renderWorldEnvironment(
+            mapConfig = activeMap,
+            focusX = px,
+            focusZ = pz,
+            drawDist = drawDist,
+            graphicsConfig = cfg,
+            frameTimeSec = frameTimeSec,
+            isNightMode = activeWeather == WeatherType.NIGHT_OPS
+        )
 
         // Tactical Lobby Helipad / Command Pedestal
         drawMesh(
@@ -363,6 +348,8 @@ private class Lobby3DRenderer(
         // Dynamic Atmospheric Embers & Weather Particles
         updateAndDrawLobbyParticles(dt, px, groundY, pz, activeWeather, activeMap.id, palette)
 
+        resolutionScaler.endScaledPassAndPresent(viewportWidth, viewportHeight)
+
         if (cfg.targetFps <= 32) {
             val elapsedMs = (System.nanoTime() - nowNs) / 1_000_000L
             val remain = 32L - elapsedMs
@@ -398,7 +385,10 @@ private class Lobby3DRenderer(
 
     private fun renderBackdropDropship(x: Float, y: Float, z: Float, yawDeg: Float) {
         drawMesh(meshes.chassisSlopeBody, MaterialId.CORRUGATED_METAL, x, y, z, 0f, yawDeg, 0f, 12.5f, 2.8f, 3.2f, 0.34f, 0.38f, 0.44f, 1f, 0.32f, 0.85f, 0f)
-        drawMesh(meshes.unitBox, MaterialId.CORRUGATED_METAL, x, y + 0.3f, z, 0f, yawDeg, 0f, 3.0f, 0.36f, 17.5f, 0.38f, 0.42f, 0.48f, 1f, 0.34f, 0.82f, 0f)
+        drawMesh(meshes.sweptAircraftWing, MaterialId.CORRUGATED_METAL, x, y + 0.3f, z, 0f, yawDeg, 0f, 3.4f, 0.42f, 18.2f, 0.38f, 0.42f, 0.48f, 1f, 0.34f, 0.82f, 0f)
+        drawMesh(meshes.aircraftTailFin, MaterialId.VEHICLE_COAT, x, y + 2.2f, z, 0f, yawDeg, 0f, 2.4f, 2.8f, 0.48f, 0.72f, 0.22f, 0.16f, 1f, 0.32f, 0.75f, 0.25f)
+        drawMesh(meshes.rifleBarrel, MaterialId.CORRUGATED_METAL, x + 0.8f, y - 0.12f, z + 4.2f, 0f, yawDeg, 0f, 2.4f, 0.65f, 0.65f, 0.24f, 0.26f, 0.32f, 1f, 0.28f, 0.88f, 0.1f)
+        drawMesh(meshes.rifleBarrel, MaterialId.CORRUGATED_METAL, x + 0.8f, y - 0.12f, z - 4.2f, 0f, yawDeg, 0f, 2.4f, 0.65f, 0.65f, 0.24f, 0.26f, 0.32f, 1f, 0.28f, 0.88f, 0.1f)
     }
 
     private fun updateAndDrawLobbyParticles(

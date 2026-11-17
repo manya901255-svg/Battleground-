@@ -175,10 +175,10 @@ fun SettingsScreen(
                 Text("GRAPHICS PRESET", color = TextSecondary, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                 Spacer(modifier = Modifier.height(8.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    listOf("Low", "Medium", "High", "Ultra").forEach { q ->
-                        val isSelected = graphics.startsWith(q, ignoreCase = true) ||
-                            (q == "Low" && graphics.equals("Smooth", true)) ||
-                            (q == "Medium" && graphics.equals("Balanced", true)) ||
+                    listOf("Smooth", "Standard", "High", "Ultra").forEach { q ->
+                        val isSelected = graphics.equals(q, ignoreCase = true) ||
+                            (q == "Smooth" && graphics.equals("Low", true)) ||
+                            (q == "Standard" && (graphics.equals("Medium", true) || graphics.equals("Balanced", true))) ||
                             (q == "High" && graphics.equals("HD", true)) ||
                             (q == "Ultra" && graphics.equals("Ultra HD", true))
                         Box(

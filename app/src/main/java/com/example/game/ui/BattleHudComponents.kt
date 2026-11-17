@@ -1615,8 +1615,11 @@ fun InMatchSettingsDialog(
 
                 Text("3D GRAPHICS QUALITY", color = TextSecondary, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    listOf("Low", "Medium", "High", "Ultra").forEach { q ->
-                        val active = currentGraphics.startsWith(q, ignoreCase = true)
+                    listOf("Smooth", "Standard", "High", "Ultra").forEach { q ->
+                        val active = currentGraphics.equals(q, ignoreCase = true) ||
+                            (q == "Smooth" && currentGraphics.equals("Low", true)) ||
+                            (q == "Standard" && (currentGraphics.equals("Medium", true) || currentGraphics.equals("Balanced", true))) ||
+                            (q == "Ultra" && currentGraphics.equals("Ultra HD", true))
                         Button(
                             onClick = { onSelectGraphics(q) },
                             colors = ButtonDefaults.buttonColors(

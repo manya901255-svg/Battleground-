@@ -37,12 +37,15 @@ import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.Leaderboard
 import androidx.compose.material.icons.filled.LocalOffer
 import androidx.compose.material.icons.filled.MilitaryTech
+import androidx.compose.material.icons.filled.NightsStay
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Pets
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.ShoppingBag
+import androidx.compose.material.icons.filled.WbSunny
+import androidx.compose.material.icons.filled.WbTwilight
 import androidx.compose.material.icons.filled.SportsKabaddi
 import androidx.compose.material.icons.filled.Stars
 import androidx.compose.material.icons.filled.Tune
@@ -420,19 +423,27 @@ fun LobbyBottomBar(
         // Left & Center-Left: Bottom Navigation Bar + Quick Emote/Weather
         Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                val isNight = selectedWeather == WeatherType.NIGHT_OPS
+                val weatherTint = if (isNight) HazardYellow else ElectricBlueSafe
+                val weatherIcon = when (selectedWeather) {
+                    WeatherType.CLEAR -> Icons.Default.WbSunny
+                    WeatherType.SUNSET_STORM -> Icons.Default.WbTwilight
+                    WeatherType.DENSE_FOG -> Icons.Default.Cloud
+                    WeatherType.NIGHT_OPS -> Icons.Default.NightsStay
+                }
                 Row(
                     modifier = Modifier
                         .clip(RoundedCornerShape(8.dp))
                         .background(TacticalSurface.copy(alpha = 0.84f))
-                        .border(1.dp, ElectricBlueSafe.copy(alpha = 0.45f), RoundedCornerShape(8.dp))
+                        .border(1.dp, weatherTint.copy(alpha = 0.50f), RoundedCornerShape(8.dp))
                         .clickable(onClick = onCycleWeather)
                         .padding(horizontal = 8.dp, vertical = 4.dp)
                         .testTag("weather_cycle_button"),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(Icons.Default.Cloud, contentDescription = "Weather", tint = ElectricBlueSafe, modifier = Modifier.size(13.dp))
+                    Icon(weatherIcon, contentDescription = "Day Night Weather", tint = weatherTint, modifier = Modifier.size(13.dp))
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text(selectedWeather.displayName.uppercase(), color = ElectricBlueSafe, fontSize = 8.sp, fontWeight = FontWeight.Black)
+                    Text(selectedWeather.displayName.uppercase(), color = weatherTint, fontSize = 8.sp, fontWeight = FontWeight.Black)
                 }
                 Row(
                     modifier = Modifier

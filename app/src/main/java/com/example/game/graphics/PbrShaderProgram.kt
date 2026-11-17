@@ -177,35 +177,41 @@ class PbrShaderProgram {
                 vec3 L = normalize(uLightDir);
                 vec3 H = normalize(L + V);
 
-                // Ground contact AO + cavity shading
+                // Ground contact AO + wrap subsurface diffuse shading
                 float contactAo = clamp(0.76 + vWorldPos.y * 0.06, 0.72, 1.0);
-                float nDotL = max(dot(N, L), 0.0);
+                float rawNDotL = dot(N, L);
+                float nDotL = max(rawNDotL, 0.0);
+                float wrapDiffuse = clamp((rawNDotL + 0.22) / 1.22, 0.0, 1.0);
                 float nDotV = max(dot(N, V), 0.001);
                 float nDotH = max(dot(N, H), 0.0);
 
                 // Roughness-driven Blinn-GGX specular lobe + Schlick Fresnel
                 float rough = clamp(uRoughness, 0.06, 0.98);
-                float shininess = mix(140.0, 4.0, rough * rough);
+                float shininess = mix(160.0, 5.0, rough * rough);
                 float specNorm = (shininess + 8.0) / 25.13;
-                float specPower = pow(nDotH, shininess) * specNorm * 0.14;
+                float specPower = pow(nDotH, shininess) * specNorm * 0.16;
                 vec3 f0 = mix(vec3(0.04), albedo, uMetallic);
                 float fresnel = pow(1.0 - nDotV, 5.0);
                 vec3 F = f0 + (vec3(1.0) - f0) * fresnel;
+
+                // Subtle sky rim highlight for crisp realistic 3D character separation
+                float rimFactor = pow(1.0 - nDotV, 3.2) * (1.0 - rough * 0.55) * 0.22;
+                vec3 rimLight = mix(uSkyHorizon, uSunColor, 0.45) * rimFactor;
 
                 // Hemispheric Global Illumination + Reflection Probe
                 vec3 R = reflect(-V, N);
                 float reflSkyMix = clamp(R.y * 0.5 + 0.5, 0.0, 1.0);
                 vec3 iblSky = mix(uGroundBounce, mix(uSkyHorizon, uSkyZenith, clamp(R.y, 0.0, 1.0)), reflSkyMix);
-                float sunGlint = pow(max(dot(R, L), 0.0), mix(48.0, 6.0, rough)) * (1.0 - rough * 0.85);
-                vec3 envSpec = (iblSky + uSunColor * sunGlint * 1.35) * F * mix(0.95, 0.20, rough);
+                float sunGlint = pow(max(dot(R, L), 0.0), mix(52.0, 6.0, rough)) * (1.0 - rough * 0.82);
+                vec3 envSpec = (iblSky + uSunColor * sunGlint * 1.35) * F * mix(0.95, 0.22, rough);
 
                 float hemiMix = clamp(N.y * 0.5 + 0.5, 0.0, 1.0);
-                vec3 ambientGi = mix(uGroundBounce, mix(uSkyHorizon, uSkyZenith, 0.35), hemiMix) * 0.55;
-                vec3 diffuseTerm = albedo * (1.0 - uMetallic * 0.65) * (ambientGi * contactAo + uSunColor * nDotL * 0.92);
+                vec3 ambientGi = mix(uGroundBounce, mix(uSkyHorizon, uSkyZenith, 0.38), hemiMix) * 0.58;
+                vec3 diffuseTerm = albedo * (1.0 - uMetallic * 0.65) * (ambientGi * contactAo + uSunColor * mix(nDotL, wrapDiffuse, 0.35) * 0.94);
                 vec3 directSpec = uSunColor * F * specPower * nDotL;
 
-                vec3 litColor = diffuseTerm + directSpec + envSpec;
-                vec3 emissiveColor = mix(litColor, albedo * (1.0 + uEmissive * 0.35), uEmissive);
+                vec3 litColor = diffuseTerm + directSpec + envSpec + rimLight;
+                vec3 emissiveColor = mix(litColor, albedo * (1.0 + uEmissive * 0.40), uEmissive);
 
                 // Distance Atmospheric Haze + Aerial Perspective
                 float fogFactor = clamp((vViewDist - 42.0) / max(uFogMaxDist - 42.0, 26.0), 0.0, 0.88);
@@ -252,20 +258,33 @@ class PbrShaderProgram {
             void main() {
                 vec3 dir = normalize(vDir);
                 float h = clamp(dir.y, 0.0, 1.0);
-                vec3 sky = mix(uHorizonColor, uZenithColor, pow(h, 0.58));
+                vec3 sky = mix(uHorizonColor, uZenithColor, pow(h, 0.56));
 
-                // Solar disc + atmospheric scatter halo
+                // Solar / Lunar disc + atmospheric scatter halo
                 vec3 L = normalize(uLightDir);
                 float sunDot = max(dot(dir, L), 0.0);
                 float halo = pow(sunDot, 12.0) * 0.42 + pow(sunDot, 220.0) * 1.45;
                 sky += uSunColor * halo;
 
-                // Projected procedural clouds above horizon
-                if (dir.y > 0.04) {
-                    vec2 cloudUv = dir.xz / (dir.y + 0.18) * 1.6 + vec2(uTime * 0.025, uTime * 0.012);
-                    float c = noise(cloudUv * 1.5) * 0.6 + noise(cloudUv * 3.4) * 0.4;
-                    float cloudMask = smoothstep(0.52, 0.84, c) * smoothstep(0.04, 0.28, dir.y) * uCloudDensity;
-                    vec3 cloudCol = mix(vec3(0.95, 0.97, 1.0), uSunColor * 1.1, pow(sunDot, 4.0) * 0.45);
+                // Night Ops Starfield when zenith luminance is dark
+                float zenithLum = dot(uZenithColor, vec3(0.299, 0.587, 0.114));
+                if (zenithLum < 0.14 && dir.y > 0.06) {
+                    vec2 starCell = floor(dir.xz / (dir.y + 0.35) * 85.0);
+                    float starRnd = hash(starCell);
+                    if (starRnd > 0.986) {
+                        float twinkle = 0.65 + 0.35 * sin(uTime * 3.2 + starRnd * 90.0);
+                        float nightMask = smoothstep(0.14, 0.04, zenithLum) * smoothstep(0.06, 0.25, dir.y);
+                        sky += vec3(0.85, 0.92, 1.0) * twinkle * nightMask * 0.95;
+                    }
+                }
+
+                // Multi-octave projected volumetric clouds above horizon
+                if (dir.y > 0.03) {
+                    vec2 cloudUv = dir.xz / (dir.y + 0.18) * 1.55 + vec2(uTime * 0.022, uTime * 0.011);
+                    float c = noise(cloudUv * 1.4) * 0.55 + noise(cloudUv * 3.1 + 1.7) * 0.30 + noise(cloudUv * 6.2) * 0.15;
+                    float cloudMask = smoothstep(0.50, 0.82, c) * smoothstep(0.03, 0.26, dir.y) * uCloudDensity;
+                    vec3 baseCloud = zenithLum < 0.14 ? vec3(0.16, 0.20, 0.30) : vec3(0.95, 0.97, 1.0);
+                    vec3 cloudCol = mix(baseCloud, uSunColor * (zenithLum < 0.14 ? 0.55 : 1.08), pow(sunDot, 4.0) * 0.48);
                     sky = mix(sky, cloudCol, cloudMask);
                 }
 

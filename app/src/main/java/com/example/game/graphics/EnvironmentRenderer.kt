@@ -9,10 +9,11 @@ import kotlin.math.cos
 import kotlin.math.sin
 
 /**
- * Renders the upgraded 3D environment: Height-mapped biome terrain & perimeter mountains,
- * paved roads & steel-truss river bridges, houses & industrial warehouses/factories with glass
- * windows, fluted bark conifer trees, jagged displaced boulders, bushes, wind-swaying grass
- * tufts, and animated water reflections.
+ * Renders a realistic 3D Battle Royale environment: Height-mapped biome terrain & perimeter mountains,
+ * curbed asphalt roads & illuminated streetlamps, arched steel-truss river bridges with submerged piers,
+ * detailed multi-story houses & industrial warehouses with overhanging eaves and lit windows,
+ * military tents, sandbag bunkers, watchtowers, ribbed shipping containers, fluted bark conifers,
+ * displaced boulders, shrubs, wind-swaying grass, and animated rippled water. Zero cube placeholders.
  */
 class EnvironmentRenderer(
     private val meshes: MeshLibrary,
@@ -33,7 +34,7 @@ class EnvironmentRenderer(
     fun ensureTerrainMesh(mapConfig: MapConfig) {
         if (terrainMesh == null || cachedMapId != mapConfig.id) {
             cachedMapId = mapConfig.id
-            terrainMesh = meshes.buildTerrainMeshForMap(mapConfig, gridRes = 56)
+            terrainMesh = meshes.buildTerrainMeshForMap(mapConfig, gridRes = 48)
         }
     }
 
@@ -43,7 +44,8 @@ class EnvironmentRenderer(
         focusZ: Float,
         drawDist: Float,
         graphicsConfig: GraphicsConfig,
-        frameTimeSec: Float
+        frameTimeSec: Float,
+        isNightMode: Boolean = false
     ) {
         ensureTerrainMesh(mapConfig)
 
@@ -64,19 +66,30 @@ class EnvironmentRenderer(
             )
         }
 
-        // 2. Paved Asphalt Highway Cross & Crosswalk Stripes
-        drawMesh(meshes.unitBox, MaterialId.ASPHALT_ROAD, 250f, 0.03f, 250f, 0f, 0f, 0f, 500f, 0.06f, 11f, 0.24f, 0.25f, 0.28f, 1f, 0.74f, 0.05f, uvScaleX = 28f, uvScaleY = 1.5f)
-        drawMesh(meshes.unitBox, MaterialId.ASPHALT_ROAD, 250f, 0.035f, 250f, 0f, 0f, 0f, 11f, 0.06f, 500f, 0.24f, 0.25f, 0.28f, 1f, 0.74f, 0.05f, uvScaleX = 1.5f, uvScaleY = 28f)
+        // 2. Curbed Asphalt Highway Cross, Lane Markings & Streetlamps
+        drawMesh(meshes.chamferedStructure, MaterialId.ASPHALT_ROAD, 250f, 0.03f, 250f, 0f, 0f, 0f, 500f, 0.07f, 11.2f, 0.23f, 0.24f, 0.27f, 1f, 0.72f, 0.05f, uvScaleX = 28f, uvScaleY = 1.5f)
+        drawMesh(meshes.chamferedStructure, MaterialId.ASPHALT_ROAD, 250f, 0.035f, 250f, 0f, 0f, 0f, 11.2f, 0.07f, 500f, 0.23f, 0.24f, 0.27f, 1f, 0.72f, 0.05f, uvScaleX = 1.5f, uvScaleY = 28f)
+        // Concrete Raised Sidewalk Curbs
+        for (edgeOff in listOf(-5.85f, 5.85f)) {
+            drawMesh(meshes.chamferedStructure, MaterialId.CONCRETE_WALL, 250f, 0.09f, 250f + edgeOff, 0f, 0f, 0f, 500f, 0.14f, 0.55f, 0.54f, 0.55f, 0.58f, 1f, 0.84f, 0.04f, uvScaleX = 40f, uvScaleY = 1f)
+            drawMesh(meshes.chamferedStructure, MaterialId.CONCRETE_WALL, 250f + edgeOff, 0.095f, 250f, 0f, 0f, 0f, 0.55f, 0.14f, 500f, 0.54f, 0.55f, 0.58f, 1f, 0.84f, 0.04f, uvScaleX = 1f, uvScaleY = 40f)
+        }
         val snapX = ((focusX / 12f).toInt() * 12f).coerceIn(24f, 476f)
         val snapZ = ((focusZ / 12f).toInt() * 12f).coerceIn(24f, 476f)
         for (i in -6..6) {
             val sx = snapX + i * 12f
             val sz = snapZ + i * 12f
             if (abs(250f - focusZ) < drawDist) {
-                drawMesh(meshes.unitBox, MaterialId.CONCRETE_WALL, sx, 0.065f, 250f, 0f, 0f, 0f, 4.4f, 0.02f, 0.42f, 0.96f, 0.82f, 0.16f, 1f, 0.45f, 0f, emissive = 0.25f, useTex = 0f)
+                drawMesh(meshes.chamferedStructure, MaterialId.CONCRETE_WALL, sx, 0.07f, 250f, 0f, 0f, 0f, 4.4f, 0.025f, 0.36f, 0.96f, 0.82f, 0.16f, 1f, 0.45f, 0f, emissive = 0.25f, useTex = 0f)
+                if (i % 3 == 0 && abs(sx - 250f) > 12f) {
+                    drawStreetLamp(sx, 256.2f, 180f, isNightMode)
+                }
             }
             if (abs(250f - focusX) < drawDist) {
-                drawMesh(meshes.unitBox, MaterialId.CONCRETE_WALL, 250f, 0.065f, sz, 0f, 0f, 0f, 0.42f, 0.02f, 4.4f, 0.96f, 0.82f, 0.16f, 1f, 0.45f, 0f, emissive = 0.25f, useTex = 0f)
+                drawMesh(meshes.chamferedStructure, MaterialId.CONCRETE_WALL, 250f, 0.07f, sz, 0f, 0f, 0f, 0.36f, 0.025f, 4.4f, 0.96f, 0.82f, 0.16f, 1f, 0.45f, 0f, emissive = 0.25f, useTex = 0f)
+                if (i % 3 == 0 && abs(sz - 250f) > 12f) {
+                    drawStreetLamp(256.2f, sz, 90f, isNightMode)
+                }
             }
         }
 
@@ -96,7 +109,7 @@ class EnvironmentRenderer(
             )
         }
 
-        // 4. Steel Truss Bridges Spanning Rivers
+        // 4. Arched Steel-Truss Bridges with Concrete Piers Spanning Rivers
         TerrainHeightfield.bridgesForMap(mapConfig).forEach { br ->
             val bx = br.centerX * TerrainHeightfield.WORLD_SCALE
             val bz = ((br.startY + br.endY) * 0.5f) * TerrainHeightfield.WORLD_SCALE
@@ -104,23 +117,34 @@ class EnvironmentRenderer(
             val bLen = (br.endY - br.startY) * TerrainHeightfield.WORLD_SCALE
             val dx = bx - focusX; val dz = bz - focusZ
             if (dx * dx + dz * dz < (drawDist + 40f) * (drawDist + 40f)) {
-                // Concrete roadbed deck
-                drawMesh(meshes.unitBox, MaterialId.ASPHALT_ROAD, bx, br.deckHeightGl + 0.16f, bz, 0f, 0f, 0f, bw, 0.42f, bLen, 0.34f, 0.36f, 0.39f, 1f, 0.7f, 0.1f, uvScaleX = 2f, uvScaleY = 6f)
-                // Steel truss side girders & overhead arch beams
-                for (side in listOf(-bw * 0.48f, bw * 0.48f)) {
-                    drawMesh(meshes.unitBox, MaterialId.CORRUGATED_METAL, bx + side, br.deckHeightGl + 1.45f, bz, 0f, 0f, 0f, 0.45f, 2.3f, bLen, 0.58f, 0.24f, 0.18f, 1f, 0.38f, 0.82f)
-                    drawMesh(meshes.unitBox, MaterialId.CORRUGATED_METAL, bx + side, br.deckHeightGl + 2.65f, bz, 0f, 0f, 0f, 0.55f, 0.36f, bLen * 0.92f, 0.48f, 0.20f, 0.16f, 1f, 0.35f, 0.85f)
+                // Asphalt roadbed deck + raised guardrails
+                drawMesh(meshes.chamferedStructure, MaterialId.ASPHALT_ROAD, bx, br.deckHeightGl + 0.14f, bz, 0f, 0f, 0f, bw, 0.44f, bLen, 0.34f, 0.36f, 0.39f, 1f, 0.7f, 0.1f, uvScaleX = 2f, uvScaleY = 6f)
+                // Concrete river piers supporting deck
+                for (pierZ in listOf(-bLen * 0.30f, 0f, bLen * 0.30f)) {
+                    for (side in listOf(-bw * 0.42f, bw * 0.42f)) {
+                        drawMesh(meshes.columnBeam, MaterialId.CONCRETE_WALL, bx + side, br.deckHeightGl - 0.85f, bz + pierZ, 0f, 0f, 0f, 0.85f, 2.2f, 0.85f, 0.46f, 0.48f, 0.50f, 1f, 0.85f, 0.05f)
+                    }
                 }
-                // Cross overhead steel rafters
+                // Parabolic Steel Arch Trusses + Guardrails
+                for (side in listOf(-bw * 0.48f, bw * 0.48f)) {
+                    drawMesh(meshes.chamferedStructure, MaterialId.CORRUGATED_METAL, bx + side, br.deckHeightGl + 0.72f, bz, 0f, 0f, 0f, 0.38f, 0.65f, bLen, 0.42f, 0.44f, 0.48f, 1f, 0.38f, 0.80f)
+                    drawMesh(meshes.bridgeArchTruss, MaterialId.CORRUGATED_METAL, bx + side, br.deckHeightGl + 2.35f, bz, 0f, 0f, 0f, 0.52f, 3.1f, bLen * 0.92f, 0.58f, 0.24f, 0.18f, 1f, 0.34f, 0.84f)
+                }
+                // Overhead crossbracing struts
                 val spanCount = 4
-                for (k in 0..spanCount) {
-                    val rzPos = bz - bLen * 0.38f + (k.toFloat() / spanCount) * bLen * 0.76f
-                    drawMesh(meshes.unitBox, MaterialId.CORRUGATED_METAL, bx, br.deckHeightGl + 2.65f, rzPos, 0f, 0f, 0f, bw, 0.28f, 0.35f, 0.45f, 0.22f, 0.18f, 1f, 0.35f, 0.85f)
+                for (k in 1 until spanCount) {
+                    val rzPos = bz - bLen * 0.36f + (k.toFloat() / spanCount) * bLen * 0.72f
+                    val archH = sin((k.toFloat() / spanCount) * Math.PI).toFloat() * 2.5f
+                    drawMesh(meshes.chamferedStructure, MaterialId.CORRUGATED_METAL, bx, br.deckHeightGl + 1.2f + archH, rzPos, 0f, 0f, 0f, bw * 0.96f, 0.24f, 0.32f, 0.45f, 0.22f, 0.18f, 1f, 0.35f, 0.85f)
                 }
             }
         }
 
-        // 5. Buildings (Houses, Factories, Warehouses with pitched roofs, recessed framed windows, and doors)
+        // 5. Realistic Multi-Part Houses, Warehouses & Lit Night Windows
+        val winGlow = if (isNightMode) 0.85f else 0.0f
+        val winR = if (isNightMode) 1.0f else 0.24f
+        val winG = if (isNightMode) 0.82f else 0.42f
+        val winB = if (isNightMode) 0.44f else 0.58f
         mapConfig.buildings.forEachIndexed { idx, b ->
             val bx = (b.x + b.width * 0.5f) * TerrainHeightfield.WORLD_SCALE
             val bz = (b.y + b.height * 0.5f) * TerrainHeightfield.WORLD_SCALE
@@ -131,32 +155,37 @@ class EnvironmentRenderer(
                 val isWarehouse = bw > 10.5f || idx % 3 == 0
                 val bh = if (isWarehouse) 6.4f else 5.0f
 
-                // Concrete foundation slab
-                drawMesh(meshes.unitBox, MaterialId.CONCRETE_WALL, bx, 0.22f, bz, 0f, 0f, 0f, bw + 1.0f, 0.44f, bd + 1.0f, 0.32f, 0.34f, 0.36f, 1f, 0.84f, 0.05f, uvScaleX = 3f, uvScaleY = 1f)
+                // Chamfered Concrete Foundation Slab
+                drawMesh(meshes.chamferedStructure, MaterialId.CONCRETE_WALL, bx, 0.22f, bz, 0f, 0f, 0f, bw + 1.0f, 0.44f, bd + 1.0f, 0.34f, 0.36f, 0.38f, 1f, 0.84f, 0.05f, uvScaleX = 3f, uvScaleY = 1f)
 
                 if (isWarehouse) {
-                    // Corrugated steel warehouse / factory walls + pitched metal roof + HVAC
-                    drawMesh(meshes.unitBox, MaterialId.CORRUGATED_METAL, bx, bh * 0.5f + 0.44f, bz, 0f, 0f, 0f, bw, bh, bd, 0.46f, 0.52f, 0.58f, 1f, 0.42f, 0.72f, uvScaleX = 3f, uvScaleY = 2f)
-                    drawMesh(meshes.pitchedRoof, MaterialId.CORRUGATED_METAL, bx, bh + 1.35f, bz, 0f, 0f, 0f, bw + 0.8f, 1.9f, bd + 0.8f, 0.22f, 0.32f, 0.44f, 1f, 0.35f, 0.78f, uvScaleX = 3f, uvScaleY = 2f)
-                    // Sliding steel hangar door + reflective upper clerestory glass windows
-                    drawMesh(meshes.unitBox, MaterialId.CORRUGATED_METAL, bx, 1.85f, bz + bd * 0.5f + 0.06f, 0f, 0f, 0f, 3.1f, 3.2f, 0.16f, 0.16f, 0.48f, 0.76f, 1f, 0.32f, 0.82f)
+                    drawMesh(meshes.corrugatedContainer, MaterialId.CORRUGATED_METAL, bx, bh * 0.5f + 0.44f, bz, 0f, 0f, 0f, bw, bh, bd, 0.46f, 0.52f, 0.58f, 1f, 0.42f, 0.72f, uvScaleX = 3f, uvScaleY = 2f)
+                    drawMesh(meshes.slopedAwningRoof, MaterialId.CORRUGATED_METAL, bx, bh + 1.38f, bz, 0f, 0f, 0f, bw + 0.6f, 1.9f, bd + 0.6f, 0.22f, 0.32f, 0.44f, 1f, 0.35f, 0.78f, uvScaleX = 3f, uvScaleY = 2f)
+                    // Sliding corrugated hangar door + overhead track beam
+                    drawMesh(meshes.corrugatedContainer, MaterialId.CORRUGATED_METAL, bx, 1.85f, bz + bd * 0.5f + 0.14f, 0f, 0f, 0f, 3.1f, 3.2f, 0.22f, 0.18f, 0.46f, 0.72f, 1f, 0.32f, 0.82f)
+                    drawMesh(meshes.chamferedStructure, MaterialId.CORRUGATED_METAL, bx, bh + 2.35f, bz + bd * 0.15f, 0f, 0f, 0f, 1.4f, 0.85f, 1.2f, 0.64f, 0.66f, 0.70f, 1f, 0.42f, 0.7f)
                 } else {
-                    // Two-story battleground house with concrete walls + red-terracotta pitched roof
-                    drawMesh(meshes.unitBox, MaterialId.CONCRETE_WALL, bx, bh * 0.5f + 0.44f, bz, 0f, 0f, 0f, bw, bh, bd, 0.76f, 0.72f, 0.66f, 1f, 0.82f, 0.04f, uvScaleX = 2.5f, uvScaleY = 2f)
-                    drawMesh(meshes.pitchedRoof, MaterialId.CORRUGATED_METAL, bx, bh + 1.28f, bz, 0f, 0f, 0f, bw + 0.9f, 1.75f, bd + 0.9f, 0.62f, 0.28f, 0.20f, 1f, 0.65f, 0.18f, uvScaleX = 3f, uvScaleY = 2f)
-                    drawMesh(meshes.unitBox, MaterialId.WOOD_CRATE, bx, 1.45f, bz + bd * 0.5f + 0.06f, 0f, 0f, 0f, 1.45f, 2.35f, 0.14f, 0.42f, 0.26f, 0.14f, 1f, 0.7f, 0.05f)
+                    // Two-story battleground house with textured stucco walls, overhanging terracotta gable roof, & porch columns
+                    drawMesh(meshes.chamferedStructure, MaterialId.CONCRETE_WALL, bx, bh * 0.5f + 0.44f, bz, 0f, 0f, 0f, bw, bh, bd, 0.76f, 0.72f, 0.66f, 1f, 0.82f, 0.04f, uvScaleX = 2.5f, uvScaleY = 2f)
+                    drawMesh(meshes.slopedAwningRoof, MaterialId.CORRUGATED_METAL, bx, bh + 1.32f, bz, 0f, 0f, 0f, bw + 0.65f, 1.85f, bd + 0.65f, 0.62f, 0.28f, 0.20f, 1f, 0.65f, 0.18f, uvScaleX = 3f, uvScaleY = 2f)
+                    drawMesh(meshes.chamferedStructure, MaterialId.WOOD_CRATE, bx, 1.45f, bz + bd * 0.5f + 0.08f, 0f, 0f, 0f, 1.45f, 2.35f, 0.16f, 0.42f, 0.26f, 0.14f, 1f, 0.7f, 0.05f)
+                    // Entry canopy & porch pillars
+                    drawMesh(meshes.chamferedStructure, MaterialId.WOOD_CRATE, bx, 2.85f, bz + bd * 0.5f + 0.55f, 0f, 0f, 0f, 2.35f, 0.18f, 1.15f, 0.48f, 0.24f, 0.16f, 1f, 0.65f, 0.1f)
+                    drawMesh(meshes.columnBeam, MaterialId.CONCRETE_WALL, bx - 0.95f, 1.45f, bz + bd * 0.5f + 0.92f, 0f, 0f, 0f, 0.20f, 2.8f, 0.20f, 0.68f, 0.66f, 0.62f, 1f, 0.8f, 0.05f)
+                    drawMesh(meshes.columnBeam, MaterialId.CONCRETE_WALL, bx + 0.95f, 1.45f, bz + bd * 0.5f + 0.92f, 0f, 0f, 0f, 0.20f, 2.8f, 0.20f, 0.68f, 0.66f, 0.62f, 1f, 0.8f, 0.05f)
                 }
-                // Reflective Framed Windows on front & side walls
+
+                // Recessed Framed Windows with Glass Panes (lit warm amber at night)
                 val winY = bh * 0.66f
-                drawMesh(meshes.unitBox, MaterialId.CORRUGATED_METAL, bx - bw * 0.26f, winY, bz + bd * 0.5f + 0.05f, 0f, 0f, 0f, 1.75f, 1.35f, 0.14f, 0.10f, 0.48f, 0.82f, 1f, 0.4f, 0.6f)
-                drawMesh(meshes.unitBox, MaterialId.VEHICLE_COAT, bx - bw * 0.26f, winY, bz + bd * 0.5f + 0.10f, 0f, 0f, 0f, 1.42f, 1.02f, 0.10f, 0.22f, 0.38f, 0.52f, 0.94f, 0.06f, 0.92f)
-                drawMesh(meshes.unitBox, MaterialId.CORRUGATED_METAL, bx + bw * 0.26f, winY, bz + bd * 0.5f + 0.05f, 0f, 0f, 0f, 1.75f, 1.35f, 0.14f, 0.10f, 0.48f, 0.82f, 1f, 0.4f, 0.6f)
-                drawMesh(meshes.unitBox, MaterialId.VEHICLE_COAT, bx + bw * 0.26f, winY, bz + bd * 0.5f + 0.10f, 0f, 0f, 0f, 1.42f, 1.02f, 0.10f, 0.22f, 0.38f, 0.52f, 0.94f, 0.06f, 0.92f)
-                drawMesh(meshes.unitBox, MaterialId.VEHICLE_COAT, bx + bw * 0.5f + 0.08f, winY, bz, 0f, 0f, 0f, 0.12f, 1.08f, 1.45f, 0.22f, 0.38f, 0.52f, 0.94f, 0.06f, 0.92f)
+                drawMesh(meshes.chamferedStructure, MaterialId.CORRUGATED_METAL, bx - bw * 0.26f, winY, bz + bd * 0.5f + 0.05f, 0f, 0f, 0f, 1.75f, 1.35f, 0.14f, 0.16f, 0.42f, 0.68f, 1f, 0.4f, 0.6f)
+                drawMesh(meshes.chamferedStructure, MaterialId.VEHICLE_COAT, bx - bw * 0.26f, winY, bz + bd * 0.5f + 0.10f, 0f, 0f, 0f, 1.42f, 1.02f, 0.10f, winR, winG, winB, 0.95f, 0.06f, 0.90f, emissive = winGlow)
+                drawMesh(meshes.chamferedStructure, MaterialId.CORRUGATED_METAL, bx + bw * 0.26f, winY, bz + bd * 0.5f + 0.05f, 0f, 0f, 0f, 1.75f, 1.35f, 0.14f, 0.16f, 0.42f, 0.68f, 1f, 0.4f, 0.6f)
+                drawMesh(meshes.chamferedStructure, MaterialId.VEHICLE_COAT, bx + bw * 0.26f, winY, bz + bd * 0.5f + 0.10f, 0f, 0f, 0f, 1.42f, 1.02f, 0.10f, winR, winG, winB, 0.95f, 0.06f, 0.90f, emissive = winGlow)
+                drawMesh(meshes.chamferedStructure, MaterialId.VEHICLE_COAT, bx + bw * 0.5f + 0.08f, winY, bz, 0f, 0f, 0f, 0.12f, 1.08f, 1.45f, winR, winG, winB, 0.95f, 0.06f, 0.90f, emissive = winGlow)
             }
         }
 
-        // 6. Conifer Pine Trees, Sculpted Boulders, Bushes & Grass Tufts
+        // 6. Conifer Pine Trees, Sculpted Boulders, Bushes, Sandbag Bunkers & Crates
         val isDesert = mapConfig.id == "kalahari_dunes"
         val isSnow = mapConfig.id == "snow_mountain"
         mapConfig.obstacles.forEachIndexed { i, obs ->
@@ -174,14 +203,12 @@ class EnvironmentRenderer(
                         }
                         // Fluted Bark Trunk
                         drawMesh(meshes.treeTrunk, MaterialId.TREE_BARK, ox, gy + 2.0f, oz, 0f, 0f, 0f, 0.56f, 4.1f, 0.56f, 0.42f, 0.28f, 0.16f, 1f, 0.88f, 0.02f, uvScaleX = 1.5f, uvScaleY = 3f)
-                        // 3 Layered Organic Evergreen Cones with snow tint on alpine map
                         val folR = if (isSnow) 0.55f else 0.18f
                         val folG = if (isSnow) 0.68f else 0.46f
                         val folB = if (isSnow) 0.72f else 0.16f
                         drawMesh(meshes.foliageCone, MaterialId.PINE_FOLIAGE, ox, gy + 3.5f, oz, 0f, 12f, sway, r * 1.75f, 2.35f, r * 1.75f, folR, folG, folB, 1f, 0.78f, 0.02f, uvScaleX = 2f, uvScaleY = 2f)
                         drawMesh(meshes.foliageCone, MaterialId.PINE_FOLIAGE, ox, gy + 4.9f, oz, 0f, 48f, sway * 1.2f, r * 1.38f, 2.15f, r * 1.38f, folR + 0.04f, folG + 0.08f, folB + 0.03f, 1f, 0.76f, 0.02f, uvScaleX = 2f, uvScaleY = 2f)
                         drawMesh(meshes.foliageCone, MaterialId.PINE_FOLIAGE, ox, gy + 6.2f, oz, 0f, 82f, sway * 1.5f, r * 0.92f, 1.85f, r * 0.92f, folR + 0.08f, folG + 0.14f, folB + 0.05f, 1f, 0.74f, 0.02f)
-                        // Accompanying low bush around selected trunks
                         if (i % 2 == 0) {
                             drawMesh(meshes.bushCluster, MaterialId.PINE_FOLIAGE, ox + r * 0.85f, gy + 0.42f, oz + 0.4f, 0f, (i * 40f) % 360f, sway, 1.35f, 0.95f, 1.35f, 0.22f, 0.48f, 0.18f, 1f, 0.8f, 0.02f)
                         }
@@ -191,14 +218,17 @@ class EnvironmentRenderer(
                         drawMesh(meshes.boulderRock, MaterialId.CONCRETE_WALL, ox, gy + r * 0.35f, oz, 12f, (i * 37f) % 360f, 0f, r * 1.75f, r * 1.15f, r * 1.48f, rockTint.first, rockTint.second, rockTint.third, 1f, 0.82f, 0.06f)
                         drawMesh(meshes.boulderRock, MaterialId.CONCRETE_WALL, ox + r * 0.42f, gy + r * 0.20f, oz - r * 0.25f, 0f, (i * 83f) % 360f, 0f, r * 0.95f, r * 0.68f, r * 0.90f, rockTint.first * 0.88f, rockTint.second * 0.88f, rockTint.third * 0.88f, 1f, 0.85f, 0.05f)
                     }
-                    ObstacleType.CRATE, ObstacleType.SANDBAGS -> {
-                        drawMesh(meshes.unitBox, MaterialId.WOOD_CRATE, ox, gy + 0.75f, oz, 0f, (i * 19f) % 360f, 0f, 1.6f, 1.5f, 1.6f, 0.66f, 0.48f, 0.28f, 1f, 0.72f, 0.05f)
+                    ObstacleType.SANDBAGS -> {
+                        drawMesh(meshes.sandbagRow, MaterialId.DESERT_SAND, ox, gy + 0.65f, oz, 0f, (i * 29f) % 360f, 0f, 2.3f, 1.25f, 1.25f, 0.68f, 0.58f, 0.42f, 1f, 0.86f, 0.02f)
+                    }
+                    ObstacleType.CRATE -> {
+                        drawMesh(meshes.chamferedStructure, MaterialId.WOOD_CRATE, ox, gy + 0.75f, oz, 0f, (i * 19f) % 360f, 0f, 1.6f, 1.5f, 1.6f, 0.66f, 0.48f, 0.28f, 1f, 0.72f, 0.05f)
                     }
                 }
             }
         }
 
-        // 7. Ambient Grass Blades Near Player Camera (LOD culled)
+        // 7. Ambient Wind-Swaying Grass Blades Near Camera (LOD culled)
         val grassStep = graphicsConfig.grassDensityStep
         if (grassStep > 0 && !isDesert) {
             val baseX = ((focusX / 5f).toInt() * 5)
@@ -207,7 +237,7 @@ class EnvironmentRenderer(
                 for (gx in -20..20 step (4 * grassStep)) {
                     val px = (baseX + gx).toFloat()
                     val pz = (baseZ + gz).toFloat()
-                    if (abs(px - 250f) < 6.5f || abs(pz - 250f) < 6.5f) continue // skip asphalt highways
+                    if (abs(px - 250f) < 6.5f || abs(pz - 250f) < 6.5f) continue
                     val ex = px / TerrainHeightfield.WORLD_SCALE
                     val ez = pz / TerrainHeightfield.WORLD_SCALE
                     if (TerrainHeightfield.isInWaterNotOnBridge(mapConfig, ex, ez)) continue
@@ -221,29 +251,59 @@ class EnvironmentRenderer(
             }
         }
 
-        // 8. Iconic Arena Landmarks (Shipping Containers, Crates, Fence, Billboard, Cooling Tower, Radio Mast)
+        // 8. Military Compounds, Watchtower, Tents, Shipping Containers, Cooling Tower & Radio Mast
         if ((focusX - 250f) * (focusX - 250f) + (focusZ - 250f) * (focusZ - 250f) < drawDist * drawDist) {
-            drawMesh(meshes.unitBox, MaterialId.CORRUGATED_METAL, 264f, 1.7f, 240f, 0f, -15f, 0f, 7.6f, 3.4f, 3.2f, 0.12f, 0.48f, 0.82f, 1f, 0.36f, 0.82f, uvScaleX = 4f, uvScaleY = 1.5f)
-            drawMesh(meshes.unitBox, MaterialId.CORRUGATED_METAL, 234f, 1.7f, 263f, 0f, 72f, 0f, 7.2f, 3.3f, 3.1f, 0.22f, 0.40f, 0.28f, 1f, 0.38f, 0.78f, uvScaleX = 4f, uvScaleY = 1.5f)
+            // Intermodal Ribbed Shipping Containers
+            drawMesh(meshes.corrugatedContainer, MaterialId.CORRUGATED_METAL, 264f, 1.7f, 240f, 0f, -15f, 0f, 7.6f, 3.4f, 3.2f, 0.12f, 0.48f, 0.82f, 1f, 0.36f, 0.82f, uvScaleX = 4f, uvScaleY = 1.5f)
+            drawMesh(meshes.corrugatedContainer, MaterialId.CORRUGATED_METAL, 234f, 1.7f, 263f, 0f, 72f, 0f, 7.2f, 3.3f, 3.1f, 0.22f, 0.40f, 0.28f, 1f, 0.38f, 0.78f, uvScaleX = 4f, uvScaleY = 1.5f)
 
-            // Stacked Wooden Crates
-            drawMesh(meshes.unitBox, MaterialId.WOOD_CRATE, 260f, 0.85f, 244f, 0f, 5f, 0f, 1.8f, 1.7f, 1.8f, 0.72f, 0.52f, 0.30f, 1f, 0.72f, 0.04f)
-            drawMesh(meshes.unitBox, MaterialId.WOOD_CRATE, 262f, 0.85f, 244.5f, 0f, 12f, 0f, 1.8f, 1.7f, 1.8f, 0.66f, 0.46f, 0.25f, 1f, 0.72f, 0.04f)
-            drawMesh(meshes.unitBox, MaterialId.WOOD_CRATE, 261f, 2.55f, 244.2f, 0f, -8f, 0f, 1.7f, 1.7f, 1.7f, 0.75f, 0.56f, 0.32f, 1f, 0.70f, 0.04f)
-            drawMesh(meshes.unitBox, MaterialId.WOOD_CRATE, 242f, 0.65f, 260f, 0f, 12f, 0f, 6.5f, 1.25f, 0.24f, 0.56f, 0.40f, 0.22f, 1f, 0.75f, 0.02f, uvScaleX = 3f, uvScaleY = 1f)
+            // Field Military Canvas Tent & Fortified Sandbag Bunker
+            val gyTent = TerrainHeightfield.groundHeightGl(mapConfig, 2240f, 2340f)
+            drawMesh(meshes.militaryTent, MaterialId.TACTICAL_FABRIC, 224f, gyTent + 1.85f, 234f, 0f, 22f, 0f, 5.2f, 3.7f, 6.8f, 0.28f, 0.34f, 0.24f, 1f, 0.82f, 0.04f)
+            drawMesh(meshes.sandbagRow, MaterialId.DESERT_SAND, 230f, gyTent + 0.65f, 236f, 0f, 18f, 0f, 3.6f, 1.3f, 1.4f, 0.66f, 0.56f, 0.40f, 1f, 0.86f, 0.02f)
+
+            // Perimeter Watchtower & Radome Dish
+            val gyTower = TerrainHeightfield.groundHeightGl(mapConfig, 2760f, 2680f)
+            for (lx in listOf(-1.2f, 1.2f)) {
+                for (lz in listOf(-1.2f, 1.2f)) {
+                    drawMesh(meshes.columnBeam, MaterialId.CORRUGATED_METAL, 276f + lx, gyTower + 3.8f, 268f + lz, 0f, 0f, 0f, 0.26f, 7.6f, 0.26f, 0.32f, 0.36f, 0.40f, 1f, 0.35f, 0.82f)
+                }
+            }
+            drawMesh(meshes.chamferedStructure, MaterialId.CONCRETE_WALL, 276f, gyTower + 7.6f, 268f, 0f, 0f, 0f, 3.6f, 0.35f, 3.6f, 0.38f, 0.40f, 0.44f, 1f, 0.75f, 0.12f)
+            drawMesh(meshes.chamferedStructure, MaterialId.CORRUGATED_METAL, 276f, gyTower + 9.0f, 268f, 0f, 0f, 0f, 2.8f, 2.4f, 2.8f, 0.28f, 0.34f, 0.40f, 1f, 0.40f, 0.65f)
+            drawMesh(meshes.slopedAwningRoof, MaterialId.CORRUGATED_METAL, 276f, gyTower + 10.7f, 268f, 0f, 0f, 0f, 3.4f, 1.2f, 3.4f, 0.48f, 0.24f, 0.20f, 1f, 0.50f, 0.40f)
+            val beaconBlink = 0.5f + 0.5f * sin(frameTimeSec * 5f)
+            drawMesh(meshes.radomeSphere, MaterialId.SKIN_DETAIL, 276f, gyTower + 11.6f, 268f, 0f, 0f, 0f, 0.55f, 0.55f, 0.55f, 1.0f, 0.24f * beaconBlink, 0.14f, 1f, 0.2f, 0f, emissive = 1.0f, useTex = 0f)
+
+            // Stacked Wooden Supply Crates & Barrier
+            drawMesh(meshes.chamferedStructure, MaterialId.WOOD_CRATE, 260f, 0.85f, 244f, 0f, 5f, 0f, 1.8f, 1.7f, 1.8f, 0.72f, 0.52f, 0.30f, 1f, 0.72f, 0.04f)
+            drawMesh(meshes.chamferedStructure, MaterialId.WOOD_CRATE, 262f, 0.85f, 244.5f, 0f, 12f, 0f, 1.8f, 1.7f, 1.8f, 0.66f, 0.46f, 0.25f, 1f, 0.72f, 0.04f)
+            drawMesh(meshes.chamferedStructure, MaterialId.WOOD_CRATE, 261f, 2.55f, 244.2f, 0f, -8f, 0f, 1.7f, 1.7f, 1.7f, 0.75f, 0.56f, 0.32f, 1f, 0.70f, 0.04f)
+            drawMesh(meshes.sandbagRow, MaterialId.DESERT_SAND, 242f, 0.65f, 260f, 0f, 12f, 0f, 6.2f, 1.3f, 1.1f, 0.64f, 0.54f, 0.38f, 1f, 0.84f, 0.02f)
 
             // Highway Billboard
-            drawMesh(meshes.treeTrunk, MaterialId.CORRUGATED_METAL, 272f, 3.2f, 232f, 0f, 0f, 0f, 0.62f, 6.4f, 0.62f, 0.26f, 0.28f, 0.32f, 1f, 0.3f, 0.85f)
-            drawMesh(meshes.unitBox, MaterialId.CORRUGATED_METAL, 272f, 6.8f, 232f, 0f, -20f, 0f, 7.6f, 3.6f, 0.45f, 0.10f, 0.12f, 0.20f, 1f, 0.28f, 0.82f)
-            drawMesh(meshes.unitBox, MaterialId.VEHICLE_COAT, 272f, 6.8f, 232.18f, 0f, -20f, 0f, 7.0f, 3.0f, 0.25f, 1.0f, 0.72f, 0.10f, 1f, 0.2f, 0.4f, emissive = 0.75f)
+            drawMesh(meshes.columnBeam, MaterialId.CORRUGATED_METAL, 272f, 3.2f, 232f, 0f, 0f, 0f, 0.58f, 6.4f, 0.58f, 0.26f, 0.28f, 0.32f, 1f, 0.3f, 0.85f)
+            drawMesh(meshes.chamferedStructure, MaterialId.CORRUGATED_METAL, 272f, 6.8f, 232f, 0f, -20f, 0f, 7.6f, 3.6f, 0.45f, 0.10f, 0.12f, 0.20f, 1f, 0.28f, 0.82f)
+            drawMesh(meshes.chamferedStructure, MaterialId.VEHICLE_COAT, 272f, 6.8f, 232.18f, 0f, -20f, 0f, 7.0f, 3.0f, 0.25f, 1.0f, 0.72f, 0.10f, 1f, 0.2f, 0.4f, emissive = 0.75f)
 
-            // Cylindrical Industrial Cooling Tower + Radio Lattice Mast
+            // Cylindrical Industrial Cooling Tower + Radio Lattice Mast + Radome Sphere
             drawMesh(meshes.treeTrunk, MaterialId.CONCRETE_WALL, 295f, 10.5f, 195f, 0f, 0f, 0f, 11.5f, 21f, 11.5f, 0.60f, 0.64f, 0.68f, 1f, 0.82f, 0.05f, uvScaleX = 4f, uvScaleY = 3f)
             drawMesh(meshes.wheelCylinder, MaterialId.CONCRETE_WALL, 295f, 21.4f, 195f, 90f, 0f, 0f, 8.6f, 8.6f, 1.2f, 0.72f, 0.75f, 0.78f, 1f, 0.78f, 0.08f)
             drawMesh(meshes.treeTrunk, MaterialId.CORRUGATED_METAL, 318f, 10f, 212f, 0f, 0f, 0f, 1.8f, 20f, 1.8f, 0.46f, 0.50f, 0.55f, 1f, 0.30f, 0.88f)
             val beaconPulse = 0.55f + 0.45f * sin(frameTimeSec * 4.5f)
-            drawMesh(meshes.boulderRock, MaterialId.SKIN_DETAIL, 318f, 20.6f, 212f, 0f, 0f, 0f, 0.75f, 0.75f, 0.75f, 1.0f, 0.16f * beaconPulse, 0.12f, 1f, 0.2f, 0f, emissive = 1.0f, useTex = 0f)
+            drawMesh(meshes.radomeSphere, MaterialId.SKIN_DETAIL, 318f, 20.6f, 212f, 0f, 0f, 0f, 0.85f, 0.85f, 0.85f, 1.0f, 0.16f * beaconPulse, 0.12f, 1f, 0.2f, 0f, emissive = 1.0f, useTex = 0f)
         }
+    }
+
+    private fun drawStreetLamp(x: Float, z: Float, rotY: Float, isNightMode: Boolean) {
+        drawMesh(meshes.columnBeam, MaterialId.CORRUGATED_METAL, x, 2.8f, z, 0f, rotY, 0f, 0.18f, 5.6f, 0.18f, 0.22f, 0.24f, 0.28f, 1f, 0.32f, 0.86f)
+        drawMesh(meshes.chamferedStructure, MaterialId.CORRUGATED_METAL, x, 5.65f, z, 0f, rotY, 0f, 0.35f, 0.18f, 1.25f, 0.22f, 0.24f, 0.28f, 1f, 0.30f, 0.84f)
+        drawMesh(
+            meshes.radomeSphere, MaterialId.SKIN_DETAIL,
+            x, 5.52f, z, 0f, rotY, 0f, 0.38f, 0.18f, 0.52f,
+            1.0f, 0.88f, 0.58f, 1f, 0.1f, 0f,
+            emissive = if (isNightMode) 1.0f else 0.25f, useTex = 0f
+        )
     }
 
     private fun drawMesh(

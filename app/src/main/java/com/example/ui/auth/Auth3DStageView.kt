@@ -20,6 +20,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import com.example.game.graphics.CharacterAndVehicleRenderer
 import com.example.game.graphics.EnvironmentRenderer
 import com.example.game.graphics.GlMesh
+import com.example.game.graphics.GlResolutionScaler
 import com.example.game.graphics.GraphicsConfig
 import com.example.game.graphics.MaterialId
 import com.example.game.graphics.MeshLibrary
@@ -87,46 +88,19 @@ fun Auth3DStageView(
 
     AndroidView(
         factory = { surfaceView },
-        update = { view ->
-            view.applyResolutionScale(graphicsConfig.resolutionScale)
-        },
         modifier = modifier.fillMaxSize()
     )
 }
 
 private class Auth3DSurfaceView(
     context: Context,
-    val renderer: Auth3DRenderer
+    renderer: Auth3DRenderer
 ) : GLSurfaceView(context) {
-    private var baseWidth = 0
-    private var baseHeight = 0
-    private var lastScale = -1f
-
     init {
         setEGLContextClientVersion(2)
+        preserveEGLContextOnPause = true
         setRenderer(renderer)
         renderMode = RENDERMODE_CONTINUOUSLY
-    }
-
-    override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
-        super.onSizeChanged(w, h, oldw, oldh)
-        if (w > 0 && h > 0 && baseWidth == 0) {
-            baseWidth = w
-            baseHeight = h
-        }
-        applyResolutionScale(renderer.graphicsConfig.resolutionScale)
-    }
-
-    fun applyResolutionScale(scale: Float) {
-        val clamped = scale.coerceIn(0.60f, 1.00f)
-        if (baseWidth > 0 && baseHeight > 0 && kotlin.math.abs(clamped - lastScale) > 0.03f) {
-            lastScale = clamped
-            val targetW = (baseWidth * clamped).toInt().coerceAtLeast(320)
-            val targetH = (baseHeight * clamped).toInt().coerceAtLeast(180)
-            post {
-                holder.setFixedSize(targetW, targetH)
-            }
-        }
     }
 }
 
@@ -139,6 +113,7 @@ private class Auth3DRenderer(
 
     private val shader = PbrShaderProgram()
     private val textures = PbrTextureAtlas()
+    private val resolutionScaler = GlResolutionScaler()
     private lateinit var meshes: MeshLibrary
     private lateinit var envRenderer: EnvironmentRenderer
     private lateinit var actorRenderer: CharacterAndVehicleRenderer
@@ -200,6 +175,7 @@ private class Auth3DRenderer(
         GLES20.glEnable(GLES20.GL_BLEND)
         GLES20.glBlendFunc(GLES20.GL_SRC_ALPHA, GLES20.GL_ONE_MINUS_SRC_ALPHA)
 
+        resolutionScaler.reset()
         shader.init()
         meshes = MeshLibrary()
         textures.ensureInitialized(
@@ -253,6 +229,7 @@ private class Auth3DRenderer(
         val sunR = 1.0f; val sunG = 0.95f; val sunB = 0.85f
         val sunDirX = -0.35f; val sunDirY = 0.78f; val sunDirZ = -0.52f
 
+        resolutionScaler.beginScaledPass(viewportWidth, viewportHeight, cfg.resolutionScale)
         GLES20.glClearColor(horizonR, horizonG, horizonB, 1f)
         GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT or GLES20.GL_DEPTH_BUFFER_BIT)
 
@@ -279,7 +256,15 @@ private class Auth3DRenderer(
         envRenderer.setViewProjection(vpMatrix)
         actorRenderer.setViewProjection(vpMatrix)
 
-        envRenderer.renderWorldEnvironment(mapConfig, focusX, focusZ, drawDist, cfg, frameTimeSec)
+        envRenderer.renderWorldEnvironment(
+            mapConfig = mapConfig,
+            focusX = focusX,
+            focusZ = focusZ,
+            drawDist = drawDist,
+            graphicsConfig = cfg,
+            frameTimeSec = frameTimeSec,
+            isNightMode = false
+        )
 
         // Foreground Left Volcanic Rocky Cliff Outcrop
         drawMesh(meshes.boulderRock, MaterialId.CONCRETE_WALL, focusX - 2.35f, baseGroundY + 0.15f, focusZ + 0.45f, 0f, 18f, -12f, 2.75f, 1.35f, 2.25f, 0.12f, 0.12f, 0.15f, 1f, 0.90f, 0.08f, 0f)
@@ -338,6 +323,8 @@ private class Auth3DRenderer(
         // Embers & Crimson Smoke Flare VFX
         updateAndDrawAuthVfx(dt, focusX, baseGroundY, focusZ)
 
+        resolutionScaler.endScaledPassAndPresent(viewportWidth, viewportHeight)
+
         if (cfg.targetFps <= 32) {
             val elapsedMs = (System.nanoTime() - nowNs) / 1_000_000L
             val remain = 32L - elapsedMs
@@ -349,24 +336,24 @@ private class Auth3DRenderer(
 
     private fun renderWarXCliffFlag(poleBaseX: Float, poleBaseY: Float, poleBaseZ: Float) {
         // Slanted Steel Flagpole
-        drawMesh(meshes.unitBox, MaterialId.CORRUGATED_METAL, poleBaseX, poleBaseY + 1.4f, poleBaseZ, 0f, 0f, 14f, 0.08f, 3.6f, 0.08f, 0.16f, 0.16f, 0.20f, 1f, 0.35f, 0.85f, 0f)
-        // Animated Cloth Segments (3 undulating strips + crimson crown crest)
+        drawMesh(meshes.columnBeam, MaterialId.CORRUGATED_METAL, poleBaseX, poleBaseY + 1.4f, poleBaseZ, 0f, 0f, 14f, 0.08f, 3.6f, 0.08f, 0.16f, 0.16f, 0.20f, 1f, 0.35f, 0.85f, 0f)
+        // Animated Cloth Segments (3 undulating cloth strips + crimson crown crest)
         for (i in 0..3) {
             val waveZ = sin(frameTimeSec * 4.8f - i * 0.8f) * 0.10f
             val waveY = cos(frameTimeSec * 3.6f - i * 0.7f) * 0.04f
             val segX = poleBaseX - 0.15f - i * 0.36f
             val segY = poleBaseY + 2.45f + i * 0.08f + waveY
             drawMesh(
-                meshes.unitBox, MaterialId.TACTICAL_FABRIC,
+                meshes.bannerClothStrip, MaterialId.TACTICAL_FABRIC,
                 segX, segY, poleBaseZ + waveZ,
                 0f, waveZ * 45f, 12f,
-                0.38f, 1.35f, 0.04f,
+                0.38f, 1.35f, 0.05f,
                 0.08f, 0.08f, 0.10f, 0.96f, 0.75f, 0.05f, 0f
             )
             if (i == 1 || i == 2) {
                 drawMesh(
-                    meshes.unitBox, MaterialId.VEHICLE_COAT,
-                    segX, segY + 0.06f, poleBaseZ + waveZ + 0.028f,
+                    meshes.chamferedStructure, MaterialId.VEHICLE_COAT,
+                    segX, segY + 0.06f, poleBaseZ + waveZ + 0.03f,
                     0f, waveZ * 45f, 12f,
                     0.30f, 0.54f, 0.02f,
                     0.94f, 0.10f, 0.16f, 0.98f, 0.3f, 0.3f, 0.75f, useTex = 0f
@@ -376,25 +363,29 @@ private class Auth3DRenderer(
     }
 
     private fun renderCoastalRadioOutpost(x: Float, y: Float, z: Float) {
-        // Outpost Building
-        drawMesh(meshes.unitBox, MaterialId.CONCRETE_WALL, x, y + 1.2f, z, 0f, 12f, 0f, 4.2f, 2.4f, 3.6f, 0.26f, 0.28f, 0.36f, 1f, 0.75f, 0.15f, 0f)
-        // Radio Mast Tower + Crimson Beacons
-        drawMesh(meshes.unitBox, MaterialId.CORRUGATED_METAL, x + 0.8f, y + 5.2f, z - 0.5f, 0f, 0f, 0f, 0.55f, 7.6f, 0.55f, 0.22f, 0.25f, 0.32f, 1f, 0.38f, 0.82f, 0f)
-        drawMesh(meshes.unitBox, MaterialId.VEHICLE_COAT, x + 0.8f, y + 8.8f, z - 0.5f, 0f, 0f, 0f, 0.32f, 0.45f, 0.32f, 1.0f, 0.16f, 0.22f, 1f, 0.2f, 0.2f, 0.95f, useTex = 0f)
+        // Outpost Building & Sloped Roof
+        drawMesh(meshes.chamferedStructure, MaterialId.CONCRETE_WALL, x, y + 1.2f, z, 0f, 12f, 0f, 4.2f, 2.4f, 3.6f, 0.26f, 0.28f, 0.36f, 1f, 0.75f, 0.15f, 0f)
+        drawMesh(meshes.slopedAwningRoof, MaterialId.CORRUGATED_METAL, x, y + 2.75f, z, 0f, 12f, 0f, 4.6f, 0.75f, 4.0f, 0.22f, 0.24f, 0.30f, 1f, 0.52f, 0.45f, 0f)
+        // Radio Mast Tower + Crimson Radome Beacons
+        drawMesh(meshes.columnBeam, MaterialId.CORRUGATED_METAL, x + 0.8f, y + 5.2f, z - 0.5f, 0f, 0f, 0f, 0.55f, 7.6f, 0.55f, 0.22f, 0.25f, 0.32f, 1f, 0.38f, 0.82f, 0f)
+        drawMesh(meshes.radomeSphere, MaterialId.VEHICLE_COAT, x + 0.8f, y + 8.95f, z - 0.5f, 0f, 0f, 0f, 0.45f, 0.45f, 0.45f, 1.0f, 0.16f, 0.22f, 1f, 0.2f, 0.2f, 0.95f, useTex = 0f)
     }
 
     private fun renderDropship(x: Float, y: Float, z: Float, yawDeg: Float) {
         drawMesh(meshes.chassisSlopeBody, MaterialId.CORRUGATED_METAL, x, y, z, 6f, yawDeg, -8f, 9.6f, 2.1f, 2.5f, 0.42f, 0.46f, 0.54f, 1f, 0.30f, 0.85f, 0.05f)
-        drawMesh(meshes.unitBox, MaterialId.CORRUGATED_METAL, x, y + 0.22f, z, 6f, yawDeg, -8f, 2.4f, 0.28f, 13.5f, 0.48f, 0.52f, 0.58f, 1f, 0.32f, 0.82f, 0.05f)
-        // Wing Red/Orange Engine Highlights
-        drawMesh(meshes.unitBox, MaterialId.VEHICLE_COAT, x, y + 0.10f, z + 3.6f, 6f, yawDeg, -8f, 1.4f, 0.45f, 0.45f, 0.96f, 0.32f, 0.18f, 1f, 0.2f, 0.4f, 0.8f, useTex = 0f)
-        drawMesh(meshes.unitBox, MaterialId.VEHICLE_COAT, x, y + 0.10f, z - 3.6f, 6f, yawDeg, -8f, 1.4f, 0.45f, 0.45f, 0.96f, 0.32f, 0.18f, 1f, 0.2f, 0.4f, 0.8f, useTex = 0f)
+        drawMesh(meshes.sweptAircraftWing, MaterialId.CORRUGATED_METAL, x, y + 0.22f, z, 6f, yawDeg, -8f, 2.8f, 0.32f, 13.8f, 0.48f, 0.52f, 0.58f, 1f, 0.32f, 0.82f, 0.05f)
+        drawMesh(meshes.aircraftTailFin, MaterialId.VEHICLE_COAT, x, y + 1.85f, z, 6f, yawDeg, -8f, 1.8f, 2.2f, 0.40f, 0.92f, 0.16f, 0.20f, 1f, 0.3f, 0.65f, 0.25f)
+        // Wing Engine Pods + Nav Strobes
+        drawMesh(meshes.rifleBarrel, MaterialId.CORRUGATED_METAL, x + 0.6f, y + 0.05f, z + 3.6f, 6f, yawDeg, -8f, 1.8f, 0.50f, 0.50f, 0.20f, 0.24f, 0.28f, 1f, 0.2f, 0.8f, 0.2f)
+        drawMesh(meshes.rifleBarrel, MaterialId.CORRUGATED_METAL, x + 0.6f, y + 0.05f, z - 3.6f, 6f, yawDeg, -8f, 1.8f, 0.50f, 0.50f, 0.20f, 0.24f, 0.28f, 1f, 0.2f, 0.8f, 0.2f)
+        drawMesh(meshes.radomeSphere, MaterialId.VEHICLE_COAT, x, y + 0.10f, z + 6.4f, 6f, yawDeg, -8f, 0.36f, 0.36f, 0.36f, 0.96f, 0.32f, 0.18f, 1f, 0.2f, 0.4f, 0.9f, useTex = 0f)
+        drawMesh(meshes.radomeSphere, MaterialId.VEHICLE_COAT, x, y + 0.10f, z - 6.4f, 6f, yawDeg, -8f, 0.36f, 0.36f, 0.36f, 0.96f, 0.32f, 0.18f, 1f, 0.2f, 0.4f, 0.9f, useTex = 0f)
     }
 
     private fun renderParachutist(x: Float, y: Float, z: Float, phase: Float) {
         val sway = sin(phase * 1.9f) * 8f
-        drawMesh(meshes.helmetShell, MaterialId.TACTICAL_FABRIC, x, y + 1.25f, z, 0f, 0f, sway, 2.2f, 0.85f, 1.45f, 0.14f, 0.15f, 0.18f, 0.96f, 0.65f, 0.05f, 0f)
-        drawMesh(meshes.unitBox, MaterialId.VEHICLE_COAT, x, y + 1.42f, z, 0f, 0f, sway, 1.6f, 0.22f, 1.15f, 0.95f, 0.16f, 0.20f, 0.95f, 0.35f, 0.2f, 0.4f, useTex = 0f)
+        drawMesh(meshes.curvedParachuteCanopy, MaterialId.TACTICAL_FABRIC, x, y + 1.25f, z, 0f, 0f, sway, 2.3f, 0.85f, 1.50f, 0.14f, 0.15f, 0.18f, 0.96f, 0.65f, 0.05f, 0f)
+        drawMesh(meshes.chamferedStructure, MaterialId.VEHICLE_COAT, x, y + 1.45f, z, 0f, 0f, sway, 1.5f, 0.20f, 0.90f, 0.95f, 0.16f, 0.20f, 0.95f, 0.35f, 0.2f, 0.4f, useTex = 0f)
         drawMesh(meshes.limbCapsule, MaterialId.TACTICAL_FABRIC, x, y + 0.18f, z, 0f, 0f, sway, 0.22f, 0.65f, 0.22f, 0.10f, 0.12f, 0.16f, 1f, 0.6f, 0.1f, 0f)
     }
 

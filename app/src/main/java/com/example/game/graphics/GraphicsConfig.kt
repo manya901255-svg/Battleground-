@@ -42,7 +42,7 @@ data class GraphicsConfig(
     companion object {
         fun fromPreset(preset: String): GraphicsConfig = when (preset.lowercase()) {
             "low", "smooth" -> GraphicsConfig(
-                presetName = "Low",
+                presetName = "Smooth",
                 resolutionScale = 0.65f,
                 shadowQuality = 0,
                 textureQuality = 0,
@@ -51,8 +51,8 @@ data class GraphicsConfig(
                 effectsQuality = 0,
                 targetFps = 30
             )
-            "medium", "balanced" -> GraphicsConfig(
-                presetName = "Medium",
+            "medium", "balanced", "standard" -> GraphicsConfig(
+                presetName = "Standard",
                 resolutionScale = 0.80f,
                 shadowQuality = 1,
                 textureQuality = 1,
@@ -98,8 +98,8 @@ data class GraphicsConfig(
         }
 
         fun normalizePresetName(raw: String): String = when (raw.lowercase()) {
-            "low", "smooth" -> "Low"
-            "medium", "balanced" -> "Medium"
+            "low", "smooth" -> "Smooth"
+            "medium", "balanced", "standard" -> "Standard"
             "ultra", "ultra hd" -> "Ultra"
             else -> "High"
         }

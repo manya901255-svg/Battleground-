@@ -78,6 +78,7 @@ fun Character3DShowcaseView(
         runCatching {
             GLSurfaceView(context).apply {
                 setEGLContextClientVersion(2)
+                preserveEGLContextOnPause = true
                 setRenderer(renderer)
                 renderMode = GLSurfaceView.RENDERMODE_CONTINUOUSLY
             }
@@ -150,6 +151,7 @@ fun Weapon3DShowcaseView(
         runCatching {
             GLSurfaceView(context).apply {
                 setEGLContextClientVersion(2)
+                preserveEGLContextOnPause = true
                 setRenderer(renderer)
                 renderMode = GLSurfaceView.RENDERMODE_CONTINUOUSLY
             }
@@ -452,40 +454,40 @@ private class WeaponShowcaseRenderer : GLSurfaceView.Renderer {
         }
         val glowStrength = 0.22f + (upgradeLevel - 1).coerceIn(0, 4) * 0.16f
 
-        // 1. Upper & Lower Receiver
-        drawWeaponPart(meshes.bevelPack, MaterialId.CORRUGATED_METAL, -0.05f, 0.02f, 0f, 0f, 0f, 0f, 0.72f * lenFactor.coerceAtLeast(0.75f), 0.16f, 0.11f, 0.18f, 0.20f, 0.24f, 0.28f, 0.86f, 0f)
-        // Accent anodized receiver shroud (skin finish)
-        drawWeaponPart(meshes.unitBox, MaterialId.VEHICLE_COAT, -0.02f, 0.065f, 0f, 0f, 0f, 0f, 0.62f * lenFactor.coerceAtLeast(0.7f), 0.07f, 0.115f, skinR, skinG, skinB, 0.18f, 0.78f, glowStrength)
+        // 1. Upper & Lower Sculpted Receiver
+        drawWeaponPart(meshes.weaponReceiver, MaterialId.CORRUGATED_METAL, -0.05f, 0.02f, 0f, 0f, 0f, 0f, 0.72f * lenFactor.coerceAtLeast(0.75f), 0.16f, 0.11f, 0.18f, 0.20f, 0.24f, 0.28f, 0.86f, 0f)
+        // Accent anodized Picatinny receiver shroud (skin finish)
+        drawWeaponPart(meshes.chamferedStructure, MaterialId.VEHICLE_COAT, -0.02f, 0.065f, 0f, 0f, 0f, 0f, 0.62f * lenFactor.coerceAtLeast(0.7f), 0.07f, 0.115f, skinR, skinG, skinB, 0.18f, 0.78f, glowStrength)
 
         // 2. Barrel Assembly
         drawWeaponPart(meshes.rifleBarrel, MaterialId.CORRUGATED_METAL, 0.44f * lenFactor, 0.05f, 0f, 0f, 0f, 0f, 0.62f * lenFactor, 0.055f, 0.055f, 0.24f, 0.26f, 0.30f, 0.20f, 0.92f, 0f)
         if (weaponCategory != WeaponCategory.PISTOL) {
-            // Perforated Handguard / Gas Block
-            drawWeaponPart(meshes.bevelPack, MaterialId.TACTICAL_FABRIC, 0.30f * lenFactor, 0.045f, 0f, 0f, 0f, 0f, 0.38f * lenFactor, 0.105f, 0.095f, skinR * 0.72f, skinG * 0.72f, skinB * 0.72f, 0.36f, 0.65f, glowStrength * 0.5f)
+            // Ventilated Shroud / Gas Block Handguard
+            drawWeaponPart(meshes.chamferedStructure, MaterialId.TACTICAL_FABRIC, 0.30f * lenFactor, 0.045f, 0f, 0f, 0f, 0f, 0.38f * lenFactor, 0.105f, 0.095f, skinR * 0.72f, skinG * 0.72f, skinB * 0.72f, 0.36f, 0.65f, glowStrength * 0.5f)
         }
 
         // 3. Muzzle Attachment
         val muzzleX = 0.76f * lenFactor
         when (muzzleType) {
             MuzzleType.SUPPRESSOR -> drawWeaponPart(meshes.rifleBarrel, MaterialId.CORRUGATED_METAL, muzzleX + 0.10f, 0.05f, 0f, 0f, 0f, 0f, 0.26f, 0.085f, 0.085f, 0.10f, 0.11f, 0.13f, 0.32f, 0.82f, 0f)
-            MuzzleType.COMPENSATOR -> drawWeaponPart(meshes.unitBox, MaterialId.CORRUGATED_METAL, muzzleX + 0.05f, 0.05f, 0f, 0f, 0f, 0f, 0.12f, 0.075f, 0.08f, skinR, skinG, skinB, 0.22f, 0.88f, 0.25f)
+            MuzzleType.COMPENSATOR -> drawWeaponPart(meshes.chamferedStructure, MaterialId.CORRUGATED_METAL, muzzleX + 0.05f, 0.05f, 0f, 0f, 0f, 0f, 0.12f, 0.075f, 0.08f, skinR, skinG, skinB, 0.22f, 0.88f, 0.25f)
             MuzzleType.FLASH_HIDER -> drawWeaponPart(meshes.rifleBarrel, MaterialId.CORRUGATED_METAL, muzzleX + 0.04f, 0.05f, 0f, 0f, 0f, 0f, 0.10f, 0.07f, 0.07f, 0.35f, 0.36f, 0.40f, 0.24f, 0.90f, 0f)
             MuzzleType.NONE -> {}
         }
 
-        // 4. Buttstock (omitted on pistols)
+        // 4. Tactical Buttstock (omitted on pistols)
         if (weaponCategory != WeaponCategory.PISTOL) {
-            drawWeaponPart(meshes.taperedBoot, MaterialId.TACTICAL_FABRIC, -0.52f * lenFactor.coerceAtMost(1.1f), -0.01f, 0f, 0f, 0f, 0f, 0.44f, 0.16f, 0.09f, 0.15f, 0.16f, 0.19f, 0.55f, 0.25f, 0f)
+            drawWeaponPart(meshes.tacticalStock, MaterialId.TACTICAL_FABRIC, -0.52f * lenFactor.coerceAtMost(1.1f), -0.01f, 0f, 0f, 0f, 0f, 0.44f, 0.16f, 0.09f, 0.15f, 0.16f, 0.19f, 0.55f, 0.25f, 0f)
         }
 
-        // 5. Pistol Grip & Detachable Magazine
-        drawWeaponPart(meshes.unitBox, MaterialId.TACTICAL_FABRIC, -0.22f * lenFactor.coerceAtLeast(0.75f), -0.11f, 0f, 0f, 0f, 18f, 0.09f, 0.20f, 0.07f, 0.12f, 0.13f, 0.15f, 0.72f, 0.15f, 0f)
+        // 5. Ergonomic Pistol Grip & Curved Detachable Magazine
+        drawWeaponPart(meshes.ergoGrip, MaterialId.TACTICAL_FABRIC, -0.22f * lenFactor.coerceAtLeast(0.75f), -0.11f, 0f, 0f, 0f, 18f, 0.09f, 0.20f, 0.07f, 0.12f, 0.13f, 0.15f, 0.72f, 0.15f, 0f)
         val magHeight = when (magType) {
             MagType.EXTENDED, MagType.EXTENDED_QUICKDRAW -> 0.30f
             else -> 0.22f
         }
         val magTilt = if (weaponId == "akm") -22f else -10f
-        drawWeaponPart(meshes.unitBox, MaterialId.CORRUGATED_METAL, 0.06f, -0.14f, 0f, 0f, 0f, magTilt, 0.11f, magHeight, 0.065f, skinR * 0.85f, skinG * 0.85f, skinB * 0.85f, 0.28f, 0.75f, glowStrength * 0.6f)
+        drawWeaponPart(meshes.curvedMagazine, MaterialId.CORRUGATED_METAL, 0.06f, -0.14f, 0f, 0f, 0f, magTilt, 0.11f, magHeight, 0.065f, skinR * 0.85f, skinG * 0.85f, skinB * 0.85f, 0.28f, 0.75f, glowStrength * 0.6f)
 
         // 6. Optic Scope on Top Rail
         when (scopeType) {
@@ -495,16 +497,16 @@ private class WeaponShowcaseRenderer : GLSurfaceView.Renderer {
                 drawWeaponPart(meshes.curvedVisor, MaterialId.VEHICLE_COAT, len * 0.48f, 0.16f, 0f, 0f, 0f, 0f, 0.04f, 0.075f, 0.075f, 0.1f, 0.88f, 1.0f, 0.08f, 0.9f, 0.8f)
             }
             ScopeType.RED_DOT, ScopeType.HOLO -> {
-                drawWeaponPart(meshes.unitBox, MaterialId.CORRUGATED_METAL, 0.02f, 0.145f, 0f, 0f, 0f, 0f, 0.12f, 0.08f, 0.085f, 0.12f, 0.14f, 0.18f, 0.22f, 0.85f, 0f)
-                drawWeaponPart(meshes.unitBox, MaterialId.SKIN_DETAIL, 0.02f, 0.15f, 0f, 0f, 0f, 0f, 0.02f, 0.04f, 0.04f, 1.0f, 0.25f, 0.25f, 0.1f, 0f, 0.95f)
+                drawWeaponPart(meshes.opticBody, MaterialId.CORRUGATED_METAL, 0.02f, 0.145f, 0f, 0f, 0f, 0f, 0.12f, 0.08f, 0.085f, 0.12f, 0.14f, 0.18f, 0.22f, 0.85f, 0f)
+                drawWeaponPart(meshes.humanEyeOrb, MaterialId.SKIN_DETAIL, 0.02f, 0.15f, 0f, 0f, 0f, 0f, 0.025f, 0.036f, 0.036f, 1.0f, 0.25f, 0.25f, 0.1f, 0f, 0.95f)
             }
             else -> {}
         }
 
-        // 7. Upgrade Level Holographic Crest Stars along Barrel Side
+        // 7. Upgrade Level Holographic Crest Jewels along Barrel Side
         for (lvlIdx in 0 until upgradeLevel.coerceIn(1, 5)) {
             val sxOff = -0.18f + lvlIdx * 0.075f
-            drawWeaponPart(meshes.unitBox, MaterialId.VEHICLE_COAT, sxOff, 0.04f, 0.062f, 0f, 0f, 45f, 0.028f, 0.028f, 0.015f, 1.0f, 0.82f, 0.15f, 0.15f, 0.8f, 0.95f)
+            drawWeaponPart(meshes.radomeSphere, MaterialId.VEHICLE_COAT, sxOff, 0.04f, 0.062f, 0f, 0f, 45f, 0.030f, 0.030f, 0.018f, 1.0f, 0.82f, 0.15f, 0.15f, 0.8f, 0.95f)
         }
     }
 

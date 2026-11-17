@@ -421,8 +421,11 @@ fun AuthSettingsDialog(
 
                 Text("3D GRAPHICS QUALITY", color = TextSecondary, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    listOf("Low", "Medium", "High", "Ultra").forEach { preset ->
-                        val active = graphics.startsWith(preset, ignoreCase = true)
+                    listOf("Smooth", "Standard", "High", "Ultra").forEach { preset ->
+                        val active = graphics.equals(preset, ignoreCase = true) ||
+                            (preset == "Smooth" && graphics.equals("Low", true)) ||
+                            (preset == "Standard" && (graphics.equals("Medium", true) || graphics.equals("Balanced", true))) ||
+                            (preset == "Ultra" && graphics.equals("Ultra HD", true))
                         Box(
                             modifier = Modifier
                                 .weight(1f)
@@ -430,8 +433,9 @@ fun AuthSettingsDialog(
                                 .background(if (active) WarXGoldBright else Color.White.copy(alpha = 0.08f))
                                 .border(1.dp, if (active) WarXGoldBright else Color.White.copy(alpha = 0.16f), RoundedCornerShape(8.dp))
                                 .clickable {
-                                    graphics = preset
-                                    persist(newQuality = preset)
+                                    val cfg = com.example.game.graphics.GraphicsConfig.fromPreset(preset)
+                                    graphics = cfg.presetName
+                                    persist(newQuality = cfg.presetName)
                                 }
                                 .padding(vertical = 9.dp)
                                 .testTag("auth_gfx_${preset.lowercase()}"),

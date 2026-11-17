@@ -113,7 +113,6 @@ fun BattleScreen(
     }
     LaunchedEffect(activeConfig) {
         renderer.graphicsConfig = activeConfig
-        surfaceViewRef?.applyResolutionScale(activeConfig.resolutionScale)
     }
 
     val damagePaint = remember {

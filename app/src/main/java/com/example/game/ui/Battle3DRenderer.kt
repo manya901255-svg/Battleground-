@@ -8,6 +8,7 @@ import com.example.game.engine.BattleRoyaleEngine
 import com.example.game.graphics.CharacterAndVehicleRenderer
 import com.example.game.graphics.EnvironmentRenderer
 import com.example.game.graphics.GlMesh
+import com.example.game.graphics.GlResolutionScaler
 import com.example.game.graphics.GraphicsConfig
 import com.example.game.graphics.MaterialId
 import com.example.game.graphics.MeshLibrary
@@ -38,35 +39,11 @@ class Battle3DSurfaceView(
     context: Context,
     val renderer: Battle3DRenderer
 ) : GLSurfaceView(context) {
-    private var baseWidth = 0
-    private var baseHeight = 0
-    private var lastAppliedScale = -1f
-
     init {
         setEGLContextClientVersion(2)
+        preserveEGLContextOnPause = true
         setRenderer(renderer)
         renderMode = RENDERMODE_CONTINUOUSLY
-    }
-
-    override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
-        super.onSizeChanged(w, h, oldw, oldh)
-        if (w > 0 && h > 0 && baseWidth == 0) {
-            baseWidth = w
-            baseHeight = h
-        }
-        applyResolutionScale(renderer.graphicsConfig.resolutionScale)
-    }
-
-    fun applyResolutionScale(scale: Float) {
-        val clamped = scale.coerceIn(0.60f, 1.00f)
-        if (baseWidth > 0 && baseHeight > 0 && kotlin.math.abs(clamped - lastAppliedScale) > 0.03f) {
-            lastAppliedScale = clamped
-            val targetW = (baseWidth * clamped).toInt().coerceAtLeast(320)
-            val targetH = (baseHeight * clamped).toInt().coerceAtLeast(240)
-            post {
-                holder.setFixedSize(targetW, targetH)
-            }
-        }
     }
 }
 
@@ -88,6 +65,7 @@ class Battle3DRenderer(
 
     private val shader = PbrShaderProgram()
     private val textures = PbrTextureAtlas()
+    private val resolutionScaler = GlResolutionScaler()
     private lateinit var meshes: MeshLibrary
     private lateinit var envRenderer: EnvironmentRenderer
     private lateinit var actorRenderer: CharacterAndVehicleRenderer
@@ -119,6 +97,7 @@ class Battle3DRenderer(
         GLES20.glEnable(GLES20.GL_BLEND)
         GLES20.glBlendFunc(GLES20.GL_SRC_ALPHA, GLES20.GL_ONE_MINUS_SRC_ALPHA)
 
+        resolutionScaler.reset()
         shader.init()
         meshes = MeshLibrary()
         textures.ensureInitialized(
@@ -236,6 +215,7 @@ class Battle3DRenderer(
         synchronized(lock) { System.arraycopy(vpMatrix, 0, sharedVpMatrix, 0, 16) }
 
         val atmos = computeAtmosphere(engine.mapConfig.id, engine.weatherType)
+        resolutionScaler.beginScaledPass(viewportWidth, viewportHeight, cfg.resolutionScale)
         GLES20.glClearColor(atmos.horizonR, atmos.horizonG, atmos.horizonB, 1f)
         GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT or GLES20.GL_DEPTH_BUFFER_BIT)
 
@@ -269,8 +249,16 @@ class Battle3DRenderer(
             renderSupplyPlane(state.planeX * TerrainHeightfield.WORLD_SCALE, 62f, state.planeY * TerrainHeightfield.WORLD_SCALE, -45f)
         }
 
-        // 4. Environment (Heightfield Terrain, Mountains, Bridges, Warehouses, Houses, Conifer Trees, Boulders, Grass)
-        envRenderer.renderWorldEnvironment(engine.mapConfig, pivotX, pivotZ, drawDist, cfg, frameTimeSec)
+        // 4. Environment (Heightfield Terrain, Mountains, Bridges, Houses, Military Compounds, Conifers, Boulders, Grass)
+        envRenderer.renderWorldEnvironment(
+            mapConfig = engine.mapConfig,
+            focusX = pivotX,
+            focusZ = pivotZ,
+            drawDist = drawDist,
+            graphicsConfig = cfg,
+            frameTimeSec = frameTimeSec,
+            isNightMode = engine.weatherType == WeatherType.NIGHT_OPS
+        )
 
         // 5. Explosive Hazard Barrels, Loot Beacons, Vehicles, Shields, Airdrops, Silhouette Targets
         renderDynamicWorldProps(state, pivotX, pivotZ, drawDist, cfg.shadowQuality)
@@ -294,6 +282,8 @@ class Battle3DRenderer(
         // 7. Bullet Tracers, Explosions, Safe Zone Ring & Pooled 3D VFX Particles
         renderTracersAndZones(state)
         emitAndRenderVfx(dt, state, user, targetGroundY, pivotX, pivotY, pivotZ)
+
+        resolutionScaler.endScaledPassAndPresent(viewportWidth, viewportHeight)
 
         // Frame pacing for battery-saving 30 FPS mode if selected
         if (cfg.targetFps <= 32) {
@@ -357,7 +347,7 @@ class Battle3DRenderer(
                     else -> Triple(1.0f, 0.84f, 0.0f)
                 }
                 drawMesh(meshes.bevelPack, MaterialId.VEHICLE_COAT, lx, gy + 0.35f, lz, 0f, frameTimeSec * 45f, 0f, 0.82f, 0.44f, 0.82f, r, g, b, 0.96f, 0.25f, 0.4f, 0.65f)
-                drawMesh(meshes.unitBox, MaterialId.SKIN_DETAIL, lx, gy + 1.55f, lz, 0f, 0f, 0f, 0.10f, 2.4f, 0.10f, r, g, b, 0.34f, 0.5f, 0f, 1.0f, 0f)
+                drawMesh(meshes.columnBeam, MaterialId.SKIN_DETAIL, lx, gy + 1.55f, lz, 0f, 0f, 0f, 0.12f, 2.4f, 0.12f, r, g, b, 0.34f, 0.5f, 0f, 1.0f, 0f)
             }
         }
 
@@ -376,8 +366,8 @@ class Battle3DRenderer(
             val sz = shield.y * TerrainHeightfield.WORLD_SCALE
             val gy = TerrainHeightfield.groundHeightGl(engine.mapConfig, shield.x, shield.y)
             val rot = -shield.angleDegrees
-            drawMesh(meshes.bevelPack, MaterialId.CORRUGATED_METAL, sx, gy + 1.35f, sz, 0f, rot, 0f, 0.36f, 2.65f, 4.4f, 0.06f, 0.78f, 1.0f, 0.68f, 0.15f, 0.7f, 0.82f)
-            drawMesh(meshes.unitBox, MaterialId.VEHICLE_COAT, sx, gy + 2.72f, sz, 0f, rot, 0f, 0.42f, 0.18f, 4.5f, 0.75f, 0.96f, 1.0f, 0.92f, 0.1f, 0.5f, 1f)
+            drawMesh(meshes.shieldHexBarrier, MaterialId.CORRUGATED_METAL, sx, gy + 1.35f, sz, 0f, rot, 0f, 0.42f, 2.65f, 4.4f, 0.06f, 0.78f, 1.0f, 0.68f, 0.15f, 0.7f, 0.82f)
+            drawMesh(meshes.chamferedStructure, MaterialId.VEHICLE_COAT, sx, gy + 2.72f, sz, 0f, rot, 0f, 0.40f, 0.18f, 4.5f, 0.75f, 0.96f, 1.0f, 0.92f, 0.1f, 0.5f, 1f)
         }
 
         state.airdrops.forEach { drop ->
@@ -385,9 +375,10 @@ class Battle3DRenderer(
             val az = drop.y * TerrainHeightfield.WORLD_SCALE
             val gy = TerrainHeightfield.groundHeightGl(engine.mapConfig, drop.x, drop.y)
             val ay = (gy + drop.altitude * TerrainHeightfield.WORLD_SCALE).coerceAtLeast(gy + 1.1f)
-            drawMesh(meshes.bevelPack, MaterialId.CORRUGATED_METAL, ax, ay, az, 0f, 0f, 0f, 2.2f, 2.2f, 2.2f, 0.84f, 0.15f, 0.15f, 1f, 0.4f, 0.6f, 0f)
-            drawMesh(meshes.unitBox, MaterialId.CORRUGATED_METAL, ax, ay + 1.2f, az, 0f, 0f, 0f, 2.3f, 0.45f, 2.3f, 0.10f, 0.45f, 0.88f, 1f, 0.4f, 0.6f, 0f)
-            drawMesh(meshes.unitBox, MaterialId.SKIN_DETAIL, ax, ay + 25f, az, 0f, 0f, 0f, 0.35f, 50f, 0.35f, 1.0f, 0.18f, 0.15f, 0.32f, 0.5f, 0f, 1f, 0f)
+            drawMesh(meshes.corrugatedContainer, MaterialId.CORRUGATED_METAL, ax, ay, az, 0f, 0f, 0f, 2.2f, 2.2f, 2.2f, 0.84f, 0.15f, 0.15f, 1f, 0.4f, 0.6f, 0f)
+            drawMesh(meshes.chamferedStructure, MaterialId.CORRUGATED_METAL, ax, ay + 1.2f, az, 0f, 0f, 0f, 2.3f, 0.45f, 2.3f, 0.10f, 0.45f, 0.88f, 1f, 0.4f, 0.6f, 0f)
+            drawMesh(meshes.radomeSphere, MaterialId.VEHICLE_COAT, ax, ay + 1.50f, az, 0f, 0f, 0f, 0.42f, 0.28f, 0.42f, 1.0f, 0.25f, 0.18f, 1f, 0.2f, 0.2f, 0.95f, 0f)
+            drawMesh(meshes.columnBeam, MaterialId.SKIN_DETAIL, ax, ay + 25f, az, 0f, 0f, 0f, 0.36f, 50f, 0.36f, 1.0f, 0.18f, 0.15f, 0.32f, 0.5f, 0f, 1f, 0f)
         }
 
         if (engine.gameMode == GameModeType.TRAINING_GROUND) {
@@ -431,7 +422,7 @@ class Battle3DRenderer(
             val sx = cx + (cos(angle) * radius).toFloat()
             val sz = cz + (sin(angle) * radius).toFloat()
             val rotDeg = -Math.toDegrees(angle).toFloat() + 90f
-            drawMesh(meshes.unitBox, MaterialId.SKIN_DETAIL, sx, 7f, sz, 0f, rotDeg, 0f, (2f * Math.PI.toFloat() * radius) / segments, 14f, 0.45f, 0.0f, 0.85f, 1.0f, 0.22f, 0.3f, 0f, 1f, 0f)
+            drawMesh(meshes.shieldHexBarrier, MaterialId.SKIN_DETAIL, sx, 7f, sz, 0f, rotDeg, 0f, (2f * Math.PI.toFloat() * radius) / segments, 14f, 0.45f, 0.0f, 0.85f, 1.0f, 0.22f, 0.3f, 0f, 1f, 0f)
         }
     }
 
@@ -507,9 +498,11 @@ class Battle3DRenderer(
     }
 
     private fun renderSupplyPlane(px: Float, py: Float, pz: Float, rotDeg: Float) {
-        drawMesh(meshes.limbCapsule, MaterialId.CORRUGATED_METAL, px, py, pz, 0f, rotDeg, 90f, 2.8f, 13.5f, 2.8f, 0.92f, 0.94f, 0.96f, 1f, 0.32f, 0.72f, 0.2f)
-        drawMesh(meshes.pitchedRoof, MaterialId.VEHICLE_COAT, px, py + 0.35f, pz, 0f, rotDeg, 0f, 3.4f, 0.55f, 18.0f, 0.86f, 0.18f, 0.18f, 1f, 0.35f, 0.62f, 0.25f)
-        drawMesh(meshes.bevelPack, MaterialId.VEHICLE_COAT, px - 5.2f, py + 2.2f, pz, 0f, rotDeg, 0f, 2.2f, 2.8f, 0.52f, 0.86f, 0.18f, 0.18f, 1f, 0.35f, 0.62f, 0.25f)
+        drawMesh(meshes.chassisSlopeBody, MaterialId.CORRUGATED_METAL, px, py, pz, 0f, rotDeg, 0f, 13.5f, 2.75f, 3.1f, 0.82f, 0.85f, 0.90f, 1f, 0.30f, 0.78f, 0.15f)
+        drawMesh(meshes.sweptAircraftWing, MaterialId.VEHICLE_COAT, px, py + 0.32f, pz, 0f, rotDeg, 0f, 3.6f, 0.48f, 18.5f, 0.86f, 0.18f, 0.18f, 1f, 0.34f, 0.68f, 0.22f)
+        drawMesh(meshes.aircraftTailFin, MaterialId.VEHICLE_COAT, px, py + 2.35f, pz, 0f, rotDeg, 0f, 2.6f, 3.0f, 0.50f, 0.86f, 0.18f, 0.18f, 1f, 0.34f, 0.68f, 0.22f)
+        drawMesh(meshes.rifleBarrel, MaterialId.CORRUGATED_METAL, px + 1.2f, py - 0.15f, pz + 4.4f, 0f, rotDeg, 0f, 2.6f, 0.72f, 0.72f, 0.22f, 0.25f, 0.30f, 1f, 0.25f, 0.88f, 0.1f)
+        drawMesh(meshes.rifleBarrel, MaterialId.CORRUGATED_METAL, px + 1.2f, py - 0.15f, pz - 4.4f, 0f, rotDeg, 0f, 2.6f, 0.72f, 0.72f, 0.22f, 0.25f, 0.30f, 1f, 0.25f, 0.88f, 0.1f)
     }
 
     private fun drawMesh(
