@@ -2,26 +2,26 @@ package com.example.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-// Tactical Military & Cyber Esports Palette
-val TacticalDarkBg = Color(0xFF0A0E17)
-val TacticalSurface = Color(0xFF131A29)
-val TacticalSurfaceVariant = Color(0xFF1E293B)
-val TacticalBorder = Color(0xFF334155)
+// WarX Battleground Crimson, Obsidian, Champion Gold & Coastal Blue Palette
+val TacticalDarkBg = Color(0xFF070910)
+val TacticalSurface = Color(0xFF101524)
+val TacticalSurfaceVariant = Color(0xFF1A2236)
+val TacticalBorder = Color(0xFF2D3952)
 
-// Primary accents
-val CyberOrange = Color(0xFFFF7A00)
-val CyberOrangeLight = Color(0xFFFFA040)
-val HazardYellow = Color(0xFFFFD600)
+// Primary accents (WarX Crimson & Champion Gold)
+val CyberOrange = Color(0xFFE5192B)
+val CyberOrangeLight = Color(0xFFFF4D5E)
+val HazardYellow = Color(0xFFFFD21E)
 val MilitaryGreen = Color(0xFF4CAF50)
 
-// Combat indicators
-val ElectricBlueZone = Color(0xFF00E5FF)
-val ElectricBlueSafe = Color(0xFF00B0FF)
+// Combat & coastal sky indicators
+val ElectricBlueZone = Color(0xFF2EC7FF)
+val ElectricBlueSafe = Color(0xFF1E90FF)
 val RedZoneBombardment = Color(0xFFFF1744)
 val BloodKnockout = Color(0xFFD50000)
 val HealthGreen = Color(0xFF00E676)
 val BoostOrange = Color(0xFFFF9100)
-val AirdropGold = Color(0xFFFFC107)
+val AirdropGold = Color(0xFFFFD21E)
 
 // Text & Neutral
 val TextPrimary = Color(0xFFF8FAFC)

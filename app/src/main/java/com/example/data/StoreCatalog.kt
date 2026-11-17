@@ -61,7 +61,7 @@ object StoreCatalog {
             description = "${CharacterPreset.VORTEX_GHOST.roleTitle} • ${CharacterPreset.VORTEX_GHOST.activeSkillName}: ${CharacterPreset.VORTEX_GHOST.activeSkillDesc}",
             starterOwned = true,
             starterEquipped = true,
-            accentHex = 0xFFFF7A00
+            accentHex = 0xFFE5192B
         ),
         CatalogItemSpec(
             id = "char_nova_valkyrie",
@@ -73,7 +73,7 @@ object StoreCatalog {
             priceBp = 0,
             description = "${CharacterPreset.NOVA_VALKYRIE.roleTitle} • ${CharacterPreset.NOVA_VALKYRIE.activeSkillName}: ${CharacterPreset.NOVA_VALKYRIE.activeSkillDesc}",
             starterOwned = true,
-            accentHex = 0xFFF552B8
+            accentHex = 0xFFFF2E43
         ),
         CatalogItemSpec(
             id = "char_blaze_striker",

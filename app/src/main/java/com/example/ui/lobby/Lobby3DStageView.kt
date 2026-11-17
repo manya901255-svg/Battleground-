@@ -192,6 +192,21 @@ private class Lobby3DRenderer(
         rotationAngle = -38f
     )
 
+    private val partnerOperative = Player(
+        id = "lobby_warx_partner",
+        name = "WarX Partner",
+        isUser = false,
+        teamId = 1,
+        x = 2500f,
+        y = 2500f,
+        z = 0f,
+        angle = 104f,
+        stance = PlayerStance.STAND,
+        characterPresetId = "nova_valkyrie",
+        primaryWeapon1 = WeaponCatalog.createById("akm", "Crimson Bloodline"),
+        activeSlot = 1
+    )
+
     override fun onSurfaceCreated(gl: GL10?, config: EGLConfig?) {
         GLES20.glEnable(GLES20.GL_DEPTH_TEST)
         GLES20.glEnable(GLES20.GL_BLEND)
@@ -333,6 +348,45 @@ private class Lobby3DRenderer(
             shadowQuality = cfg.shadowQuality,
             radarActive = false,
             frameTimeSec = frameTimeSec
+        )
+
+        // Flanking Signature WarX Partner Operative & WarX Crimson Cliff Banner
+        partnerOperative.characterPresetId =
+            if (characterPresetId == "nova_valkyrie") "vortex_ghost" else "nova_valkyrie"
+        partnerOperative.x = showcasePlayer.x - 16.5f
+        partnerOperative.y = showcasePlayer.y - 11.5f
+        partnerOperative.angle = 104f + soldierYawOffset * 0.6f + cos(frameTimeSec * 0.65f) * 2.5f
+        actorRenderer.renderSoldier3D(
+            player = partnerOperative,
+            groundY = groundY + 0.22f,
+            userTeamId = 1,
+            shadowQuality = cfg.shadowQuality,
+            radarActive = false,
+            frameTimeSec = frameTimeSec + 1.2f
+        )
+
+        // WarX Crimson Crown Cliff Flagpole on left side of command pedestal
+        val flagFlutter = sin(frameTimeSec * 4.2f) * 8f
+        drawMesh(
+            meshes.rifleBarrel, MaterialId.CORRUGATED_METAL,
+            px - 2.35f, groundY + 1.65f, pz - 0.85f,
+            0f, 0f, 94f,
+            3.1f, 0.055f, 0.055f,
+            0.16f, 0.17f, 0.20f, 1f, 0.35f, 0.80f, 0.05f
+        )
+        drawMesh(
+            meshes.chamferedStructure, MaterialId.TACTICAL_FABRIC,
+            px - 1.72f, groundY + 2.55f, pz - 0.85f,
+            0f, flagFlutter, -4f,
+            1.28f, 0.88f, 0.05f,
+            0.09f, 0.08f, 0.11f, 1f, 0.68f, 0.12f, 0.10f
+        )
+        drawMesh(
+            meshes.chamferedStructure, MaterialId.VEHICLE_COAT,
+            px - 1.70f, groundY + 2.55f, pz - 0.80f,
+            0f, flagFlutter, -4f,
+            0.72f, 0.46f, 0.06f,
+            0.94f, 0.12f, 0.18f, 1f, 0.25f, 0.35f, 0.52f, useTex = 0f
         )
 
         // Hovering / Standing 3D Companion Pet beside the operative
@@ -480,7 +534,7 @@ private class Lobby3DRenderer(
 
     private fun computeLobbyPalette(theme: LobbyWallpaperTheme, weather: WeatherType): LobbyPalette {
         val base = when (theme) {
-            LobbyWallpaperTheme.DARK_TACTICAL -> LobbyPalette(0.10f, 0.22f, 0.45f, 0.58f, 0.42f, 0.28f, 1.0f, 0.88f, 0.72f, 0.28f, 0.24f, 0.20f, 1.0f, 0.54f, 0.08f, 0.52f, 0.68f, -0.51f)
+            LobbyWallpaperTheme.DARK_TACTICAL -> LobbyPalette(0.09f, 0.30f, 0.72f, 0.42f, 0.62f, 0.90f, 1.0f, 0.92f, 0.76f, 0.24f, 0.20f, 0.22f, 0.94f, 0.13f, 0.20f, 0.52f, 0.72f, -0.46f)
             LobbyWallpaperTheme.DESERT_WARFARE -> LobbyPalette(0.24f, 0.36f, 0.58f, 0.88f, 0.62f, 0.34f, 1.0f, 0.84f, 0.58f, 0.42f, 0.32f, 0.20f, 1.0f, 0.62f, 0.10f, 0.60f, 0.58f, -0.55f)
             LobbyWallpaperTheme.NEON_CYBERPUNK -> LobbyPalette(0.06f, 0.08f, 0.24f, 0.16f, 0.38f, 0.56f, 0.65f, 0.90f, 1.0f, 0.14f, 0.18f, 0.28f, 0.0f, 0.90f, 1.0f, 0.40f, 0.72f, -0.56f)
             LobbyWallpaperTheme.SNOW_BASE -> LobbyPalette(0.18f, 0.34f, 0.62f, 0.70f, 0.82f, 0.94f, 0.94f, 0.97f, 1.0f, 0.42f, 0.48f, 0.56f, 0.45f, 0.85f, 1.0f, 0.48f, 0.74f, -0.46f)

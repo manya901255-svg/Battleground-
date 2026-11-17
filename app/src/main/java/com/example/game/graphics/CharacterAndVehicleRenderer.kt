@@ -84,18 +84,24 @@ class CharacterAndVehicleRenderer(
         val (visR, visG, visB) = if (player.isUser || isTeammate) preset.visorRgb else Triple(1.0f, 0.15f, 0.15f)
 
         val skinTone = when (preset) {
-            CharacterPreset.VORTEX_GHOST, CharacterPreset.FROST_RECON -> Triple(0.84f, 0.68f, 0.56f)
-            CharacterPreset.NOVA_VALKYRIE, CharacterPreset.SERAPH_ECHO -> Triple(0.88f, 0.72f, 0.62f)
+            CharacterPreset.VORTEX_GHOST, CharacterPreset.FROST_RECON -> Triple(0.86f, 0.70f, 0.58f)
+            CharacterPreset.NOVA_VALKYRIE, CharacterPreset.SERAPH_ECHO -> Triple(0.89f, 0.73f, 0.63f)
             CharacterPreset.BLAZE_STRIKER -> Triple(0.56f, 0.38f, 0.28f)
             else -> Triple(0.76f, 0.60f, 0.48f)
         }
         val hairRgb = hairRgbOverride ?: when (preset) {
-            CharacterPreset.NOVA_VALKYRIE -> Triple(0.76f, 0.16f, 0.42f)
+            CharacterPreset.VORTEX_GHOST -> Triple(0.92f, 0.94f, 0.98f)
+            CharacterPreset.NOVA_VALKYRIE -> Triple(0.09f, 0.08f, 0.11f)
             CharacterPreset.CYBER_VIPER -> Triple(0.10f, 0.62f, 0.76f)
             CharacterPreset.FROST_RECON -> Triple(0.88f, 0.90f, 0.94f)
             CharacterPreset.SERAPH_ECHO -> Triple(0.88f, 0.72f, 0.28f)
             else -> Triple(0.12f, 0.10f, 0.10f)
         }
+        val effectiveHalfMaskRgb = halfMaskRgb
+            ?: if (preset == CharacterPreset.VORTEX_GHOST) Triple(0.08f, 0.08f, 0.10f) else null
+        val effectiveHalfMaskAccent = halfMaskAccentRgb
+            ?: if (preset == CharacterPreset.VORTEX_GHOST) Triple(0.95f, 0.12f, 0.18f) else null
+        val effectiveHasPonytail = hasPonytailHair || preset == CharacterPreset.NOVA_VALKYRIE
 
         // Contact Drop Shadow
         if (shadowQuality > 0 && player.vehicleId == null) {
@@ -390,7 +396,7 @@ class CharacterAndVehicleRenderer(
                 )
             }
             // Subtle Mouth / Lips (when not wearing half-mask)
-            if (halfMaskRgb == null) {
+            if (effectiveHalfMaskRgb == null) {
                 drawLocalMesh(
                     meshes.facialMouth, MaterialId.SKIN_DETAIL,
                     tx = 0.150f, ty = 0.105f, tz = 0f,
@@ -411,7 +417,7 @@ class CharacterAndVehicleRenderer(
             r = hairRgb.first, g = hairRgb.second, b = hairRgb.third,
             roughness = 0.70f, metallic = 0.08f
         )
-        if (hasPonytailHair) {
+        if (effectiveHasPonytail) {
             val sway = sin(frameTimeSec * 3.1f + speedNorm * 2f) * (5f + speedNorm * 8f)
             drawLocalMesh(
                 meshes.hairPonytail, MaterialId.TACTICAL_FABRIC,
@@ -426,22 +432,22 @@ class CharacterAndVehicleRenderer(
                 tx = -0.32f, ty = 0.11f, tz = 0f,
                 rx = 0f, ry = 0f, rz = -58f + sway * 1.25f,
                 sx = 0.16f, sy = 0.24f, sz = 0.16f,
-                r = 0.88f, g = 0.14f, b = 0.18f,
-                roughness = 0.56f, metallic = 0.12f, emissive = 0.18f
+                r = 0.94f, g = 0.12f, b = 0.18f,
+                roughness = 0.52f, metallic = 0.14f, emissive = 0.24f
             )
         }
 
         // Sleek Tactical Half-Mask over lower jaw
-        if (halfMaskRgb != null) {
+        if (effectiveHalfMaskRgb != null) {
             drawLocalMesh(
                 meshes.bevelPack, MaterialId.TACTICAL_FABRIC,
                 tx = 0.075f, ty = 0.115f, tz = 0f,
                 rx = 0f, ry = 0f, rz = 0f,
                 sx = 0.23f, sy = 0.155f, sz = 0.265f,
-                r = halfMaskRgb.first, g = halfMaskRgb.second, b = halfMaskRgb.third,
+                r = effectiveHalfMaskRgb.first, g = effectiveHalfMaskRgb.second, b = effectiveHalfMaskRgb.third,
                 roughness = 0.48f, metallic = 0.25f
             )
-            val mAcc = halfMaskAccentRgb ?: Triple(0.95f, 0.12f, 0.16f)
+            val mAcc = effectiveHalfMaskAccent ?: Triple(0.95f, 0.12f, 0.18f)
             drawLocalMesh(
                 meshes.chamferedStructure, MaterialId.VEHICLE_COAT,
                 tx = 0.188f, ty = 0.120f, tz = 0f,
@@ -452,8 +458,10 @@ class CharacterAndVehicleRenderer(
             )
         }
 
-        // Tactical Helmet + Reflective Curved Visor
-        if (showHelmetAndVisor) {
+        // Tactical Helmet + Reflective Curved Visor (only heavy Lv3 combat helmet covers signature WarX heroes)
+        val hideSignatureHairHelmet =
+            (preset == CharacterPreset.VORTEX_GHOST || preset == CharacterPreset.NOVA_VALKYRIE) && player.helmetLevel < 3
+        if (showHelmetAndVisor && !hideSignatureHairHelmet) {
             if (player.helmetLevel > 0) {
                 drawLocalMesh(
                     meshes.helmetShell, MaterialId.CORRUGATED_METAL,
@@ -464,7 +472,7 @@ class CharacterAndVehicleRenderer(
                     roughness = 0.32f, metallic = 0.55f
                 )
             }
-            if (player.helmetLevel >= 2 || player.isUser) {
+            if (player.helmetLevel >= 3) {
                 drawLocalMesh(
                     meshes.curvedVisor, MaterialId.VEHICLE_COAT,
                     tx = 0.04f, ty = 0.21f, tz = 0f,

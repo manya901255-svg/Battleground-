@@ -294,6 +294,7 @@ class ExampleRobolectricTest {
             R.drawable.vortex_hero_soldier_1794458613075,
             R.drawable.vortex_game_icon_1794457264483,
             R.drawable.warx_user_app_icon,
+            R.drawable.warx_welcome_hero,
             R.mipmap.ic_launcher,
             R.mipmap.ic_launcher_round
         )

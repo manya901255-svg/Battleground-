@@ -14,11 +14,11 @@ enum class LobbyWallpaperTheme(
 ) {
     DARK_TACTICAL(
         id = "DARK_TACTICAL",
-        title = "Dark Tactical Battlefield",
-        subtitle = "Runway military base with air transport",
-        drawableResId = R.drawable.vortex_lobby_banner_1794457279200,
+        title = "WarX Crimson Revolution",
+        subtitle = "Obsidian & crimson coastal battleground with hero crest",
+        drawableResId = R.drawable.warx_welcome_hero,
         accentColor = CyberOrange,
-        fallbackGradient = Brush.verticalGradient(listOf(Color(0xFF0F172A), Color(0xFF020617)))
+        fallbackGradient = Brush.verticalGradient(listOf(Color(0xFF0A1F4A), Color(0xFF1B070D), Color(0xFF070910)))
     ),
     DESERT_WARFARE(
         id = "DESERT_WARFARE",

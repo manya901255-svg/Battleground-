@@ -172,7 +172,7 @@ private fun LeftMenuTile(
                     .background(CyberOrange),
                 contentAlignment = Alignment.Center
             ) {
-                Text("$badgeCount", color = Color.Black, fontSize = 7.sp, fontWeight = FontWeight.Black)
+                Text("$badgeCount", color = Color.White, fontSize = 7.sp, fontWeight = FontWeight.Black)
             }
         }
     }
@@ -583,7 +583,7 @@ private fun TeamSizeMiniPill(label: String, selected: Boolean, onClick: () -> Un
     ) {
         Text(
             text = label,
-            color = if (selected) Color.Black else TextSecondary,
+            color = if (selected) Color.White else TextSecondary,
             fontSize = 9.sp,
             fontWeight = FontWeight.Black
         )

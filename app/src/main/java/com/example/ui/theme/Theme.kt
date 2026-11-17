@@ -8,12 +8,12 @@ import androidx.compose.ui.graphics.Color
 
 private val VortexDarkColorScheme = darkColorScheme(
     primary = CyberOrange,
-    onPrimary = Color.Black,
-    primaryContainer = Color(0xFF3E1D00),
+    onPrimary = Color.White,
+    primaryContainer = Color(0xFF4A0710),
     onPrimaryContainer = CyberOrangeLight,
     secondary = ElectricBlueSafe,
-    onSecondary = Color.Black,
-    secondaryContainer = Color(0xFF00364F),
+    onSecondary = Color.White,
+    secondaryContainer = Color(0xFF092B52),
     onSecondaryContainer = ElectricBlueZone,
     tertiary = HazardYellow,
     onTertiary = Color.Black,

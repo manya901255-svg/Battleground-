@@ -582,7 +582,7 @@ fun CharacterSelectionScreen(
                             ) {
                                 Text(
                                     text = if (isFocusedEquipped) "DEPLOYED IN LOBBY ✓" else "DEPLOY OPERATIVE",
-                                    color = if (isFocusedEquipped) HealthGreen else Color.Black,
+                                    color = if (isFocusedEquipped) HealthGreen else Color.White,
                                     fontWeight = FontWeight.Black,
                                     fontSize = 11.sp
                                 )

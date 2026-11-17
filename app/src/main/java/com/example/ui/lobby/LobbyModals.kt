@@ -285,7 +285,7 @@ fun LobbyVipAndSeasonDialog(
                 Text("• Season Rewards: Reach Crown / Heroic for Exclusive Weapon Finishes & 2,500 BP Supply Crate", color = HealthGreen, fontSize = 11.sp)
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
                     Button(onClick = { onDismiss(); onOpenBattlePass() }, colors = ButtonDefaults.buttonColors(containerColor = CyberOrange), modifier = Modifier.weight(1f)) {
-                        Text("WARX PASS", color = Color.Black, fontWeight = FontWeight.Black)
+                        Text("WARX PASS", color = Color.White, fontWeight = FontWeight.Black)
                     }
                     OutlinedButton(onClick = { onDismiss(); onOpenStore() }, border = BorderStroke(1.dp, HazardYellow), modifier = Modifier.weight(1f)) {
                         Text("FEATURED OFFERS", color = HazardYellow, fontWeight = FontWeight.Bold)
@@ -433,7 +433,7 @@ fun LobbyThemeAndUtilityModals(
                         colors = ButtonDefaults.buttonColors(containerColor = if (canClaim) HealthGreen else CyberOrange),
                         modifier = Modifier.fillMaxWidth().testTag("collect_daily_reward_button")
                     ) {
-                        Text(if (canClaim) "COLLECT +1,500 BP" else "CLOSE", color = Color.Black, fontWeight = FontWeight.Black)
+                        Text(if (canClaim) "COLLECT +1,500 BP" else "CLOSE", color = if (canClaim) Color.Black else Color.White, fontWeight = FontWeight.Black)
                     }
                 }
             }
@@ -466,7 +466,7 @@ fun LobbyThemeAndUtilityModals(
                                             Text("CLAIMED ✓", color = HealthGreen, fontWeight = FontWeight.Black, fontSize = 10.sp)
                                         } else {
                                             Button(onClick = { onClaimMail(mail) }, colors = ButtonDefaults.buttonColors(containerColor = CyberOrange), modifier = Modifier.height(34.dp).testTag("claim_mail_${mail.id}")) {
-                                                Text(if (mail.rewardBp > 0L) "CLAIM" else "READ", color = Color.Black, fontWeight = FontWeight.Black, fontSize = 10.sp)
+                                                Text(if (mail.rewardBp > 0L) "CLAIM" else "READ", color = Color.White, fontWeight = FontWeight.Black, fontSize = 10.sp)
                                             }
                                         }
                                     }

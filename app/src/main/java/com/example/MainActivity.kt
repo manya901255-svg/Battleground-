@@ -11,10 +11,22 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -28,7 +40,15 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -56,6 +76,7 @@ import com.example.ui.screens.ShopScreen
 import com.example.ui.screens.SocialScreen
 import com.example.ui.screens.WeaponCollectionScreen
 import com.example.ui.theme.CyberOrange
+import com.example.ui.theme.HazardYellow
 import com.example.ui.theme.LobbyWallpaperTheme
 import com.example.ui.theme.MyApplicationTheme
 import com.example.ui.theme.TacticalDarkBg
@@ -63,6 +84,7 @@ import com.google.firebase.Firebase
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseUser
 import com.google.firebase.auth.auth
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
@@ -124,6 +146,7 @@ fun VortexRootApp(
     var currentUser by remember { mutableStateOf<FirebaseUser?>(auth.currentUser) }
     var isGuestMode by remember { mutableStateOf(false) }
     var selectedServerId by remember { mutableStateOf("in") }
+    var showColdStartWelcome by remember { mutableStateOf(auth.currentUser != null) }
 
     LaunchedEffect(incomingEmailLink) {
         if (!incomingEmailLink.isNullOrBlank() && auth.isSignInWithEmailLink(incomingEmailLink)) {
@@ -144,6 +167,13 @@ fun VortexRootApp(
         }
     }
 
+    LaunchedEffect(showColdStartWelcome) {
+        if (showColdStartWelcome) {
+            delay(2000L)
+            showColdStartWelcome = false
+        }
+    }
+
     DisposableEffect(auth) {
         val listener = FirebaseAuth.AuthStateListener { firebaseAuth ->
             currentUser = firebaseAuth.currentUser
@@ -156,25 +186,77 @@ fun VortexRootApp(
     }
 
     val signedInUser = currentUser
-    if (signedInUser == null && !isGuestMode) {
-        AuthScreen(
-            repository = repository,
-            soundSynthesizer = soundSynthesizer,
-            selectedServerId = selectedServerId,
-            onSelectServer = { selectedServerId = it },
-            onGuestLogin = { isGuestMode = true },
-            onAuthenticated = {
-                isGuestMode = false
-                currentUser = auth.currentUser
-            }
-        )
-    } else {
-        key(signedInUser?.uid ?: "guest_local_session") {
-            MainApp(
-                user = signedInUser,
+    when {
+        showColdStartWelcome && signedInUser != null -> {
+            WarXColdStartWelcomeOverlay(
+                onSkipToLobby = { showColdStartWelcome = false }
+            )
+        }
+        signedInUser == null && !isGuestMode -> {
+            AuthScreen(
                 repository = repository,
                 soundSynthesizer = soundSynthesizer,
-                onRequestSignIn = { isGuestMode = false }
+                selectedServerId = selectedServerId,
+                onSelectServer = { selectedServerId = it },
+                onGuestLogin = { isGuestMode = true },
+                onAuthenticated = {
+                    isGuestMode = false
+                    currentUser = auth.currentUser
+                }
+            )
+        }
+        else -> {
+            key(signedInUser?.uid ?: "guest_local_session") {
+                MainApp(
+                    user = signedInUser,
+                    repository = repository,
+                    soundSynthesizer = soundSynthesizer,
+                    onRequestSignIn = { isGuestMode = false }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun WarXColdStartWelcomeOverlay(
+    onSkipToLobby: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(TacticalDarkBg)
+            .clickable(onClick = onSkipToLobby)
+            .testTag("cold_start_welcome_photo")
+    ) {
+        Image(
+            painter = painterResource(id = R.drawable.warx_welcome_hero),
+            contentDescription = "WARX Battleground Welcome",
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.fillMaxSize()
+        )
+        Row(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 18.dp)
+                .clip(RoundedCornerShape(10.dp))
+                .background(Color(0xE6080B14))
+                .border(1.2.dp, HazardYellow, RoundedCornerShape(10.dp))
+                .padding(horizontal = 18.dp, vertical = 9.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            LinearProgressIndicator(
+                color = CyberOrange,
+                trackColor = Color(0xFF1D2436),
+                modifier = Modifier.width(110.dp)
+            )
+            Text(
+                text = "ENTERING WARX BATTLEGROUND • TAP TO SKIP",
+                color = HazardYellow,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Black,
+                letterSpacing = 1.sp
             )
         }
     }

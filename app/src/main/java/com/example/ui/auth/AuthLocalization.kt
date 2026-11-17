@@ -7,7 +7,7 @@ val WarXRedBright = Color(0xFFFF263B)
 val WarXGold = Color(0xFFFFCA18)
 val WarXGoldBright = Color(0xFFFFDF4D)
 val WarXBlack = Color(0xFF0A0C12)
-val WarXPanelBg = Color(0xCC0D1422)
+val WarXPanelBg = Color(0xEE0B111E)
 val WarXRoyalBlue = Color(0xFF1D6CE0)
 val WarXFacebookBlue = Color(0xFF1877F2)
 

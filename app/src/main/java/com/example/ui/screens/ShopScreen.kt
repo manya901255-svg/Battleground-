@@ -366,7 +366,7 @@ fun ShopScreen(
                                         text = if (isOwned) "OWNED ✓" else cost,
                                         fontSize = 9.sp,
                                         fontWeight = FontWeight.Black,
-                                        color = if (isOwned) HealthGreen else Color.Black
+                                        color = if (isOwned) HealthGreen else Color.White
                                     )
                                 }
                             }
@@ -524,7 +524,7 @@ fun ShopScreen(
                     ) {
                         Text(
                             if (isOwned) "ALREADY OWNED ✓" else "CONFIRM DIRECT PURCHASE",
-                            color = Color.Black,
+                            color = Color.White,
                             fontWeight = FontWeight.Black
                         )
                     }
