@@ -48,6 +48,7 @@ fun Lobby3DStageView(
     petVisible: Boolean,
     equippedWeaponId: String = "m416",
     equippedWeaponSkin: String = "Tactical Slate",
+    equippedVehicleSkinId: String = "vehicle_uaz_camo",
     soldierYawOffset: Float,
     emoteTriggerTick: Int,
     wallpaperTheme: LobbyWallpaperTheme,
@@ -72,6 +73,7 @@ fun Lobby3DStageView(
         petVisible,
         equippedWeaponId,
         equippedWeaponSkin,
+        equippedVehicleSkinId,
         soldierYawOffset,
         wallpaperTheme,
         weatherType,
@@ -83,6 +85,7 @@ fun Lobby3DStageView(
         renderer.petVisible = petVisible
         renderer.equippedWeaponId = equippedWeaponId
         renderer.equippedWeaponSkin = equippedWeaponSkin
+        renderer.equippedVehicleSkinId = equippedVehicleSkinId
         renderer.soldierYawOffset = soldierYawOffset
         renderer.wallpaperTheme = wallpaperTheme
         renderer.weatherType = weatherType
@@ -142,6 +145,7 @@ private class Lobby3DRenderer(
     @Volatile var petVisible: Boolean = true
     @Volatile var equippedWeaponId: String = "m416"
     @Volatile var equippedWeaponSkin: String = "Tactical Slate"
+    @Volatile var equippedVehicleSkinId: String = "vehicle_uaz_camo"
     @Volatile var soldierYawOffset: Float = 0f
     @Volatile var emoteRemainingSec: Float = 0f
     @Volatile var wallpaperTheme: LobbyWallpaperTheme = LobbyWallpaperTheme.DARK_TACTICAL
@@ -321,16 +325,34 @@ private class Lobby3DRenderer(
             0.22f, 0.30f, 0.72f, useTex = 0f
         )
 
-        // Background cruising C-130 Dropship in the sky
+        // Background cruising C-130 Dropship, WARX Blimp Airship & Descending Parachutists
         val planeT = frameTimeSec * 0.16f
         val planeX = px - 18f + cos(planeT) * 52f
         val planeZ = pz - 58f + sin(planeT) * 28f
         val planeYaw = -Math.toDegrees(planeT.toDouble()).toFloat() + 90f
         renderBackdropDropship(planeX, groundY + 26f, planeZ, planeYaw)
 
-        // Background parked tactical UAZ
-        val uazGround = TerrainHeightfield.groundHeightGl(activeMap, parkedVehicle.x, parkedVehicle.y)
-        actorRenderer.renderVehicle3D(parkedVehicle, uazGround, frameTimeSec, cfg.shadowQuality)
+        val blimpDrift = sin(frameTimeSec * 0.32f) * 3.5f
+        renderWarXBlimp(px - 10.5f + blimpDrift, groundY + 13.5f, pz - 32f, 14f)
+        renderCoastalCitadelAndWaterfalls(px + 17.5f, groundY, pz - 46f)
+        renderDistantParachutist(px + 10.5f, groundY + 11.5f + sin(frameTimeSec * 0.6f) * 0.8f, pz - 36f, -24f)
+        renderDistantParachutist(px + 22.0f, groundY + 13.0f + cos(frameTimeSec * 0.5f) * 0.8f, pz - 42f, 18f)
+
+        // Background parked vehicle matching player's equipped vehicle skin
+        val showcaseVehicleType = when {
+            equippedVehicleSkinId.contains("supercar", ignoreCase = true) -> VehicleType.DACIA_SEDAN
+            equippedVehicleSkinId.contains("moto", ignoreCase = true) ||
+                equippedVehicleSkinId.contains("bike", ignoreCase = true) -> VehicleType.MOTORBIKE
+            equippedVehicleSkinId.contains("buggy", ignoreCase = true) -> VehicleType.BUGGY
+            else -> VehicleType.UAZ_JEEP
+        }
+        val activeParkedVehicle = if (parkedVehicle.type == showcaseVehicleType) {
+            parkedVehicle
+        } else {
+            parkedVehicle.copy(type = showcaseVehicleType)
+        }
+        val uazGround = TerrainHeightfield.groundHeightGl(activeMap, activeParkedVehicle.x, activeParkedVehicle.y)
+        actorRenderer.renderVehicle3D(activeParkedVehicle, uazGround, frameTimeSec, cfg.shadowQuality, equippedVehicleSkinId)
 
         // Prominent Animated 3D Playable Operative
         val wKey = "${equippedWeaponId}_${equippedWeaponSkin}"
@@ -443,6 +465,37 @@ private class Lobby3DRenderer(
         drawMesh(meshes.aircraftTailFin, MaterialId.VEHICLE_COAT, x, y + 2.2f, z, 0f, yawDeg, 0f, 2.4f, 2.8f, 0.48f, 0.72f, 0.22f, 0.16f, 1f, 0.32f, 0.75f, 0.25f)
         drawMesh(meshes.rifleBarrel, MaterialId.CORRUGATED_METAL, x + 0.8f, y - 0.12f, z + 4.2f, 0f, yawDeg, 0f, 2.4f, 0.65f, 0.65f, 0.24f, 0.26f, 0.32f, 1f, 0.28f, 0.88f, 0.1f)
         drawMesh(meshes.rifleBarrel, MaterialId.CORRUGATED_METAL, x + 0.8f, y - 0.12f, z - 4.2f, 0f, yawDeg, 0f, 2.4f, 0.65f, 0.65f, 0.24f, 0.26f, 0.32f, 1f, 0.28f, 0.88f, 0.1f)
+    }
+
+    private fun renderWarXBlimp(x: Float, y: Float, z: Float, yawDeg: Float) {
+        // Cobalt/Navy Dirigible Envelope
+        drawMesh(meshes.radomeSphere, MaterialId.VEHICLE_COAT, x, y, z, 0f, yawDeg, 0f, 13.5f, 4.6f, 4.4f, 0.14f, 0.42f, 0.86f, 1f, 0.26f, 0.48f, 0.20f)
+        // Crimson Nose Cap & Tail Stabilizer Fins
+        drawMesh(meshes.radomeSphere, MaterialId.VEHICLE_COAT, x + 5.6f, y, z, 0f, yawDeg, 0f, 3.0f, 2.4f, 2.4f, 0.92f, 0.14f, 0.20f, 1f, 0.25f, 0.45f, 0.35f)
+        drawMesh(meshes.aircraftTailFin, MaterialId.VEHICLE_COAT, x - 5.2f, y + 1.8f, z, 0f, yawDeg, 0f, 2.6f, 2.4f, 0.28f, 0.92f, 0.14f, 0.20f, 1f, 0.3f, 0.5f, 0.40f)
+        drawMesh(meshes.aircraftTailFin, MaterialId.VEHICLE_COAT, x - 5.2f, y - 1.6f, z, 0f, yawDeg, 180f, 2.6f, 2.0f, 0.28f, 0.92f, 0.14f, 0.20f, 1f, 0.3f, 0.5f, 0.40f)
+        // Illuminated WARX Side Billboard Banner + Underbelly Gondola Cabin
+        drawMesh(meshes.chamferedStructure, MaterialId.VEHICLE_COAT, x + 0.3f, y + 0.1f, z + 2.15f, 0f, yawDeg, 0f, 6.8f, 1.55f, 0.22f, 0.98f, 0.16f, 0.24f, 1f, 0.18f, 0.25f, 0.85f, useTex = 0f)
+        drawMesh(meshes.chamferedStructure, MaterialId.CORRUGATED_METAL, x + 0.4f, y - 2.35f, z, 0f, yawDeg, 0f, 3.6f, 0.85f, 1.15f, 0.18f, 0.22f, 0.30f, 1f, 0.3f, 0.8f, 0.15f)
+    }
+
+    private fun renderCoastalCitadelAndWaterfalls(x: Float, gy: Float, z: Float) {
+        // Elevated Multi-Tiered WarX Citadel Fortress with Glowing Gold/Cobalt Tower
+        drawMesh(meshes.chamferedStructure, MaterialId.CONCRETE_WALL, x, gy + 3.2f, z, 0f, -18f, 0f, 15.5f, 6.4f, 10.5f, 0.42f, 0.46f, 0.54f, 1f, 0.72f, 0.12f, 0.05f)
+        drawMesh(meshes.chamferedStructure, MaterialId.VEHICLE_COAT, x, gy + 8.0f, z, 0f, -18f, 0f, 9.2f, 4.8f, 6.8f, 0.14f, 0.36f, 0.78f, 1f, 0.32f, 0.58f, 0.35f)
+        // Golden W Emblem Trim & Beacon Spire
+        drawMesh(meshes.chamferedStructure, MaterialId.VEHICLE_COAT, x, gy + 8.3f, z + 3.45f, 0f, -18f, 0f, 4.4f, 2.2f, 0.3f, 1.0f, 0.78f, 0.16f, 1f, 0.2f, 0.65f, 0.88f, useTex = 0f)
+        drawMesh(meshes.columnBeam, MaterialId.CORRUGATED_METAL, x, gy + 13.0f, z, 0f, 0f, 0f, 0.45f, 6.5f, 0.45f, 0.92f, 0.16f, 0.24f, 1f, 0.25f, 0.75f, 0.65f)
+        // Cascading Twin White-Cyan Waterfall Ribbons Down the Cliff
+        val shimmer = 0.75f + 0.25f * sin(frameTimeSec * 4.5f)
+        for (wfOff in listOf(-4.2f, -1.0f, 2.8f)) {
+            drawMesh(meshes.chamferedStructure, MaterialId.WATER_RIPPLE, x + wfOff, gy + 1.4f, z + 5.8f, -10f, -18f, 0f, 1.55f, 4.8f, 0.35f, 0.68f, 0.90f, 1.0f, 0.82f, 0.1f, 0.2f, 0.45f * shimmer, useTex = 0f)
+        }
+    }
+
+    private fun renderDistantParachutist(x: Float, y: Float, z: Float, yawDeg: Float) {
+        drawMesh(meshes.curvedParachuteCanopy, MaterialId.TACTICAL_FABRIC, x, y + 1.8f, z, 0f, yawDeg, 0f, 2.8f, 0.95f, 1.6f, 0.18f, 0.64f, 0.96f, 0.95f, 0.5f, 0.1f, 0.25f)
+        drawMesh(meshes.limbCapsule, MaterialId.TACTICAL_FABRIC, x, y, z, 0f, yawDeg, 0f, 0.28f, 0.85f, 0.28f, 0.15f, 0.16f, 0.20f, 1f, 0.6f, 0.1f, 0f)
     }
 
     private fun updateAndDrawLobbyParticles(

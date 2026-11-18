@@ -28,6 +28,7 @@ import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.MonetizationOn
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Stars
 import androidx.compose.material.icons.filled.WorkspacePremium
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -47,6 +48,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.UserProfileEntity
 import com.example.game.model.CharacterPreset
+import com.example.game.model.RankTierBadge
+import com.example.ui.components.RankTierCrest
 import com.example.ui.theme.CyberOrange
 import com.example.ui.theme.ElectricBlueSafe
 import com.example.ui.theme.HazardYellow
@@ -71,6 +74,7 @@ fun LobbyTopBar(
     onOpenThemes: () -> Unit,
     onOpenAdmin: () -> Unit,
     onOpenSettings: () -> Unit,
+    onOpenRankGuide: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val activeCharacter = CharacterPreset.fromId(profile.selectedCharacterId)
@@ -120,7 +124,7 @@ fun LobbyTopBar(
                 ) {
                     Text(
                         text = profile.username.take(1).uppercase(),
-                        color = Color.Black,
+                        color = Color.White,
                         fontWeight = FontWeight.Black,
                         fontSize = 18.sp
                     )
@@ -167,6 +171,28 @@ fun LobbyTopBar(
                         overflow = TextOverflow.Ellipsis
                     )
                 }
+            }
+
+            // Rank Crest Pill (Tap for Bronze -> Grandmaster Rank Guide)
+            val rankBadge = RankTierBadge.fromRp(profile.rankPoints)
+            Row(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(TacticalSurface.copy(alpha = 0.90f))
+                    .border(1.dp, Color(rankBadge.primaryHex).copy(alpha = 0.72f), RoundedCornerShape(10.dp))
+                    .clickable(onClick = onOpenRankGuide)
+                    .padding(horizontal = 7.dp, vertical = 5.dp)
+                    .testTag("top_rank_crest_button"),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                RankTierCrest(tier = rankBadge, size = 24.dp)
+                Text(
+                    text = rankBadge.title.uppercase(),
+                    color = Color(rankBadge.accentHex),
+                    fontWeight = FontWeight.Black,
+                    fontSize = 9.sp
+                )
             }
 
             // Gold Coins Capsule
@@ -223,11 +249,13 @@ fun LobbyTopBar(
             Row(
                 modifier = Modifier
                     .clip(RoundedCornerShape(10.dp))
-                    .background(Color(0xBB0D1322))
-                    .border(1.dp, accentColor.copy(alpha = 0.55f), RoundedCornerShape(10.dp))
+                    .background(Brush.horizontalGradient(listOf(Color(0xD90E1422), Color(0xD9240C14))))
+                    .border(1.2.dp, HazardYellow.copy(alpha = 0.75f), RoundedCornerShape(10.dp))
                     .padding(horizontal = 9.dp, vertical = 5.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                Icon(Icons.Default.Stars, contentDescription = "WarX Crown", tint = HazardYellow, modifier = Modifier.size(13.dp))
+                Spacer(modifier = Modifier.width(4.dp))
                 Text("WAR", color = TextPrimary, fontWeight = FontWeight.Black, fontSize = 12.sp, letterSpacing = 0.8.sp)
                 Text("X", color = CyberOrange, fontWeight = FontWeight.Black, fontSize = 13.sp)
                 Spacer(modifier = Modifier.width(5.dp))
@@ -356,7 +384,7 @@ private fun TopUtilityIcon(
             ) {
                 Text(
                     text = if (badgeCount > 9) "9+" else "$badgeCount",
-                    color = Color.Black,
+                    color = Color.White,
                     fontSize = 8.sp,
                     fontWeight = FontWeight.Black
                 )

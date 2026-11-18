@@ -130,6 +130,83 @@ object StoreCatalog {
             description = "${CharacterPreset.APEX_TITAN.roleTitle} • ${CharacterPreset.APEX_TITAN.activeSkillName}: ${CharacterPreset.APEX_TITAN.activeSkillDesc}",
             accentHex = 0xFFFFC71F
         ),
+        CatalogItemSpec(
+            id = "char_kitsune_shrine",
+            name = CharacterPreset.KITSUNE_SHRINE.displayName,
+            category = StoreCategory.CHARACTER_STORE,
+            type = "CHARACTER",
+            targetItemId = CharacterPreset.KITSUNE_SHRINE.id,
+            rarity = "LEGENDARY",
+            priceBp = CharacterPreset.KITSUNE_SHRINE.unlockBp,
+            description = "${CharacterPreset.KITSUNE_SHRINE.roleTitle} • ${CharacterPreset.KITSUNE_SHRINE.activeSkillName}: ${CharacterPreset.KITSUNE_SHRINE.activeSkillDesc}",
+            accentHex = 0xFFFF2442
+        ),
+        CatalogItemSpec(
+            id = "char_flame_skull",
+            name = CharacterPreset.FLAME_SKULL.displayName,
+            category = StoreCategory.CHARACTER_STORE,
+            type = "CHARACTER",
+            targetItemId = CharacterPreset.FLAME_SKULL.id,
+            rarity = "MYTHIC",
+            priceCredits = CharacterPreset.FLAME_SKULL.unlockCredits,
+            description = "${CharacterPreset.FLAME_SKULL.roleTitle} • ${CharacterPreset.FLAME_SKULL.activeSkillName}: ${CharacterPreset.FLAME_SKULL.activeSkillDesc}",
+            accentHex = 0xFFFF6E1A
+        ),
+        CatalogItemSpec(
+            id = "char_neon_samurai",
+            name = CharacterPreset.NEON_SAMURAI.displayName,
+            category = StoreCategory.CHARACTER_STORE,
+            type = "CHARACTER",
+            targetItemId = CharacterPreset.NEON_SAMURAI.id,
+            rarity = "MYTHIC",
+            priceCredits = CharacterPreset.NEON_SAMURAI.unlockCredits,
+            description = "${CharacterPreset.NEON_SAMURAI.roleTitle} • ${CharacterPreset.NEON_SAMURAI.activeSkillName}: ${CharacterPreset.NEON_SAMURAI.activeSkillDesc}",
+            accentHex = 0xFFFF22B8
+        ),
+        CatalogItemSpec(
+            id = "char_cyber_afro",
+            name = CharacterPreset.CYBER_AFRO.displayName,
+            category = StoreCategory.CHARACTER_STORE,
+            type = "CHARACTER",
+            targetItemId = CharacterPreset.CYBER_AFRO.id,
+            rarity = "EPIC",
+            priceBp = CharacterPreset.CYBER_AFRO.unlockBp,
+            description = "${CharacterPreset.CYBER_AFRO.roleTitle} • ${CharacterPreset.CYBER_AFRO.activeSkillName}: ${CharacterPreset.CYBER_AFRO.activeSkillDesc}",
+            accentHex = 0xFFE6FF14
+        ),
+        CatalogItemSpec(
+            id = "char_royal_commander",
+            name = CharacterPreset.ROYAL_COMMANDER.displayName,
+            category = StoreCategory.CHARACTER_STORE,
+            type = "CHARACTER",
+            targetItemId = CharacterPreset.ROYAL_COMMANDER.id,
+            rarity = "MYTHIC",
+            priceCredits = CharacterPreset.ROYAL_COMMANDER.unlockCredits,
+            description = "${CharacterPreset.ROYAL_COMMANDER.roleTitle} • ${CharacterPreset.ROYAL_COMMANDER.activeSkillName}: ${CharacterPreset.ROYAL_COMMANDER.activeSkillDesc}",
+            accentHex = 0xFFFFC828
+        ),
+        CatalogItemSpec(
+            id = "char_street_mafia",
+            name = CharacterPreset.STREET_MAFIA.displayName,
+            category = StoreCategory.CHARACTER_STORE,
+            type = "CHARACTER",
+            targetItemId = CharacterPreset.STREET_MAFIA.id,
+            rarity = "LEGENDARY",
+            priceBp = CharacterPreset.STREET_MAFIA.unlockBp,
+            description = "${CharacterPreset.STREET_MAFIA.roleTitle} • ${CharacterPreset.STREET_MAFIA.activeSkillName}: ${CharacterPreset.STREET_MAFIA.activeSkillDesc}",
+            accentHex = 0xFFE5E5EC
+        ),
+        CatalogItemSpec(
+            id = "char_violet_blade",
+            name = CharacterPreset.VIOLET_BLADE.displayName,
+            category = StoreCategory.CHARACTER_STORE,
+            type = "CHARACTER",
+            targetItemId = CharacterPreset.VIOLET_BLADE.id,
+            rarity = "LEGENDARY",
+            priceCredits = CharacterPreset.VIOLET_BLADE.unlockCredits,
+            description = "${CharacterPreset.VIOLET_BLADE.roleTitle} • ${CharacterPreset.VIOLET_BLADE.activeSkillName}: ${CharacterPreset.VIOLET_BLADE.activeSkillDesc}",
+            accentHex = 0xFFAE3EFF
+        ),
 
         // 2. WEAPON SKINS
         CatalogItemSpec(
@@ -238,6 +315,67 @@ object StoreCatalog {
             accentHex = 0xFF448AFF
         ),
         CatalogItemSpec(
+            id = "skin_awm_butterfly",
+            name = "AWM - Crimson Butterfly",
+            category = StoreCategory.WEAPON_SKINS,
+            type = "WEAPON_SKIN",
+            targetItemId = "awm",
+            rarity = "MYTHIC",
+            priceCredits = 1350,
+            description = "Translucent crimson butterfly wings above the 8x sniper scope with scarlet tracers.",
+            accentHex = 0xFFFF2442
+        ),
+        CatalogItemSpec(
+            id = "skin_m1887_rapper",
+            name = "M1887 - Rapper Underworld",
+            category = StoreCategory.WEAPON_SKINS,
+            type = "WEAPON_SKIN",
+            targetItemId = "m1887",
+            rarity = "MYTHIC",
+            priceCredits = 1100,
+            description = "Violet flame & gilded skull double-barrel finish with blistering close-range fire rate.",
+            starterOwned = true,
+            starterEquipped = true,
+            accentHex = 0xFFB833FF
+        ),
+        CatalogItemSpec(
+            id = "skin_mp40_bunny",
+            name = "MP40 - Crazy Bunny",
+            category = StoreCategory.WEAPON_SKINS,
+            type = "WEAPON_SKIN",
+            targetItemId = "mp40",
+            rarity = "LEGENDARY",
+            priceBp = 7400,
+            description = "Acid-lime, violet and flame-orange street-art custom chassis.",
+            starterOwned = true,
+            starterEquipped = true,
+            accentHex = 0xFFAEEA00
+        ),
+        CatalogItemSpec(
+            id = "skin_katana_neon",
+            name = "Katana - Cyber Neon Edge",
+            category = StoreCategory.WEAPON_SKINS,
+            type = "WEAPON_SKIN",
+            targetItemId = "katana",
+            rarity = "LEGENDARY",
+            priceBp = 6200,
+            description = "Electric indigo scabbard with glowing plasma edge trail.",
+            starterOwned = true,
+            starterEquipped = true,
+            accentHex = 0xFF40C4FF
+        ),
+        CatalogItemSpec(
+            id = "skin_deagle_koi",
+            name = "Sidearm - Koi Dragon",
+            category = StoreCategory.WEAPON_SKINS,
+            type = "WEAPON_SKIN",
+            targetItemId = "deagle",
+            rarity = "EPIC",
+            priceBp = 4400,
+            description = "Crimson and ivory koi-wave slide engraving with golden trigger.",
+            accentHex = 0xFFFF5252
+        ),
+        CatalogItemSpec(
             id = "skin_pan_gold",
             name = "Golden Pan Supreme",
             category = StoreCategory.WEAPON_SKINS,
@@ -333,6 +471,103 @@ object StoreCatalog {
             description = "High-impact semi-auto pistol sidearm with armor punch.",
             starterOwned = true,
             accentHex = 0xFFB0BEC5
+        ),
+        CatalogItemSpec(
+            id = "gun_mp40",
+            name = "MP40 Cobra SMG",
+            category = StoreCategory.GUN_COLLECTION,
+            type = "GUN",
+            targetItemId = "mp40",
+            rarity = "EPIC",
+            priceBp = 3600,
+            description = "Ultra-high RPM folding-stock submachine gun built for aggressive rushes.",
+            starterOwned = true,
+            accentHex = 0xFFAEEA00
+        ),
+        CatalogItemSpec(
+            id = "gun_m1887",
+            name = "M1887 Double-Barrel Shotgun",
+            category = StoreCategory.GUN_COLLECTION,
+            type = "GUN",
+            targetItemId = "m1887",
+            rarity = "MYTHIC",
+            priceCredits = 680,
+            description = "Lethal 2-shot lever-action shotgun capable of one-tap knockdowns.",
+            starterOwned = true,
+            accentHex = 0xFFB833FF
+        ),
+        CatalogItemSpec(
+            id = "gun_gatling",
+            name = "Gatling Vulcan LMG",
+            category = StoreCategory.GUN_COLLECTION,
+            type = "GUN",
+            targetItemId = "gatling",
+            rarity = "LEGENDARY",
+            priceCredits = 740,
+            description = "Multi-barrel rotary machine gun with 100-round drum capacity.",
+            accentHex = 0xFFFF8F00
+        ),
+        // Melee collection weapons (Slot 4)
+        CatalogItemSpec(
+            id = "melee_katana",
+            name = "Katana",
+            category = StoreCategory.GUN_COLLECTION,
+            type = "MELEE",
+            targetItemId = "katana",
+            rarity = "LEGENDARY",
+            priceBp = 2800,
+            description = "Razor-sharp cybernetic katana with rapid dash-slash reach.",
+            starterOwned = true,
+            starterEquipped = true,
+            accentHex = 0xFF40C4FF
+        ),
+        CatalogItemSpec(
+            id = "melee_scythe",
+            name = "Crimson Scythe",
+            category = StoreCategory.GUN_COLLECTION,
+            type = "MELEE",
+            targetItemId = "scythe",
+            rarity = "MYTHIC",
+            priceBp = 4500,
+            description = "Curved executioner scythe dealing sweeping close-range cleaves.",
+            starterOwned = true,
+            accentHex = 0xFFFF2442
+        ),
+        CatalogItemSpec(
+            id = "melee_bat",
+            name = "Spiked Combat Bat",
+            category = StoreCategory.GUN_COLLECTION,
+            type = "MELEE",
+            targetItemId = "bat",
+            rarity = "EPIC",
+            priceBp = 2200,
+            description = "Wrapped street slugger reinforced with tempered steel bands.",
+            starterOwned = true,
+            accentHex = 0xFFFFB300
+        ),
+        CatalogItemSpec(
+            id = "melee_machete",
+            name = "Shadow Machete",
+            category = StoreCategory.GUN_COLLECTION,
+            type = "MELEE",
+            targetItemId = "machete",
+            rarity = "RARE",
+            priceBp = 1600,
+            description = "Tactical survival blade balanced for quick melee takedowns.",
+            starterOwned = true,
+            accentHex = 0xFF90A4AE
+        ),
+        CatalogItemSpec(
+            id = "melee_pan",
+            name = "Cast Iron Pan",
+            category = StoreCategory.GUN_COLLECTION,
+            type = "MELEE",
+            targetItemId = "pan",
+            rarity = "EPIC",
+            priceBp = 3000,
+            description = "Iconic bullet-deflecting Battle Royale melee champion skillet.",
+            starterOwned = true,
+            accentHex = 0xFFFFD700
         ),
 
         // 4. OUTFIT COLLECTION
@@ -432,44 +667,44 @@ object StoreCatalog {
             accentHex = 0xFFFF3D00
         ),
 
-        // 6. HELMET SKINS
+        // 6. HELMET SKINS (Level 1 to Level 4 styles)
         CatalogItemSpec(
             id = "helmet_cyber_vis",
-            name = "Cybernetic Visor Helmet L3",
+            name = "Cybernetic Respirator Helmet L4",
             category = StoreCategory.HELMET_SKINS,
             type = "HELMET",
             targetItemId = "helmet",
             rarity = "LEGENDARY",
             priceCredits = 480,
-            description = "HUD-projected ballistic visor integrated into composite shell.",
+            description = "Lv.4 glowing red-eye tactical respirator visor integrated into ballistic alloy.",
             starterOwned = true,
             starterEquipped = true,
-            accentHex = 0xFFFFA000
+            accentHex = 0xFFFF1744
         ),
         CatalogItemSpec(
             id = "helmet_titan_gold",
-            name = "Titan Command Visor L3",
+            name = "Spetsnaz Welded Shield Helm L3",
             category = StoreCategory.HELMET_SKINS,
             type = "HELMET",
             targetItemId = "helmet",
             rarity = "EPIC",
             priceBp = 5400,
-            description = "Heavy gilded commander headgear with armored jaw guard.",
+            description = "Heavy reinforced titanium face shield engineered for Level 3 protection.",
             accentHex = 0xFFFFD54F
         ),
         CatalogItemSpec(
             id = "helmet_oni_phantom",
-            name = "Phantom Oni Mask L3",
+            name = "Phantom Oni Mask L4",
             category = StoreCategory.HELMET_SKINS,
             type = "HELMET",
             targetItemId = "helmet",
             rarity = "MYTHIC",
             priceCredits = 780,
-            description = "Intimidating neon-horned ballistic mask for elite duelists.",
+            description = "Intimidating crimson-eyed armored mask for top-ranked WarX duelists.",
             accentHex = 0xFFD500F9
         ),
 
-        // 7. PARACHUTE SKINS
+        // 7. PARACHUTE & GLIDER SKINS
         CatalogItemSpec(
             id = "para_flame",
             name = "Inferno Streak Parachute",
@@ -505,8 +740,20 @@ object StoreCatalog {
             description = "Signature crowned wing canopy emblazoned with the WarX crest.",
             accentHex = 0xFFFFC400
         ),
+        CatalogItemSpec(
+            id = "para_glider_aero",
+            name = "Tactical Aero Glider Wing",
+            category = StoreCategory.PARACHUTE_SKINS,
+            type = "PARACHUTE",
+            targetItemId = "glider",
+            rarity = "MYTHIC",
+            priceCredits = 620,
+            description = "High-glide crimson aero wingsuit frame for extended map drops.",
+            starterOwned = true,
+            accentHex = 0xFFFF2442
+        ),
 
-        // 8. VEHICLE SKINS
+        // 8. VEHICLE & SUPERCAR SKINS
         CatalogItemSpec(
             id = "vehicle_uaz_camo",
             name = "UAZ - Desert Camo Armor",
@@ -533,17 +780,40 @@ object StoreCatalog {
         ),
         CatalogItemSpec(
             id = "vehicle_moto_crimson",
-            name = "Sport Moto - Crimson Turbo",
+            name = "Sport Moto - Cyber Neon Skull",
             category = StoreCategory.VEHICLE_SKINS,
             type = "VEHICLE",
             targetItemId = "motorbike",
-            rarity = "EPIC",
+            rarity = "MYTHIC",
             priceBp = 7200,
-            description = "Racing fairing in glossy crimson red & carbon fiber.",
+            description = "Holographic neon-aqua street bike with glowing turbine rims.",
+            starterOwned = true,
+            accentHex = 0xFF00E5FF
+        ),
+        CatalogItemSpec(
+            id = "vehicle_supercar_crimson",
+            name = "WarX Hypercar - Crimson Fury",
+            category = StoreCategory.VEHICLE_SKINS,
+            type = "VEHICLE",
+            targetItemId = "dacia",
+            rarity = "MYTHIC",
+            priceCredits = 1280,
+            description = "Aerodynamic mid-engine supercar with carbon spoiler & crimson vents.",
             accentHex = 0xFFFF1744
         ),
+        CatalogItemSpec(
+            id = "vehicle_supercar_gold",
+            name = "Apex GT - Sovereign Gold",
+            category = StoreCategory.VEHICLE_SKINS,
+            type = "VEHICLE",
+            targetItemId = "dacia",
+            rarity = "LEGENDARY",
+            priceCredits = 980,
+            description = "Gilded championship coupe with titanium exhaust flames.",
+            accentHex = 0xFFFFD54F
+        ),
 
-        // 9. EMOTES
+        // 9. EMOTES (12 Iconic Expressions)
         CatalogItemSpec(
             id = "emote_salute",
             name = EmotePreset.SALUTE.label,
@@ -578,6 +848,7 @@ object StoreCatalog {
             rarity = "EPIC",
             priceBp = 3800,
             description = "Enforcer power stance displaying holographic armor pulse.",
+            starterOwned = true,
             accentHex = 0xFF40C4FF
         ),
         CatalogItemSpec(
@@ -590,6 +861,75 @@ object StoreCatalog {
             priceCredits = 360,
             description = "Fierce WarX champion battle cry with ember burst.",
             accentHex = 0xFFFF5252
+        ),
+        CatalogItemSpec(
+            id = "emote_backflip",
+            name = EmotePreset.BACKFLIP.label,
+            category = StoreCategory.EMOTES,
+            type = "EMOTE",
+            targetItemId = EmotePreset.BACKFLIP.id,
+            rarity = "EPIC",
+            priceBp = 3200,
+            description = "Zero-gravity mid-air backflip taunt.",
+            starterOwned = true,
+            accentHex = 0xFFBA68C8
+        ),
+        CatalogItemSpec(
+            id = "emote_throne",
+            name = EmotePreset.THRONE_SIT.label,
+            category = StoreCategory.EMOTES,
+            type = "EMOTE",
+            targetItemId = EmotePreset.THRONE_SIT.id,
+            rarity = "MYTHIC",
+            priceCredits = 490,
+            description = "Summons a crimson championship throne for the victor.",
+            accentHex = 0xFFFFB300
+        ),
+        CatalogItemSpec(
+            id = "emote_high_kick",
+            name = EmotePreset.HIGH_KICK.label,
+            category = StoreCategory.EMOTES,
+            type = "EMOTE",
+            targetItemId = EmotePreset.HIGH_KICK.id,
+            rarity = "LEGENDARY",
+            priceBp = 4800,
+            description = "High-impact martial flying kick combo.",
+            accentHex = 0xFFFF5252
+        ),
+        CatalogItemSpec(
+            id = "emote_dj_mix",
+            name = EmotePreset.DJ_MIX.label,
+            category = StoreCategory.EMOTES,
+            type = "EMOTE",
+            targetItemId = EmotePreset.DJ_MIX.id,
+            rarity = "EPIC",
+            priceBp = 3600,
+            description = "Holo-turntable bass drop celebration.",
+            starterOwned = true,
+            accentHex = 0xFF00E5FF
+        ),
+        CatalogItemSpec(
+            id = "emote_dab",
+            name = EmotePreset.DAB.label,
+            category = StoreCategory.EMOTES,
+            type = "EMOTE",
+            targetItemId = EmotePreset.DAB.id,
+            rarity = "RARE",
+            priceBp = 2200,
+            description = "Classic lightning winner dab move.",
+            starterOwned = true,
+            accentHex = 0xFF448AFF
+        ),
+        CatalogItemSpec(
+            id = "emote_kungfu",
+            name = EmotePreset.KUNGFU_STANCE.label,
+            category = StoreCategory.EMOTES,
+            type = "EMOTE",
+            targetItemId = EmotePreset.KUNGFU_STANCE.id,
+            rarity = "LEGENDARY",
+            priceCredits = 320,
+            description = "Flowing martial arts dragon stance.",
+            accentHex = 0xFFFF9800
         ),
 
         // 10. PET COLLECTION
@@ -639,8 +979,44 @@ object StoreCatalog {
             description = "${PetPreset.VORTEX_ROBO.skillTitle}: ${PetPreset.VORTEX_ROBO.skillDesc}",
             accentHex = 0xFFFFD600
         ),
+        CatalogItemSpec(
+            id = "pet_panda_detective",
+            name = PetPreset.PANDA_DETECTIVE.displayName,
+            category = StoreCategory.PET_COLLECTION,
+            type = "PET",
+            targetItemId = PetPreset.PANDA_DETECTIVE.id,
+            rarity = "EPIC",
+            priceBp = 4200,
+            description = "${PetPreset.PANDA_DETECTIVE.skillTitle}: ${PetPreset.PANDA_DETECTIVE.skillDesc}",
+            starterOwned = true,
+            accentHex = 0xFF1DE9B6
+        ),
+        CatalogItemSpec(
+            id = "pet_cyber_orbit",
+            name = PetPreset.CYBER_ORBIT.displayName,
+            category = StoreCategory.PET_COLLECTION,
+            type = "PET",
+            targetItemId = PetPreset.CYBER_ORBIT.id,
+            rarity = "MYTHIC",
+            priceCredits = 580,
+            description = "${PetPreset.CYBER_ORBIT.skillTitle}: ${PetPreset.CYBER_ORBIT.skillDesc}",
+            starterOwned = true,
+            accentHex = 0xFF00E5FF
+        ),
+        CatalogItemSpec(
+            id = "pet_waggor_penguin",
+            name = PetPreset.WAGGOR_PENGUIN.displayName,
+            category = StoreCategory.PET_COLLECTION,
+            type = "PET",
+            targetItemId = PetPreset.WAGGOR_PENGUIN.id,
+            rarity = "LEGENDARY",
+            priceBp = 5600,
+            description = "${PetPreset.WAGGOR_PENGUIN.skillTitle}: ${PetPreset.WAGGOR_PENGUIN.skillDesc}",
+            starterOwned = true,
+            accentHex = 0xFF40C4FF
+        ),
 
-        // 11. PREMIUM BUNDLES
+        // 11. PREMIUM BUNDLES, GLOO WALL SKINS & TACTICAL LOADOUT ITEMS
         CatalogItemSpec(
             id = "bundle_warx_vanguard",
             name = "WarX Vanguard Command Bundle",
@@ -673,6 +1049,90 @@ object StoreCatalog {
             priceCredits = 1050,
             description = "Full frost-forged combat suit + winter recon tactical wrap.",
             accentHex = 0xFF80D8FF
+        ),
+        // Gloo Wall Skins (Rendered on DeployableShield in 3D)
+        CatalogItemSpec(
+            id = "gloo_cyber",
+            name = "Gloo Wall - Cyber Lightning",
+            category = StoreCategory.PREMIUM_BUNDLES,
+            type = "GLOO_WALL",
+            targetItemId = "gloo_cyber",
+            rarity = "EPIC",
+            priceBp = 3500,
+            description = "Electric aqua lightning barrier shielding teammates under fire.",
+            starterOwned = true,
+            starterEquipped = true,
+            accentHex = 0xFF00E5FF
+        ),
+        CatalogItemSpec(
+            id = "gloo_flame_skull",
+            name = "Gloo Wall - Flame Skull Hockey",
+            category = StoreCategory.PREMIUM_BUNDLES,
+            type = "GLOO_WALL",
+            targetItemId = "gloo_flame_skull",
+            rarity = "MYTHIC",
+            priceCredits = 640,
+            description = "Scorching crimson demon-skull barrier with blazing vents.",
+            starterOwned = true,
+            accentHex = 0xFFFF3D00
+        ),
+        CatalogItemSpec(
+            id = "gloo_samurai_ink",
+            name = "Gloo Wall - Samurai Ink Lotus",
+            category = StoreCategory.PREMIUM_BUNDLES,
+            type = "GLOO_WALL",
+            targetItemId = "gloo_samurai_ink",
+            rarity = "LEGENDARY",
+            priceBp = 5800,
+            description = "Sumi-e bamboo ink crest etched into forged steel.",
+            accentHex = 0xFF90A4AE
+        ),
+        CatalogItemSpec(
+            id = "gloo_neon_mech",
+            name = "Gloo Wall - Neon Mech Wheel",
+            category = StoreCategory.PREMIUM_BUNDLES,
+            type = "GLOO_WALL",
+            targetItemId = "gloo_neon_mech",
+            rarity = "LEGENDARY",
+            priceCredits = 520,
+            description = "Solar-yellow heavy mecha turbine cover wall.",
+            accentHex = 0xFFFFD600
+        ),
+        CatalogItemSpec(
+            id = "gloo_purple_crown",
+            name = "Gloo Wall - Royal Crown Violet",
+            category = StoreCategory.PREMIUM_BUNDLES,
+            type = "GLOO_WALL",
+            targetItemId = "gloo_purple_crown",
+            rarity = "MYTHIC",
+            priceCredits = 720,
+            description = "Amethyst crystalline shield crowned with gilded WarX wings.",
+            accentHex = 0xFFD500F9
+        ),
+        // Loadout Utility Items
+        CatalogItemSpec(
+            id = "item_bonfire",
+            name = "Loadout - Squad Bonfire",
+            category = StoreCategory.PREMIUM_BUNDLES,
+            type = "BUNDLE",
+            targetItemId = "bonfire",
+            rarity = "RARE",
+            priceBp = 1500,
+            description = "Drops a healing & EP-restoring tactical camp beacon.",
+            starterOwned = true,
+            accentHex = 0xFFFF9100
+        ),
+        CatalogItemSpec(
+            id = "item_bounty_map",
+            name = "Loadout - Warrior's Bounty Token",
+            category = StoreCategory.PREMIUM_BUNDLES,
+            type = "BUNDLE",
+            targetItemId = "bounty",
+            rarity = "EPIC",
+            priceBp = 2200,
+            description = "Unlocks bonus Lv.4 gear inside Warrior's Loot crates.",
+            starterOwned = true,
+            accentHex = 0xFFFF2442
         )
     )
 

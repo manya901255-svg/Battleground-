@@ -27,7 +27,10 @@ import com.example.game.model.SmokeCloud
 import com.example.game.model.ThrowableProjectile
 import com.example.game.model.ThrowableType
 import com.example.game.model.VehicleInstance
+import com.example.game.model.WarriorLootTrap
+import com.example.game.model.Weapon
 import com.example.game.model.WeaponCatalog
+import com.example.game.model.WeaponCategory
 import com.example.game.model.WeatherType
 import com.example.game.model.ZoneState
 import kotlinx.coroutines.CoroutineScope
@@ -127,7 +130,9 @@ data class MatchEngineState(
     val groundLootSnapshot: List<GroundLoot> = emptyList(),
     val vehiclesSnapshot: List<VehicleInstance> = emptyList(),
     val bulletsSnapshot: List<BulletProjectile> = emptyList(),
-    val explosiveBarrelsSnapshot: List<ExplosiveBarrel> = emptyList()
+    val explosiveBarrelsSnapshot: List<ExplosiveBarrel> = emptyList(),
+    val warriorLootTrapsSnapshot: List<WarriorLootTrap> = emptyList(),
+    val nearbyWarriorTrap: WarriorLootTrap? = null
 )
 
 class BattleRoyaleEngine(
@@ -144,6 +149,10 @@ class BattleRoyaleEngine(
     @Volatile var cameraSensitivity: Float = 1.0f,
     @Volatile var adsSensitivity: Float = 0.85f,
     val equippedPrimaryWeaponId: String = "m416",
+    val equippedMeleeId: String = "katana",
+    val glooWallSkinId: String = "gloo_cyber",
+    val parachuteSkinId: String = "para_flame",
+    val vehicleSkinId: String = "vehicle_uaz_camo",
     val weaponSkinMap: Map<String, String> = emptyMap(),
     val weaponUpgradeMap: Map<String, Int> = emptyMap(),
     private val onMatchFinished: (placement: Int, kills: Int, damage: Float, durationSec: Int) -> Unit
@@ -172,6 +181,7 @@ class BattleRoyaleEngine(
     val airdrops = mutableListOf<AirdropCrate>()
     val killFeed = mutableListOf<KillFeedEntry>()
     val explosiveBarrels = mutableListOf<ExplosiveBarrel>()
+    val warriorLootTraps = mutableListOf<WarriorLootTrap>()
 
     // Flight path
     private val planeStartX = 400f
@@ -216,6 +226,7 @@ class BattleRoyaleEngine(
     private val reviveDurationSec: Float = 3.0f
     private var trainingDummyHits: Int = 0
     private var trainingDummyDamage: Int = 0
+    private var botEliminationCounter: Int = 0
     private val damageContributors = mutableMapOf<String, MutableSet<String>>()
 
     init {
@@ -255,9 +266,11 @@ class BattleRoyaleEngine(
         airdrops.clear()
         killFeed.clear()
         explosiveBarrels.clear()
+        warriorLootTraps.clear()
         damageContributors.clear()
         trainingDummyHits = 0
         trainingDummyDamage = 0
+        botEliminationCounter = 0
         revivingTargetId = null
         reviveElapsedSec = 0f
         elapsedCombatSec = 0f
@@ -310,7 +323,7 @@ class BattleRoyaleEngine(
             primaryWeapon1 = startPrimary1,
             primaryWeapon2 = startPrimary2,
             pistol = buildConfiguredWeapon("deagle"),
-            melee = buildConfiguredWeapon("pan"),
+            melee = buildConfiguredWeapon(equippedMeleeId),
             activeSlot = if (chosenId == "deagle" && gameMode != GameModeType.SNIPER_TRAINING) 3 else 1
         )
         userPlayer.ammoInventory[AmmoType.AMMO_556] = 150
@@ -419,7 +432,9 @@ class BattleRoyaleEngine(
             groundLootSnapshot = groundLoot.toList(),
             vehiclesSnapshot = vehicles.toList(),
             bulletsSnapshot = bullets.toList(),
-            explosiveBarrelsSnapshot = explosiveBarrels.toList()
+            explosiveBarrelsSnapshot = explosiveBarrels.toList(),
+            warriorLootTrapsSnapshot = warriorLootTraps.toList(),
+            nearbyWarriorTrap = null
         )
     }
 
@@ -606,11 +621,13 @@ class BattleRoyaleEngine(
                     ownerId = userPlayer.id,
                     x = sx,
                     y = sy,
-                    angleDegrees = cameraYawDegrees
+                    angleDegrees = cameraYawDegrees,
+                    skinId = glooWallSkinId
                 )
             )
-            shieldCooldownSec = 3.5f
+            shieldCooldownSec = if (activePetId == PetPreset.CYBER_ORBIT.id) 2.8f else 3.5f
             soundSynthesizer?.playShieldDeploy()
+            _engineState.value = _engineState.value.copy(shieldCooldownSec = shieldCooldownSec)
         }
     }
 
@@ -757,8 +774,19 @@ class BattleRoyaleEngine(
         updateProjectiles(deltaSec)
         updateShieldsAndPopups(deltaSec)
 
-        // 6. Update Airdrops
+        // 5b. Pet Waggor passive Gloo Shield recharge
+        if (activePetId == PetPreset.WAGGOR_PENGUIN.id && userPlayer.isAlive) {
+            if (userPlayer.shield < userPlayer.maxShield) {
+                userPlayer.shield = (userPlayer.shield + 2.5f * deltaSec).coerceAtMost(userPlayer.maxShield)
+            }
+            if (shieldCooldownSec > 0f) {
+                shieldCooldownSec = (shieldCooldownSec - deltaSec * 0.35f).coerceAtLeast(0f)
+            }
+        }
+
+        // 6. Update Airdrops & Warrior's Loot Bomb Crates
         updateAirdrops(deltaSec)
+        updateWarriorLootTraps(deltaSec)
 
         // 7. Zone Damage
         applyZoneDamage(deltaSec, updatedZone)
@@ -918,7 +946,12 @@ class BattleRoyaleEngine(
             groundLootSnapshot = groundLoot.toList(),
             vehiclesSnapshot = vehicles.toList(),
             bulletsSnapshot = bullets.toList(),
-            explosiveBarrelsSnapshot = explosiveBarrels.toList()
+            explosiveBarrelsSnapshot = explosiveBarrels.toList(),
+            warriorLootTrapsSnapshot = warriorLootTraps.toList(),
+            nearbyWarriorTrap = warriorLootTraps.firstOrNull { trap ->
+                !trap.isLooted && !trap.isDetonated &&
+                    sqrt((trap.x - userPlayer.x) * (trap.x - userPlayer.x) + (trap.y - userPlayer.y) * (trap.y - userPlayer.y)) < 145f
+            }
         )
     }
 
@@ -1189,6 +1222,11 @@ class BattleRoyaleEngine(
     private fun fireWeapon(shooter: Player, aimAngle: Float) {
         val weapon = shooter.activeWeapon ?: return
 
+        if (weapon.category == WeaponCategory.MELEE) {
+            performMeleeAttack(shooter, weapon, aimAngle)
+            return
+        }
+
         if (weapon.maxCapacity > 0 && weapon.currentAmmo <= 0) {
             reloadWeapon(shooter)
             return
@@ -1399,15 +1437,17 @@ class BattleRoyaleEngine(
 
         val armorReduction = when (victim.armorLevel) {
             1 -> 0.25f
-            2 -> 0.35f
-            3 -> 0.50f
+            2 -> 0.40f
+            3 -> 0.55f
+            4 -> 0.65f
             else -> 0f
         }
         val helmetReduction = if (isHeadshot) {
             when (victim.helmetLevel) {
                 1 -> 0.25f
-                2 -> 0.35f
-                3 -> 0.50f
+                2 -> 0.38f
+                3 -> 0.52f
+                4 -> 0.62f
                 else -> 0f
             }
         } else 0f
@@ -1483,6 +1523,9 @@ class BattleRoyaleEngine(
             if (killer.characterPresetId == "nova_valkyrie") {
                 killer.health = (killer.health + 15f).coerceAtMost(killer.maxHealth)
             }
+            if (activePetId == PetPreset.PANDA_DETECTIVE.id) {
+                killer.health = (killer.health + 12f).coerceAtMost(killer.maxHealth)
+            }
             val k = killer.kills
             activeTakedownText = when {
                 k >= 5 -> "UNSTOPPABLE! ($k KILLS)"
@@ -1498,6 +1541,28 @@ class BattleRoyaleEngine(
         val weaponName = killer?.activeWeapon?.name ?: "Weapon"
         killFeed.add(KillFeedEntry(killerName, victim.name, weaponName, isHeadshot, isKnockdown = false))
 
+        if (!victim.isUser) {
+            botEliminationCounter++
+            if (botEliminationCounter == 1 || botEliminationCounter % 2 == 0) {
+                val rewardPool = listOf(
+                    WeaponCatalog.createAWM("Crimson Butterfly"),
+                    WeaponCatalog.createM1887("Rapper Underworld"),
+                    WeaponCatalog.createMP40("Crazy Bunny"),
+                    WeaponCatalog.createGatling("Obsidian Vulcan")
+                )
+                warriorLootTraps.add(
+                    WarriorLootTrap(
+                        x = victim.x + 18f,
+                        y = victim.y - 12f,
+                        victimName = victim.name,
+                        rewardWeapon = rewardPool[botEliminationCounter % rewardPool.size],
+                        rewardArmorLevel = 4,
+                        rewardHelmetLevel = 4
+                    )
+                )
+            }
+        }
+
         groundLoot.add(
             GroundLoot(
                 x = victim.x,
@@ -1510,6 +1575,142 @@ class BattleRoyaleEngine(
                 consumable = ConsumableType.FIRST_AID
             )
         )
+    }
+
+    private fun performMeleeAttack(shooter: Player, weapon: Weapon, aimAngle: Float) {
+        shooter.lastFireTimestampMs = System.currentTimeMillis()
+        if (shooter.isUser) {
+            soundSynthesizer?.playShieldHit()
+        }
+        val meleeMul = if (shooter.characterPresetId == "neon_samurai") 1.25f else 1.0f
+        val damage = weapon.effectiveDamage * meleeMul
+        val rad = Math.toRadians(aimAngle.toDouble())
+        val dirX = cos(rad).toFloat()
+        val dirY = sin(rad).toFloat()
+        val range = 180f
+
+        var hitAny = false
+        for (target in players) {
+            if (target.id == shooter.id || !target.isAlive) continue
+            if (target.teamId == shooter.teamId && gameMode != GameModeType.TRAINING_GROUND) continue
+            val dx = target.x - shooter.x
+            val dy = target.y - shooter.y
+            val dist = sqrt(dx * dx + dy * dy)
+            if (dist <= range) {
+                val dot = if (dist > 1f) (dx * dirX + dy * dirY) / dist else 1f
+                if (dot >= -0.15f || dist < 95f) {
+                    hitAny = true
+                    var rem = damage
+                    if (target.shield > 0f) {
+                        val absShield = rem.coerceAtMost(target.shield)
+                        target.shield -= absShield
+                        rem -= absShield
+                    }
+                    if (rem > 0f) {
+                        target.health = (target.health - rem).coerceAtLeast(0f)
+                    }
+                    shooter.damageDealt += damage
+                    damageContributors.getOrPut(target.id) { mutableSetOf() }.add(shooter.id)
+                    if (shooter.isUser) {
+                        lastHitTimestampMs = System.currentTimeMillis()
+                        lastHitWasHeadshot = target.characterPresetId != shooter.characterPresetId && shooter.characterPresetId == "neon_samurai"
+                        damagePopups.add(
+                            DamagePopup(
+                                worldX = target.x,
+                                worldY = target.y,
+                                worldZ = target.z + 24f,
+                                amount = damage.toInt(),
+                                isHeadshot = lastHitWasHeadshot,
+                                isShieldHit = target.shield > 0f
+                            )
+                        )
+                    }
+                    if (target.health <= 0f) {
+                        handlePlayerElimination(target, shooter, lastHitWasHeadshot)
+                    }
+                }
+            }
+        }
+        if (hitAny && shooter.isUser) {
+            soundSynthesizer?.playHeadshotDing()
+        }
+    }
+
+    private fun updateWarriorLootTraps(deltaSec: Float) {
+        val it = warriorLootTraps.iterator()
+        while (it.hasNext()) {
+            val trap = it.next()
+            if (trap.isLooted || trap.isDetonated) {
+                it.remove()
+                continue
+            }
+            trap.fuseRemainingSec -= deltaSec
+            if (trap.fuseRemainingSec <= 0f) {
+                trap.isDetonated = true
+                detonateWarriorTrap(trap)
+                it.remove()
+            }
+        }
+    }
+
+    private fun detonateWarriorTrap(trap: WarriorLootTrap) {
+        val blastRadius = 210f
+        soundSynthesizer?.playExplosion()
+        explosions.add(ExplosionEffect(x = trap.x, y = trap.y, maxRadius = blastRadius))
+        players.filter { it.isAlive }.forEach { p ->
+            val dist = sqrt((p.x - trap.x) * (p.x - trap.x) + (p.y - trap.y) * (p.y - trap.y))
+            if (dist < blastRadius) {
+                val falloff = (1f - (dist / blastRadius)).coerceAtLeast(0.25f)
+                val dmg = 85f * falloff
+                p.health = (p.health - dmg).coerceAtLeast(0f)
+                if (p.isUser) {
+                    damagePopups.add(
+                        DamagePopup(
+                            worldX = p.x,
+                            worldY = p.y,
+                            worldZ = p.z + 26f,
+                            amount = dmg.toInt(),
+                            isHeadshot = false,
+                            isShieldHit = false
+                        )
+                    )
+                }
+                if (p.health <= 0f) {
+                    handlePlayerElimination(p, null, false)
+                }
+            }
+        }
+    }
+
+    fun disarmAndLootWarriorTrap(trapId: String? = null) {
+        synchronized(worldLock) {
+            val trap = warriorLootTraps.firstOrNull { t ->
+                !t.isLooted && !t.isDetonated && (trapId == null || t.id == trapId)
+            } ?: return
+            trap.isLooted = true
+            userPlayer.armorLevel = maxOf(userPlayer.armorLevel, trap.rewardArmorLevel)
+            userPlayer.helmetLevel = maxOf(userPlayer.helmetLevel, trap.rewardHelmetLevel)
+            userPlayer.shield = userPlayer.maxShield
+            userPlayer.consumableInventory[ConsumableType.MEDKIT] =
+                (userPlayer.consumableInventory[ConsumableType.MEDKIT] ?: 0) + 1
+            trap.rewardWeapon?.let { w ->
+                if (userPlayer.primaryWeapon1 == null) {
+                    userPlayer.primaryWeapon1 = w
+                    userPlayer.activeSlot = 1
+                } else if (userPlayer.primaryWeapon2 == null) {
+                    userPlayer.primaryWeapon2 = w
+                    userPlayer.activeSlot = 2
+                } else if (userPlayer.activeSlot == 2) {
+                    userPlayer.primaryWeapon2 = w
+                } else {
+                    userPlayer.primaryWeapon1 = w
+                }
+            }
+            matchCoins += 250
+            warriorLootTraps.remove(trap)
+            soundSynthesizer?.playShieldDeploy()
+            sendQuickComms("Warrior's Loot Disarmed! Lv4 Armor + Supply Secured!")
+        }
     }
 
     private fun detonateExplosiveBarrel(barrel: ExplosiveBarrel, shooter: Player?) {
@@ -1742,11 +1943,11 @@ class BattleRoyaleEngine(
                 if (drop.altitude <= 0f) {
                     drop.altitude = 0f
                     drop.isLanded = true
-                    val awm = WeaponCatalog.createAWM()
+                    val awm = WeaponCatalog.createAWM("Crimson Butterfly")
                     drop.lootItems.add(GroundLoot(x = drop.x, y = drop.y, name = awm.name, weapon = awm))
                     drop.lootItems.add(GroundLoot(x = drop.x, y = drop.y, name = ".300 Magnum (20)", ammoType = AmmoType.AMMO_300MAG, ammoCount = 20))
-                    drop.lootItems.add(GroundLoot(x = drop.x, y = drop.y, name = "Level 3 Military Armor", armorLevel = 3))
-                    drop.lootItems.add(GroundLoot(x = drop.x, y = drop.y, name = "Level 3 Spetsnaz Helmet", helmetLevel = 3))
+                    drop.lootItems.add(GroundLoot(x = drop.x, y = drop.y, name = "Level 4 Heavy Reinforced Armor", armorLevel = 4))
+                    drop.lootItems.add(GroundLoot(x = drop.x, y = drop.y, name = "Level 4 Cyber Respirator Helmet", helmetLevel = 4))
                 }
             }
         }

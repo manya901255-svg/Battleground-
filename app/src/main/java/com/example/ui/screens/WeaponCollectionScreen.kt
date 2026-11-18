@@ -92,8 +92,10 @@ fun WeaponCollectionScreen(
     val scope = rememberCoroutineScope()
 
     val baseWeapons = remember { WeaponCatalog.primaryFirearms() }
+    val meleeWeapons = remember { WeaponCatalog.meleeWeapons() }
     var selectedCategoryFilter by remember { mutableStateOf("ALL") }
     val equippedPrimaryId = profile?.equippedWeaponId ?: "m416"
+    val equippedMeleeId = profile?.equippedMeleeId ?: "katana"
     var selectedWeaponId by remember(equippedPrimaryId) { mutableStateOf(equippedPrimaryId) }
 
     var selectedScope by remember { mutableStateOf(ScopeType.SCOPE_4X) }
@@ -113,16 +115,28 @@ fun WeaponCollectionScreen(
             "SHOTGUN" -> baseWeapons.filter { it.category == WeaponCategory.SHOTGUN }
             "SNIPER" -> baseWeapons.filter { it.category == WeaponCategory.SNIPER_RIFLE }
             "PISTOL" -> baseWeapons.filter { it.category == WeaponCategory.PISTOL }
-            else -> baseWeapons
+            "MELEE" -> meleeWeapons
+            else -> baseWeapons + meleeWeapons
         }
     }
 
-    val activeGunItemId = "gun_${selectedWeaponId.lowercase()}"
+    val isSelectedMelee = remember(selectedWeaponId) {
+        meleeWeapons.any { it.id.equals(selectedWeaponId, ignoreCase = true) }
+    }
+    val activeGunItemId = if (isSelectedMelee) {
+        "melee_${selectedWeaponId.lowercase()}"
+    } else {
+        "gun_${selectedWeaponId.lowercase()}"
+    }
     val gunEntity = allInventory.firstOrNull { it.id == activeGunItemId }
         ?: StoreCatalog.findSpec(activeGunItemId)?.toEntity()
     val gunSpec = StoreCatalog.findSpec(activeGunItemId)
-    val isGunOwned = gunEntity?.isOwned ?: (selectedWeaponId == "m416")
-    val isGunPrimary = equippedPrimaryId.equals(selectedWeaponId, ignoreCase = true)
+    val isGunOwned = gunEntity?.isOwned ?: (selectedWeaponId == "m416" || isSelectedMelee)
+    val isGunPrimary = if (isSelectedMelee) {
+        equippedMeleeId.equals(selectedWeaponId, ignoreCase = true)
+    } else {
+        equippedPrimaryId.equals(selectedWeaponId, ignoreCase = true)
+    }
     val currentLevel = (gunEntity?.upgradeLevel ?: 1).coerceIn(1, 5)
 
     val skinsForSelected = remember(selectedWeaponId, allInventory) {
@@ -285,7 +299,7 @@ fun WeaponCollectionScreen(
             verticalAlignment = Alignment.CenterVertically
         ) {
             LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                val cats = listOf("ALL", "AR", "SMG", "SHOTGUN", "SNIPER", "PISTOL")
+                val cats = listOf("ALL", "AR", "SMG", "SHOTGUN", "SNIPER", "PISTOL", "MELEE")
                 items(cats) { cat ->
                     val selected = selectedCategoryFilter == cat
                     Box(
@@ -300,7 +314,8 @@ fun WeaponCollectionScreen(
                                     "SHOTGUN" -> baseWeapons.filter { it.category == WeaponCategory.SHOTGUN }
                                     "SNIPER" -> baseWeapons.filter { it.category == WeaponCategory.SNIPER_RIFLE }
                                     "PISTOL" -> baseWeapons.filter { it.category == WeaponCategory.PISTOL }
-                                    else -> baseWeapons
+                                    "MELEE" -> meleeWeapons
+                                    else -> baseWeapons + meleeWeapons
                                 }
                                 if (nextList.none { it.id == selectedWeaponId } && nextList.isNotEmpty()) {
                                     selectedWeaponId = nextList.first().id
@@ -317,14 +332,18 @@ fun WeaponCollectionScreen(
             LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 items(filteredWeapons, key = { it.id }) { weapon ->
                     val selected = weapon.id == selectedWeaponId
-                    val isPrimary = equippedPrimaryId.equals(weapon.id, ignoreCase = true)
+                    val isEquippedSlot = if (weapon.category == WeaponCategory.MELEE) {
+                        equippedMeleeId.equals(weapon.id, ignoreCase = true)
+                    } else {
+                        equippedPrimaryId.equals(weapon.id, ignoreCase = true)
+                    }
                     Box(
                         modifier = Modifier
                             .clip(RoundedCornerShape(8.dp))
                             .background(if (selected) ElectricBlueSafe else TacticalSurface)
                             .border(
                                 1.dp,
-                                if (isPrimary) HealthGreen else Color.White.copy(alpha = 0.14f),
+                                if (isEquippedSlot) HealthGreen else Color.White.copy(alpha = 0.14f),
                                 RoundedCornerShape(8.dp)
                             )
                             .clickable { selectedWeaponId = weapon.id }
@@ -332,7 +351,7 @@ fun WeaponCollectionScreen(
                             .testTag("select_weapon_${weapon.id}")
                     ) {
                         Text(
-                            text = if (isPrimary) "★ ${weapon.name}" else weapon.name,
+                            text = if (isEquippedSlot) "★ ${weapon.name}" else weapon.name,
                             color = if (selected) Color.Black else TextPrimary,
                             fontSize = 9.sp,
                             fontWeight = FontWeight.Black
@@ -413,19 +432,34 @@ fun WeaponCollectionScreen(
                     }
                 }
 
-                // Attachment Quick Preview Cyclers
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    AttachmentMiniPill("OPTIC", selectedScope.displayName, ElectricBlueSafe, Modifier.weight(1f)) {
-                        val entries = ScopeType.entries
-                        selectedScope = entries[(selectedScope.ordinal + 1) % entries.size]
+                // Attachment Quick Preview Cyclers (or Melee Combat Role Info)
+                if (!isSelectedMelee) {
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        AttachmentMiniPill("OPTIC", selectedScope.displayName, ElectricBlueSafe, Modifier.weight(1f)) {
+                            val entries = ScopeType.entries
+                            selectedScope = entries[(selectedScope.ordinal + 1) % entries.size]
+                        }
+                        AttachmentMiniPill("MUZZLE", selectedMuzzle.displayName, HazardYellow, Modifier.weight(1f)) {
+                            val entries = MuzzleType.entries
+                            selectedMuzzle = entries[(selectedMuzzle.ordinal + 1) % entries.size]
+                        }
+                        AttachmentMiniPill("MAG", selectedMag.displayName, HealthGreen, Modifier.weight(1f)) {
+                            val entries = MagType.entries
+                            selectedMag = entries[(selectedMag.ordinal + 1) % entries.size]
+                        }
                     }
-                    AttachmentMiniPill("MUZZLE", selectedMuzzle.displayName, HazardYellow, Modifier.weight(1f)) {
-                        val entries = MuzzleType.entries
-                        selectedMuzzle = entries[(selectedMuzzle.ordinal + 1) % entries.size]
-                    }
-                    AttachmentMiniPill("MAG", selectedMag.displayName, HealthGreen, Modifier.weight(1f)) {
-                        val entries = MagType.entries
-                        selectedMag = entries[(selectedMag.ordinal + 1) % entries.size]
+                } else {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(TacticalSurfaceVariant)
+                            .border(1.dp, HazardYellow.copy(alpha = 0.4f), RoundedCornerShape(8.dp))
+                            .padding(horizontal = 10.dp, vertical = 6.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text("SLOT 4 • MELEE STRIKER", color = HazardYellow, fontSize = 9.sp, fontWeight = FontWeight.Black)
+                        Text("CLEAVE RANGE: 1.8m • ∞ DURABILITY", color = ElectricBlueSafe, fontSize = 9.sp, fontWeight = FontWeight.Bold)
                     }
                 }
 
@@ -614,19 +648,35 @@ fun WeaponCollectionScreen(
                         enabled = !isGunPrimary,
                         onClick = {
                             scope.launch {
-                                repository.updateEquippedWeapon(selectedWeaponId)
+                                if (isSelectedMelee) {
+                                    repository.updateEquippedMelee(selectedWeaponId)
+                                } else {
+                                    repository.updateEquippedWeapon(selectedWeaponId)
+                                }
                                 gunTarget?.let { cloudRepository?.setInventoryItemEquipped(it.id, true) }
-                                statusMessage = "${displayWeapon.name} equipped for Lobby & Match Spawn!"
+                                statusMessage = if (isSelectedMelee) {
+                                    "${displayWeapon.name} equipped to Melee Slot 4!"
+                                } else {
+                                    "${displayWeapon.name} equipped for Lobby & Match Spawn!"
+                                }
                             }
                         },
                         colors = ButtonDefaults.buttonColors(
                             containerColor = if (isGunPrimary) TacticalSurfaceVariant else CyberOrange,
                             disabledContainerColor = TacticalSurfaceVariant
                         ),
-                        modifier = Modifier.fillMaxWidth().height(42.dp).testTag("equip_primary_weapon_button")
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(42.dp)
+                            .testTag(if (isSelectedMelee) "equip_melee_weapon_button" else "equip_primary_weapon_button")
                     ) {
                         Text(
-                            text = if (isGunPrimary) "EQUIPPED AS PRIMARY LOADOUT ✓" else "EQUIP ${displayWeapon.name.uppercase()} TO LOBBY & MATCH",
+                            text = when {
+                                isGunPrimary && isSelectedMelee -> "EQUIPPED IN MELEE SLOT 4 ✓"
+                                isGunPrimary -> "EQUIPPED AS PRIMARY LOADOUT ✓"
+                                isSelectedMelee -> "EQUIP ${displayWeapon.name.uppercase()} TO SLOT 4"
+                                else -> "EQUIP ${displayWeapon.name.uppercase()} TO LOBBY & MATCH"
+                            },
                             color = if (isGunPrimary) HealthGreen else Color.Black,
                             fontWeight = FontWeight.Black,
                             fontSize = 12.sp

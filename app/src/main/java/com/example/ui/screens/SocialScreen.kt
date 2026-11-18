@@ -103,6 +103,10 @@ import com.example.data.cloud.CloudMatchRoom
 import com.example.data.cloud.CloudUserProfile
 import com.example.game.model.CharacterPreset
 import com.example.game.model.PetPreset
+import com.example.game.model.RankTierBadge
+import com.example.ui.components.Character3DShowcaseView
+import com.example.ui.components.RankGuideDialog
+import com.example.ui.components.RankTierCrest
 import com.example.ui.theme.CyberOrange
 import com.example.ui.theme.ElectricBlueSafe
 import com.example.ui.theme.HazardYellow
@@ -261,9 +265,9 @@ fun SocialScreen(
                     contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
                     modifier = Modifier.testTag("create_private_room_button")
                 ) {
-                    Icon(Icons.Default.Lock, contentDescription = "Private Room", tint = Color.Black, modifier = Modifier.size(14.dp))
+                    Icon(Icons.Default.Lock, contentDescription = "Private Room", tint = Color.White, modifier = Modifier.size(14.dp))
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text("PRIVATE ROOM", color = Color.Black, fontWeight = FontWeight.Black, fontSize = 10.sp)
+                    Text("PRIVATE ROOM", color = Color.White, fontWeight = FontWeight.Black, fontSize = 10.sp)
                 }
             }
         }
@@ -506,335 +510,500 @@ private fun ProfileTabContent(
     var nameDraft by remember(p.username) { mutableStateOf(p.username) }
     var isEditingBio by remember { mutableStateOf(false) }
     var bioDraft by remember(p.signatureBio) { mutableStateOf(p.signatureBio) }
+    var showAchievementsPanel by remember { mutableStateOf(false) }
+    var showRankGuideDialog by remember { mutableStateOf(false) }
 
     val effectiveRp = cloudProfile?.rankPoints?.toInt() ?: p.rankPoints
-    val effectiveTier = cloudProfile?.rankTier ?: p.rankTier
+    val activeRankBadge = remember(effectiveRp) { RankTierBadge.fromRp(effectiveRp) }
+    val effectiveTier = RankTierBadge.formattedRankLabel(effectiveRp)
     val pet = remember(p.selectedPetId) { PetPreset.fromId(p.selectedPetId) }
     val preset = remember(p.selectedCharacterId) { CharacterPreset.fromId(p.selectedCharacterId) }
     val petGlow = Color(pet.glowRgb.first, pet.glowRgb.second, pet.glowRgb.third)
-    val uidString = cloudProfile?.userId?.take(10)?.uppercase() ?: "19105274${p.id}9"
+    val uidString = cloudProfile?.userId?.take(10)?.uppercase() ?: "WARX${p.id}7094"
+    val rankFrac = ((effectiveRp - 1000).coerceAtLeast(0).toFloat() / 5500f).coerceIn(0f, 1f)
+    val xpFrac = (p.xp.toFloat() / p.maxXp.coerceAtLeast(1).toFloat()).coerceIn(0f, 1f)
+    val topTenEst = (p.wins + (p.matchesPlayed - p.wins).coerceAtLeast(0) / 3).coerceAtMost(p.matchesPlayed)
+    val avgPlacement = if (p.matchesPlayed > 0) String.format(Locale.US, "%.1f", (24f - (p.wins.toFloat() / p.matchesPlayed.coerceAtLeast(1)) * 18f).coerceIn(1.2f, 22.0f)) else "--"
+    val avgDmg = if (p.matchesPlayed > 0) String.format(Locale.US, "%.1f", p.kdRatio * 138.4f + 85f) else "0.0"
 
     Row(
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0xFF07090F)),
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        // LEFT: Stage Pedestal
+        // LEFT: Obsidian 2x3 Career Dashboard + Optional Expandable Achievements Drawer
+        Column(
+            modifier = Modifier
+                .weight(1.34f)
+                .fillMaxHeight(),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            if (showAchievementsPanel) {
+                Card(
+                    modifier = Modifier.fillMaxSize(),
+                    shape = RoundedCornerShape(10.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF10141F))
+                ) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("COMBAT ACHIEVEMENTS & BADGES", color = HazardYellow, fontWeight = FontWeight.Black, fontSize = 12.sp)
+                            Button(
+                                onClick = { showAchievementsPanel = false },
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF21293B)),
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                                modifier = Modifier.height(28.dp)
+                            ) {
+                                Text("BACK TO OVERVIEW", color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                        LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            items(achievements) { ach ->
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(Color(0xFF171D2C))
+                                        .padding(horizontal = 10.dp, vertical = 7.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(ach.title, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                                        Text("${ach.currentProgress} / ${ach.targetCount} • +${ach.rewardCredits} VC", color = TextSecondary, fontSize = 9.sp)
+                                    }
+                                    when {
+                                        ach.isClaimed -> Text("CLAIMED", color = HealthGreen, fontWeight = FontWeight.Black, fontSize = 10.sp)
+                                        ach.isCompleted -> Button(
+                                            onClick = { onClaimAchievement(ach.id) },
+                                            colors = ButtonDefaults.buttonColors(containerColor = CyberOrange),
+                                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp),
+                                            modifier = Modifier.height(28.dp)
+                                        ) {
+                                            Text("CLAIM", color = Color.White, fontWeight = FontWeight.Black, fontSize = 9.sp)
+                                        }
+                                        else -> Text("IN PROGRESS", color = TextSecondary, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            } else {
+                // TOP ROW: SEASON RANKED (wider) + COMBAT RECORD / NOTABLE SEASON
+                Row(
+                    modifier = Modifier.weight(1.15f).fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    // Season Ranked Slate Card
+                    Column(
+                        modifier = Modifier
+                            .weight(1.45f)
+                            .fillMaxHeight()
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Brush.verticalGradient(listOf(Color(0xFF1E263D), Color(0xFF101521))))
+                            .border(1.dp, Color(0xFF2D3959), RoundedCornerShape(8.dp))
+                            .padding(10.dp),
+                        verticalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("SEASON 1  |  RANKED", color = Color.White.copy(alpha = 0.85f), fontWeight = FontWeight.Black, fontSize = 10.sp, letterSpacing = 0.8.sp)
+                            Text("${effectiveRp} RP", color = HazardYellow, fontWeight = FontWeight.Black, fontSize = 10.sp)
+                        }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                modifier = Modifier
+                                    .width(72.dp)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .clickable { showRankGuideDialog = true }
+                                    .padding(vertical = 2.dp)
+                                    .testTag("profile_rank_crest_button")
+                            ) {
+                                RankTierCrest(tier = activeRankBadge, size = 48.dp)
+                                Spacer(modifier = Modifier.height(3.dp))
+                                Text(effectiveTier.uppercase(), color = Color.White, fontWeight = FontWeight.Black, fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            }
+
+                            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                    ObsidianMetricCell("WINS", "${p.wins}", Modifier.weight(1f))
+                                    ObsidianMetricCell("TOP 10", "$topTenEst", Modifier.weight(1f))
+                                    ObsidianMetricCell("MATCHES", "${p.matchesPlayed}", Modifier.weight(1f))
+                                }
+                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                    ObsidianMetricCell("AVG PLACE", avgPlacement, Modifier.weight(1f))
+                                    ObsidianMetricCell("K/D RATIO", String.format(Locale.US, "%.2f", p.kdRatio), Modifier.weight(1f))
+                                    ObsidianMetricCell("AVG DMG", avgDmg, Modifier.weight(1f))
+                                }
+                            }
+                        }
+
+                        Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                            LinearProgressIndicator(
+                                progress = { rankFrac },
+                                modifier = Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(2.dp)),
+                                color = HazardYellow,
+                                trackColor = Color(0xFF222A3D)
+                            )
+                            Text("Displays season career statistics across Classic & Ranked battlegrounds.", color = TextSecondary, fontSize = 7.sp)
+                        }
+                    }
+
+                    // Notable Season / Bio & Quick Achievements Button
+                    Column(
+                        modifier = Modifier
+                            .weight(0.95f)
+                            .fillMaxHeight()
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Brush.verticalGradient(listOf(Color(0xFF28224A), Color(0xFF131523))))
+                            .border(1.dp, Color(0xFF423872), RoundedCornerShape(8.dp))
+                            .padding(10.dp),
+                        verticalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("NOTABLE SEASON", color = Color.White.copy(alpha = 0.9f), fontWeight = FontWeight.Black, fontSize = 10.sp)
+                            Icon(Icons.Default.EmojiEvents, contentDescription = "Peak Season", tint = HazardYellow, modifier = Modifier.size(14.dp))
+                        }
+
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            RankTierCrest(tier = activeRankBadge, size = 38.dp)
+                            Column {
+                                Text(effectiveTier.uppercase(), color = Color.White, fontWeight = FontWeight.Black, fontSize = 11.sp)
+                                Text("WARX SQUAD • ${preset.displayName}", color = ElectricBlueSafe, fontSize = 8.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+
+                        if (isEditingBio) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                OutlinedTextField(
+                                    value = bioDraft,
+                                    onValueChange = { if (it.length <= 48) bioDraft = it },
+                                    singleLine = true,
+                                    modifier = Modifier.weight(1f).testTag("signature_bio_input"),
+                                    colors = OutlinedTextFieldDefaults.colors(
+                                        focusedTextColor = TextPrimary,
+                                        unfocusedTextColor = TextPrimary,
+                                        focusedBorderColor = CyberOrange,
+                                        unfocusedBorderColor = TextSecondary
+                                    )
+                                )
+                                IconButton(
+                                    onClick = {
+                                        if (bioDraft.isNotBlank()) onSaveBio(bioDraft)
+                                        isEditingBio = false
+                                    },
+                                    modifier = Modifier.testTag("save_bio_button")
+                                ) {
+                                    Icon(Icons.Default.Check, contentDescription = "Save Bio", tint = HealthGreen)
+                                }
+                            }
+                        } else {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(Color.Black.copy(alpha = 0.35f))
+                                    .clickable { bioDraft = p.signatureBio; isEditingBio = true }
+                                    .padding(horizontal = 8.dp, vertical = 5.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(p.signatureBio, color = TextPrimary, fontSize = 9.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                                Icon(Icons.Default.Edit, contentDescription = "Edit Signature", tint = HazardYellow, modifier = Modifier.size(12.dp))
+                            }
+                        }
+                    }
+                }
+
+                // BOTTOM ROW: 3 OBSIDIAN METRIC PANELS (SURVIVAL LEVEL | LAST WEAPON KILL | LAST MEDAL EARNED)
+                Row(
+                    modifier = Modifier.weight(0.95f).fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    // 1. Survival Level
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight()
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Color(0xFF10141F))
+                            .border(1.dp, Color(0xFF232C40), RoundedCornerShape(8.dp))
+                            .padding(10.dp),
+                        verticalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text("SURVIVAL LEVEL", color = Color.White.copy(alpha = 0.85f), fontWeight = FontWeight.Black, fontSize = 9.sp, letterSpacing = 0.6.sp)
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Box(
+                                modifier = Modifier
+                                    .size(34.dp)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(Color(0xFF1A2233))
+                                    .border(1.2.dp, ElectricBlueSafe, RoundedCornerShape(8.dp)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text("${p.level}", color = ElectricBlueSafe, fontWeight = FontWeight.Black, fontSize = 14.sp)
+                            }
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("Lv.${p.level}", color = Color.White, fontWeight = FontWeight.Black, fontSize = 14.sp)
+                                Spacer(modifier = Modifier.height(2.dp))
+                                LinearProgressIndicator(
+                                    progress = { xpFrac },
+                                    modifier = Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(2.dp)),
+                                    color = HazardYellow,
+                                    trackColor = Color(0xFF252E42)
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text("${p.xp}/${p.maxXp} XP", color = TextSecondary, fontSize = 8.sp)
+                            }
+                        }
+                        Text("TIER ${(p.level / 10).coerceAtLeast(1)}  •  ${p.bpCoins} BP", color = HazardYellow, fontSize = 8.sp, fontWeight = FontWeight.Bold)
+                    }
+
+                    // 2. Last Weapon Kill
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight()
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Color(0xFF10141F))
+                            .border(1.dp, Color(0xFF232C40), RoundedCornerShape(8.dp))
+                            .padding(10.dp),
+                        verticalArrangement = Arrangement.SpaceBetween,
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text("FAVORITE WEAPON", color = Color.White.copy(alpha = 0.85f), fontWeight = FontWeight.Black, fontSize = 9.sp)
+                            Text(p.equippedWeaponId.uppercase(), color = CyberOrange, fontWeight = FontWeight.Black, fontSize = 9.sp)
+                        }
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(34.dp)
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(Color(0xFF171E2E)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Default.Whatshot, contentDescription = p.equippedWeaponId, tint = HazardYellow, modifier = Modifier.size(20.dp))
+                        }
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text("TOTAL KILLS", color = TextSecondary, fontSize = 8.sp, fontWeight = FontWeight.Bold)
+                            Text("X ${p.kills}", color = Color.White, fontWeight = FontWeight.Black, fontSize = 11.sp)
+                        }
+                    }
+
+                    // 3. Last Medal Earned + Tap to View All Achievements
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight()
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Color(0xFF10141F))
+                            .border(1.dp, HazardYellow.copy(alpha = 0.45f), RoundedCornerShape(8.dp))
+                            .clickable { showAchievementsPanel = true }
+                            .padding(10.dp),
+                        verticalArrangement = Arrangement.SpaceBetween,
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text("LAST MEDAL EARNED", color = Color.White.copy(alpha = 0.85f), fontWeight = FontWeight.Black, fontSize = 9.sp)
+                        Box(
+                            modifier = Modifier
+                                .size(38.dp)
+                                .clip(CircleShape)
+                                .background(Brush.radialGradient(listOf(HazardYellow.copy(alpha = 0.35f), Color(0xFF1A1610))))
+                                .border(2.dp, HazardYellow, CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text("#1", color = HazardYellow, fontWeight = FontWeight.Black, fontSize = 14.sp)
+                        }
+                        Text("VICTORY ROYALE • ACHIEVE (${achievements.count { it.isCompleted }})", color = ElectricBlueSafe, fontSize = 8.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                }
+            }
+        }
+
+        // RIGHT: Live 3D Operative + Tactical Crate Showcase + UID & Edit Profile Plaque
         Box(
             modifier = Modifier
-                .weight(0.95f)
+                .weight(0.92f)
                 .fillMaxHeight()
-                .clip(RoundedCornerShape(14.dp))
-                .background(Brush.verticalGradient(listOf(Color(0xFF211238), Color(0xFF130D22), Color(0xFF0A0A12))))
-                .border(1.5.dp, HazardYellow.copy(alpha = 0.55f), RoundedCornerShape(14.dp))
+                .clip(RoundedCornerShape(10.dp))
+                .background(Brush.verticalGradient(listOf(Color(0xFF131722), Color(0xFF090B10))))
+                .border(1.dp, Color(0xFF283147), RoundedCornerShape(10.dp))
         ) {
-            Canvas(modifier = Modifier.fillMaxSize()) {
-                drawLine(Color(0xFF9C27B0).copy(alpha = 0.28f), Offset(size.width * 0.15f, 0f), Offset(size.width * 0.45f, size.height * 0.85f), 28f)
-                drawLine(HazardYellow.copy(alpha = 0.18f), Offset(size.width * 0.85f, 0f), Offset(size.width * 0.52f, size.height * 0.85f), 22f)
-                drawOval(Color.Black.copy(alpha = 0.82f), Offset(size.width * 0.16f, size.height * 0.78f), Size(size.width * 0.68f, size.height * 0.16f))
-                drawOval(HazardYellow.copy(alpha = 0.6f), Offset(size.width * 0.18f, size.height * 0.79f), Size(size.width * 0.64f, size.height * 0.14f), style = Stroke(3f))
-            }
-
-            Image(
-                painter = painterResource(id = R.drawable.vortex_hero_soldier_1794458613075),
-                contentDescription = preset.displayName,
-                contentScale = ContentScale.Fit,
-                modifier = Modifier.align(Alignment.BottomCenter).fillMaxHeight(0.88f).padding(bottom = 18.dp)
+            Character3DShowcaseView(
+                characterPresetId = p.selectedCharacterId,
+                weaponId = p.equippedWeaponId,
+                weaponSkin = "Crimson Bloodline",
+                animMode = "IDLE",
+                autoRotate = false,
+                showSupplyCrate = true,
+                modifier = Modifier.fillMaxSize().padding(bottom = 52.dp)
             )
 
-            Column(
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(end = 12.dp, bottom = 26.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(Color.Black.copy(alpha = 0.72f))
-                    .border(1.5.dp, petGlow, RoundedCornerShape(12.dp))
-                    .padding(horizontal = 10.dp, vertical = 7.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(28.dp)
-                        .clip(CircleShape)
-                        .background(Color(pet.bodyRgb.first, pet.bodyRgb.second, pet.bodyRgb.third))
-                        .border(2.dp, petGlow, CircleShape),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(Icons.Default.Pets, contentDescription = pet.displayName, tint = Color.White, modifier = Modifier.size(16.dp))
-                }
-                Spacer(modifier = Modifier.height(3.dp))
-                Text(pet.displayName, color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.Black)
-                Text("Lv.${p.petLevel}", color = petGlow, fontSize = 8.sp, fontWeight = FontWeight.Bold)
-            }
-
-            Column(
-                modifier = Modifier
-                    .align(Alignment.BottomStart)
-                    .padding(start = 10.dp, bottom = 10.dp)
-                    .clip(RoundedCornerShape(6.dp))
-                    .background(Color.White)
-                    .border(1.5.dp, HazardYellow, RoundedCornerShape(6.dp))
-                    .clickable {
-                        clipboard.setText(AnnotatedString(uidString))
-                        onCopyUid(uidString)
-                    }
-                    .padding(4.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Canvas(modifier = Modifier.size(34.dp)) {
-                    val cell = size.width / 5f
-                    val pattern = listOf(1,1,1,0,1, 1,0,1,1,0, 1,1,0,1,1, 0,1,1,0,1, 1,0,1,1,1)
-                    pattern.forEachIndexed { idx, v ->
-                        if (v == 1) drawRect(Color.Black, Offset((idx % 5) * cell, (idx / 5) * cell), Size(cell - 1f, cell - 1f))
-                    }
-                }
-                Text("UID: $uidString", color = Color.Black, fontSize = 6.sp, fontWeight = FontWeight.Black)
-            }
-
-            Box(
+            // Companion Pet Chip Top-Left
+            Row(
                 modifier = Modifier
                     .align(Alignment.TopStart)
                     .padding(10.dp)
                     .clip(RoundedCornerShape(6.dp))
                     .background(Color.Black.copy(alpha = 0.65f))
-                    .border(1.dp, CyberOrange, RoundedCornerShape(6.dp))
-                    .padding(horizontal = 8.dp, vertical = 3.dp)
+                    .border(1.dp, petGlow.copy(alpha = 0.7f), RoundedCornerShape(6.dp))
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(5.dp)
             ) {
-                Text("${preset.displayName.uppercase()} • ${p.title.uppercase()}", color = HazardYellow, fontSize = 9.sp, fontWeight = FontWeight.Black)
+                Icon(Icons.Default.Pets, contentDescription = pet.displayName, tint = petGlow, modifier = Modifier.size(13.dp))
+                Text("${preset.displayName.uppercase()} • ${pet.displayName.uppercase()} Lv.${p.petLevel}", color = Color.White, fontSize = 8.sp, fontWeight = FontWeight.Black)
             }
-        }
 
-        // RIGHT: Profile Banner, Rank Progression & Achievements
-        Column(
-            modifier = Modifier.weight(1.25f).fillMaxHeight(),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
+            // Bottom Action & Player Identity Overlay matching obsidian profile layout
             Column(
                 modifier = Modifier
+                    .align(Alignment.BottomCenter)
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(Color(0xFF141824))
-                    .border(1.5.dp, HazardYellow, RoundedCornerShape(12.dp))
+                    .background(Brush.verticalGradient(listOf(Color.Transparent, Color(0xEE080A0F), Color(0xFF06080C))))
+                    .padding(horizontal = 10.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(Brush.horizontalGradient(listOf(Color(0xFFE59A1A), Color(0xFF282E42))))
-                        .padding(10.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-                        Box(
-                            modifier = Modifier
-                                .size(42.dp)
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(Color(0xFF1E1336))
-                                .border(2.dp, HazardYellow, RoundedCornerShape(8.dp)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(Icons.Default.Shield, contentDescription = "Rank", tint = HazardYellow, modifier = Modifier.size(24.dp))
-                        }
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            if (isEditingName) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    OutlinedTextField(
-                                        value = nameDraft,
-                                        onValueChange = { if (it.length <= 16) nameDraft = it },
-                                        singleLine = true,
-                                        modifier = Modifier.weight(1f).testTag("username_input"),
-                                        colors = OutlinedTextFieldDefaults.colors(
-                                            focusedTextColor = TextPrimary,
-                                            unfocusedTextColor = TextPrimary,
-                                            focusedBorderColor = HazardYellow,
-                                            unfocusedBorderColor = TextSecondary
-                                        )
-                                    )
-                                    IconButton(
-                                        onClick = {
-                                            if (nameDraft.isNotBlank()) onSaveUsername(nameDraft.trim())
-                                            isEditingName = false
-                                        },
-                                        modifier = Modifier.testTag("save_username_button")
-                                    ) {
-                                        Icon(Icons.Default.Check, contentDescription = "Save Username", tint = HealthGreen)
-                                    }
-                                    IconButton(onClick = { nameDraft = p.username; isEditingName = false }) {
-                                        Icon(Icons.Default.Close, contentDescription = "Cancel", tint = RedZoneBombardment)
-                                    }
-                                }
-                            } else {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Text(p.username, color = Color.White, fontWeight = FontWeight.Black, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    IconButton(
-                                        onClick = { nameDraft = p.username; isEditingName = true },
-                                        modifier = Modifier.size(24.dp).testTag("edit_username_button")
-                                    ) {
-                                        Icon(Icons.Default.Edit, contentDescription = "Edit Username", tint = HazardYellow, modifier = Modifier.size(14.dp))
-                                    }
-                                }
-                            }
-                            Text("Season 54 • Global • $effectiveTier ($effectiveRp RP)", color = Color.White.copy(alpha = 0.9f), fontSize = 9.sp, fontWeight = FontWeight.Bold)
-                        }
-                    }
-
-                    Column(horizontalAlignment = Alignment.End) {
-                        Row(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(6.dp))
-                                .background(Color.Black.copy(alpha = 0.45f))
-                                .clickable { onIncrementLikes() }
-                                .padding(horizontal = 8.dp, vertical = 3.dp)
-                                .testTag("like_profile_button"),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
-                            Icon(Icons.Default.ThumbUp, contentDescription = "Like Profile", tint = HazardYellow, modifier = Modifier.size(13.dp))
-                            Text("${p.likesCount}", color = Color.White, fontWeight = FontWeight.Black, fontSize = 11.sp)
-                        }
-                        Spacer(modifier = Modifier.height(3.dp))
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp),
-                            modifier = Modifier.clickable {
+                    Row(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(Color(0xFF1B2130))
+                            .border(1.dp, Color.White.copy(alpha = 0.25f), RoundedCornerShape(6.dp))
+                            .clickable {
                                 clipboard.setText(AnnotatedString(uidString))
                                 onCopyUid(uidString)
                             }
-                        ) {
-                            Text("Lv.${p.level} • UID: $uidString", color = HazardYellow, fontSize = 9.sp, fontWeight = FontWeight.Black)
-                            Icon(Icons.Default.ContentCopy, contentDescription = "Copy UID", tint = Color.White, modifier = Modifier.size(11.dp))
-                        }
+                            .padding(horizontal = 8.dp, vertical = 5.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Icon(Icons.Default.ContentCopy, contentDescription = "Copy UID", tint = ElectricBlueSafe, modifier = Modifier.size(12.dp))
+                        Text("UID: $uidString", color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                    }
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Row(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(Color(0xFF1B2130))
+                            .border(1.dp, HazardYellow.copy(alpha = 0.6f), RoundedCornerShape(6.dp))
+                            .clickable { onIncrementLikes() }
+                            .padding(horizontal = 8.dp, vertical = 5.dp)
+                            .testTag("like_profile_button"),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Icon(Icons.Default.ThumbUp, contentDescription = "Like Profile", tint = HazardYellow, modifier = Modifier.size(12.dp))
+                        Text("${p.likesCount}", color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.Black)
                     }
                 }
 
-                Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    // Bronze -> Grandmaster Rank Progression Track
-                    val rankFrac = ((effectiveRp - 1000).coerceAtLeast(0).toFloat() / 5500f).coerceIn(0f, 1f)
-                    Column {
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text("RANK LADDER: BRONZE → GRANDMASTER", color = ElectricBlueSafe, fontWeight = FontWeight.Black, fontSize = 9.sp)
-                            Text("$effectiveRp / 6500 RP", color = HazardYellow, fontWeight = FontWeight.Black, fontSize = 9.sp)
-                        }
-                        Spacer(modifier = Modifier.height(4.dp))
-                        LinearProgressIndicator(
-                            progress = { rankFrac },
-                            modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)),
-                            color = HazardYellow,
-                            trackColor = Color.DarkGray
-                        )
-                    }
-
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        ProfileStatTile("MATCHES", "${p.matchesPlayed}", Icons.Default.History, Modifier.weight(1f))
-                        ProfileStatTile("WINS", "${p.wins}", Icons.Default.EmojiEvents, Modifier.weight(1f))
-                        ProfileStatTile("K/D RATIO", String.format(Locale.US, "%.2f", p.kdRatio), Icons.Default.Whatshot, Modifier.weight(1f))
-                        ProfileStatTile("PET", "${pet.displayName} Lv.${p.petLevel}", Icons.Default.Pets, Modifier.weight(1f))
-                    }
-
-                    if (isEditingBio) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            OutlinedTextField(
-                                value = bioDraft,
-                                onValueChange = { if (it.length <= 48) bioDraft = it },
-                                singleLine = true,
-                                modifier = Modifier.weight(1f).testTag("signature_bio_input"),
-                                colors = OutlinedTextFieldDefaults.colors(
-                                    focusedTextColor = TextPrimary,
-                                    unfocusedTextColor = TextPrimary,
-                                    focusedBorderColor = CyberOrange,
-                                    unfocusedBorderColor = TextSecondary
-                                )
+                if (isEditingName) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        OutlinedTextField(
+                            value = nameDraft,
+                            onValueChange = { if (it.length <= 16) nameDraft = it },
+                            singleLine = true,
+                            modifier = Modifier.weight(1f).testTag("username_input"),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedTextColor = TextPrimary,
+                                unfocusedTextColor = TextPrimary,
+                                focusedBorderColor = HazardYellow,
+                                unfocusedBorderColor = TextSecondary
                             )
-                            IconButton(
-                                onClick = {
-                                    if (bioDraft.isNotBlank()) onSaveBio(bioDraft)
-                                    isEditingBio = false
-                                },
-                                modifier = Modifier.testTag("save_bio_button")
+                        )
+                        IconButton(
+                            onClick = {
+                                if (nameDraft.isNotBlank()) onSaveUsername(nameDraft.trim())
+                                isEditingName = false
+                            },
+                            modifier = Modifier.testTag("save_username_button")
+                        ) {
+                            Icon(Icons.Default.Check, contentDescription = "Save Username", tint = HealthGreen)
+                        }
+                        IconButton(onClick = { nameDraft = p.username; isEditingName = false }) {
+                            Icon(Icons.Default.Close, contentDescription = "Cancel", tint = RedZoneBombardment)
+                        }
+                    }
+                } else {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(4.dp))
+                                    .background(CyberOrange)
+                                    .padding(horizontal = 6.dp, vertical = 3.dp)
                             ) {
-                                Icon(Icons.Default.Check, contentDescription = "Save Bio", tint = HealthGreen)
+                                Text("WARX", color = Color.White, fontWeight = FontWeight.Black, fontSize = 9.sp)
+                            }
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Column {
+                                Text(p.username, color = Color.White, fontWeight = FontWeight.Black, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Text("Lv.${p.level} • ${p.title}", color = HazardYellow, fontSize = 9.sp, fontWeight = FontWeight.Bold)
                             }
                         }
-                    } else {
+
                         Row(
                             modifier = Modifier
-                                .fillMaxWidth()
                                 .clip(RoundedCornerShape(6.dp))
-                                .background(Color.Black.copy(alpha = 0.35f))
-                                .clickable { bioDraft = p.signatureBio; isEditingBio = true }
-                                .padding(horizontal = 10.dp, vertical = 6.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
+                                .background(Color(0xFF1F2738))
+                                .border(1.dp, HazardYellow, RoundedCornerShape(6.dp))
+                                .clickable { nameDraft = p.username; isEditingName = true }
+                                .padding(horizontal = 9.dp, vertical = 5.dp)
+                                .testTag("edit_username_button"),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
-                            Text(p.signatureBio, color = TextPrimary, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
-                            Icon(Icons.Default.Edit, contentDescription = "Edit Signature", tint = TextSecondary, modifier = Modifier.size(13.dp))
-                        }
-                    }
-                }
-            }
-
-            Card(
-                modifier = Modifier.fillMaxWidth().weight(1f),
-                shape = RoundedCornerShape(12.dp),
-                colors = CardDefaults.cardColors(containerColor = TacticalSurface)
-            ) {
-                Column(modifier = Modifier.padding(10.dp)) {
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text("COMBAT ACHIEVEMENTS & SEASON BADGES", color = CyberOrange, fontWeight = FontWeight.Black, fontSize = 11.sp)
-                        Text("${p.bpCoins} BP • ${p.vortexCredits} VC", color = HazardYellow, fontWeight = FontWeight.Bold, fontSize = 10.sp)
-                    }
-                    Spacer(modifier = Modifier.height(6.dp))
-                    LazyColumn(verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                        items(achievements) { ach ->
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .background(TacticalSurfaceVariant)
-                                    .padding(horizontal = 10.dp, vertical = 6.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(ach.title, color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 11.sp)
-                                    Text("${ach.currentProgress} / ${ach.targetCount} • +${ach.rewardCredits} VC", color = TextSecondary, fontSize = 9.sp)
-                                }
-                                when {
-                                    ach.isClaimed -> Text("CLAIMED", color = HealthGreen, fontWeight = FontWeight.Black, fontSize = 10.sp)
-                                    ach.isCompleted -> Button(
-                                        onClick = { onClaimAchievement(ach.id) },
-                                        colors = ButtonDefaults.buttonColors(containerColor = CyberOrange),
-                                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp),
-                                        modifier = Modifier.height(28.dp)
-                                    ) {
-                                        Text("CLAIM", color = Color.Black, fontWeight = FontWeight.Black, fontSize = 9.sp)
-                                    }
-                                    else -> Text("IN PROGRESS", color = TextSecondary, fontSize = 9.sp, fontWeight = FontWeight.Bold)
-                                }
-                            }
+                            Icon(Icons.Default.Edit, contentDescription = "Edit Username", tint = HazardYellow, modifier = Modifier.size(12.dp))
+                            Text("EDIT PROFILE", color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.Black)
                         }
                     }
                 }
             }
         }
     }
+
+    if (showRankGuideDialog) {
+        RankGuideDialog(
+            currentRp = effectiveRp,
+            onDismiss = { showRankGuideDialog = false }
+        )
+    }
 }
 
 @Composable
-private fun ProfileStatTile(label: String, value: String, icon: ImageVector, modifier: Modifier = Modifier) {
-    Card(
-        modifier = modifier,
-        shape = RoundedCornerShape(8.dp),
-        colors = CardDefaults.cardColors(containerColor = TacticalSurfaceVariant)
-    ) {
-        Column(modifier = Modifier.fillMaxWidth().padding(7.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
-                Icon(icon, contentDescription = label, tint = CyberOrange, modifier = Modifier.size(11.dp))
-                Text(label, color = TextSecondary, fontSize = 8.sp, fontWeight = FontWeight.Bold, maxLines = 1)
-            }
-            Text(value, color = TextPrimary, fontWeight = FontWeight.Black, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        }
+private fun ObsidianMetricCell(label: String, value: String, modifier: Modifier = Modifier) {
+    Column(modifier = modifier) {
+        Text(label, color = TextSecondary, fontSize = 7.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+        Text(value, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Black, maxLines = 1)
     }
 }
 
@@ -883,7 +1052,7 @@ private fun FriendsAndSquadTabContent(
                                     contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
                                     modifier = Modifier.height(32.dp).testTag("invite_friend_${friend.id}")
                                 ) {
-                                    Text(if (isInvited) "INVITED ✓" else "INVITE", color = Color.Black, fontSize = 9.sp, fontWeight = FontWeight.Black)
+                                    Text(if (isInvited) "INVITED ✓" else "INVITE", color = if (isInvited) Color.Black else Color.White, fontSize = 9.sp, fontWeight = FontWeight.Black)
                                 }
                             }
                             IconButton(

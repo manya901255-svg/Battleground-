@@ -509,7 +509,27 @@ fun CharacterSelectionScreen(
                                     }
                                 }
 
-                                Text(preset.displayName, color = TextPrimary, fontWeight = FontWeight.Black, fontSize = 12.sp, maxLines = 1)
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(preset.displayName, color = TextPrimary, fontWeight = FontWeight.Black, fontSize = 12.sp, maxLines = 1, modifier = Modifier.weight(1f))
+                                    Box(
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(4.dp))
+                                            .background(pAccent.copy(alpha = 0.16f))
+                                            .padding(horizontal = 5.dp, vertical = 1.dp)
+                                    ) {
+                                        Text(
+                                            text = preset.styleTag.replace("_", " "),
+                                            color = pAccent,
+                                            fontSize = 7.sp,
+                                            fontWeight = FontWeight.Black,
+                                            maxLines = 1
+                                        )
+                                    }
+                                }
                                 Text(preset.roleTitle, color = pAccent, fontSize = 9.sp, fontWeight = FontWeight.Bold)
                                 Text("ACTIVE: ${preset.activeSkillName} — ${preset.activeSkillDesc}", color = ElectricBlueSafe, fontSize = 8.sp, maxLines = 2, lineHeight = 10.sp)
                                 Text("PASSIVE: ${preset.passiveSkillName} — ${preset.passiveSkillDesc}", color = HazardYellow, fontSize = 8.sp, maxLines = 2, lineHeight = 10.sp)

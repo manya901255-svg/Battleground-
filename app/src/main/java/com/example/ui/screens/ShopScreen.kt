@@ -74,6 +74,7 @@ import com.example.game.model.MuzzleType
 import com.example.game.model.ScopeType
 import com.example.game.model.WeaponCatalog
 import com.example.ui.components.Character3DShowcaseView
+import com.example.ui.components.Pet3DShowcaseView
 import com.example.ui.components.Weapon3DShowcaseView
 import com.example.ui.theme.CyberOrange
 import com.example.ui.theme.ElectricBlueSafe
@@ -111,6 +112,7 @@ fun ShopScreen(
     var selectedCategory by remember(initialCategory) {
         mutableStateOf(initialCategory ?: StoreCategory.CHARACTER_STORE)
     }
+    var selectedSubFilter by remember(selectedCategory) { mutableStateOf("ALL") }
     var previewSpec by remember { mutableStateOf<CatalogItemSpec?>(null) }
     var shopBannerMsg by remember { mutableStateOf<String?>(null) }
     var isProcessing by remember { mutableStateOf(false) }
@@ -118,8 +120,23 @@ fun ShopScreen(
     val displayBp = cloudProfile?.bpCoins ?: profile?.bpCoins?.toLong() ?: 0L
     val displayVc = cloudProfile?.vortexCredits ?: profile?.vortexCredits?.toLong() ?: 0L
 
-    val categoryItems = remember(selectedCategory) {
-        StoreCatalog.byCategory(selectedCategory)
+    val availableSubFilters = remember(selectedCategory) {
+        when (selectedCategory) {
+            StoreCategory.GUN_COLLECTION -> listOf("ALL", "FIREARMS", "MELEE")
+            StoreCategory.PREMIUM_BUNDLES -> listOf("ALL", "GLOO WALLS", "BUNDLES")
+            else -> emptyList()
+        }
+    }
+
+    val categoryItems = remember(selectedCategory, selectedSubFilter) {
+        val base = StoreCatalog.byCategory(selectedCategory)
+        when (selectedSubFilter) {
+            "FIREARMS" -> base.filter { it.type == "GUN" }
+            "MELEE" -> base.filter { it.type == "MELEE" }
+            "GLOO WALLS" -> base.filter { it.type == "GLOO_WALL" }
+            "BUNDLES" -> base.filter { it.type == "BUNDLE" }
+            else -> base
+        }
     }
 
     fun executeDirectPurchase(spec: CatalogItemSpec) {
@@ -264,7 +281,10 @@ fun ShopScreen(
                                 if (isSelected) HazardYellow else Color.White.copy(alpha = 0.12f),
                                 RoundedCornerShape(8.dp)
                             )
-                            .clickable { selectedCategory = cat }
+                            .clickable {
+                                selectedCategory = cat
+                                selectedSubFilter = "ALL"
+                            }
                             .padding(horizontal = 10.dp, vertical = 6.dp)
                             .testTag("store_cat_${cat.name.lowercase()}")
                     ) {
@@ -273,7 +293,26 @@ fun ShopScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(10.dp))
+            if (availableSubFilters.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(6.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    availableSubFilters.forEach { sf ->
+                        val active = selectedSubFilter == sf
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(7.dp))
+                                .background(if (active) ElectricBlueSafe else TacticalSurfaceVariant)
+                                .clickable { selectedSubFilter = sf }
+                                .padding(horizontal = 9.dp, vertical = 4.dp)
+                                .testTag("store_subfilter_${sf.lowercase().replace(" ", "_")}")
+                        ) {
+                            Text(sf, color = if (active) Color.Black else TextPrimary, fontSize = 8.sp, fontWeight = FontWeight.Black)
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
 
             LazyVerticalGrid(
                 columns = GridCells.Fixed(3),
@@ -461,7 +500,7 @@ fun ShopScreen(
 
                     // Contextual 3D Preview Viewport
                     when (itemToPreview.type) {
-                        "GUN", "WEAPON_SKIN" -> {
+                        "GUN", "WEAPON_SKIN", "MELEE" -> {
                             val wModel = remember(itemToPreview.id) {
                                 WeaponCatalog.createById(itemToPreview.targetItemId, itemToPreview.name.substringAfter(" - "))
                             }
@@ -479,6 +518,20 @@ fun ShopScreen(
                                     muzzleType = MuzzleType.COMPENSATOR,
                                     magType = MagType.EXTENDED_QUICKDRAW,
                                     autoInspect = true,
+                                    modifier = Modifier.fillMaxSize()
+                                )
+                            }
+                        }
+                        "PET" -> {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(175.dp)
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .border(1.dp, Color.White.copy(alpha = 0.14f), RoundedCornerShape(10.dp))
+                            ) {
+                                Pet3DShowcaseView(
+                                    petPresetId = itemToPreview.targetItemId,
                                     modifier = Modifier.fillMaxSize()
                                 )
                             }

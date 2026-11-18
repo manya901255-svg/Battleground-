@@ -60,6 +60,10 @@ class MeshLibrary {
     val curvedMagazine: GlMesh = cachedStatic("curvedMagazine") { buildCurvedMagazine() }
     val tacticalStock: GlMesh = cachedStatic("tacticalStock") { buildTaperedStock() }
     val opticBody: GlMesh = cachedStatic("opticBody") { buildChamferedPrism(bevel = 0.20f, topScaleX = 0.88f, topScaleZ = 0.88f) }
+    val katanaBlade: GlMesh = cachedStatic("katanaBlade") { buildKatanaBlade() }
+    val crescentScythe: GlMesh = cachedStatic("crescentScythe") { buildCrescentScythe() }
+    val butterflyWing: GlMesh = cachedStatic("butterflyWing") { buildButterflyWing() }
+    val kitsuneEar: GlMesh = cachedStatic("kitsuneEar") { buildCone(slices = 6, droopAmount = 0.05f) }
 
     // Environment organic, architectural, military & aircraft meshes
     val treeTrunk: GlMesh = cachedStatic("treeTrunk") { buildCylinder(slices = 10, axis = 1, radiusTop = 0.58f, radiusBot = 1.28f) }
@@ -802,6 +806,65 @@ class MeshLibrary {
 
     private fun buildTaperedPrism(topScaleX: Float, topScaleZ: Float): GlMesh =
         buildChamferedPrism(bevel = 0.08f, topScaleX = topScaleX, topScaleZ = topScaleZ)
+
+    private fun buildKatanaBlade(): GlMesh {
+        val segs = 6
+        val out = FloatArrayList(segs * 24 * 8)
+        for (i in 0 until segs) {
+            val t0 = i.toFloat() / segs
+            val t1 = (i + 1).toFloat() / segs
+            val x0 = -0.5f + t0
+            val x1 = -0.5f + t1
+            val c0 = t0 * t0 * 0.08f
+            val c1 = t1 * t1 * 0.08f
+            val h0 = 0.08f * (1f - t0 * 0.35f)
+            val h1 = 0.08f * (1f - t1 * 0.35f)
+            val a = Triple(x0, c0 + h0, 0.025f); val b = Triple(x1, c1 + h1, 0.025f)
+            val c = Triple(x1, c1 - h1 * 0.5f, 0f); val d = Triple(x0, c0 - h0 * 0.5f, 0f)
+            val e = Triple(x0, c0 + h0, -0.025f); val f = Triple(x1, c1 + h1, -0.025f)
+            out.addFacetQuad(a, b, c, d)
+            out.addFacetQuad(f, e, d, c)
+            out.addFacetQuad(a, e, f, b)
+        }
+        return out.toMesh()
+    }
+
+    private fun buildCrescentScythe(): GlMesh {
+        val segs = 7
+        val out = FloatArrayList(segs * 24 * 8)
+        for (i in 0 until segs) {
+            val t0 = i.toFloat() / segs
+            val t1 = (i + 1).toFloat() / segs
+            val ang0 = -PI * 0.15 + t0 * PI * 0.72
+            val ang1 = -PI * 0.15 + t1 * PI * 0.72
+            val w0 = 0.18f * (1f - t0 * 0.72f)
+            val w1 = 0.18f * (1f - t1 * 0.72f)
+            val o0 = Triple((cos(ang0) * 0.52).toFloat(), (sin(ang0) * 0.45).toFloat(), 0.03f)
+            val o1 = Triple((cos(ang1) * 0.52).toFloat(), (sin(ang1) * 0.45).toFloat(), 0.03f)
+            val i0 = Triple((cos(ang0) * (0.52 - w0)).toFloat(), (sin(ang0) * (0.45 - w0)).toFloat(), 0f)
+            val i1 = Triple((cos(ang1) * (0.52 - w1)).toFloat(), (sin(ang1) * (0.45 - w1)).toFloat(), 0f)
+            val b0 = Triple(o0.first, o0.second, -0.03f); val b1 = Triple(o1.first, o1.second, -0.03f)
+            out.addFacetQuad(o0, o1, i1, i0)
+            out.addFacetQuad(b1, b0, i0, i1)
+            out.addFacetQuad(o0, b0, b1, o1)
+        }
+        return out.toMesh()
+    }
+
+    private fun buildButterflyWing(): GlMesh {
+        val out = FloatArrayList(24 * 8)
+        val root = Triple(0f, 0f, 0f)
+        val tipTop = Triple(-0.22f, 0.55f, 0.48f)
+        val outerMid = Triple(-0.46f, 0.34f, 0.52f)
+        val lowerTip = Triple(-0.32f, -0.18f, 0.34f)
+        val innerLow = Triple(0.08f, -0.12f, 0.14f)
+        out.addFacetTri(root, tipTop, outerMid)
+        out.addFacetTri(root, outerMid, lowerTip)
+        out.addFacetTri(root, lowerTip, innerLow)
+        out.addFacetTri(tipTop, root, outerMid)
+        out.addFacetTri(outerMid, root, lowerTip)
+        return out.toMesh()
+    }
 
     private fun spherePoint(phi: Double, th: Double): Triple<Float, Float, Float> = Triple(
         (cos(phi) * cos(th) * 0.5).toFloat(),

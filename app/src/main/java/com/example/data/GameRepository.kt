@@ -208,6 +208,15 @@ class GameRepository(private val dao: VortexDao) {
                 "CHARACTER" -> dao.insertOrUpdateProfile(profile.copy(selectedCharacterId = item.targetItemId))
                 "PET" -> dao.insertOrUpdateProfile(profile.copy(selectedPetId = item.targetItemId))
                 "GUN" -> dao.insertOrUpdateProfile(profile.copy(equippedWeaponId = item.targetItemId))
+                "MELEE" -> dao.insertOrUpdateProfile(profile.copy(equippedMeleeId = item.targetItemId))
+                "GLOO_WALL" -> dao.insertOrUpdateProfile(profile.copy(equippedGlooWallId = item.id))
+                "PARACHUTE" -> dao.insertOrUpdateProfile(
+                    profile.copy(
+                        equippedParachuteId = item.id,
+                        gliderEnabled = item.targetItemId == "glider" || profile.gliderEnabled
+                    )
+                )
+                "VEHICLE" -> dao.insertOrUpdateProfile(profile.copy(equippedVehicleSkinId = item.id))
             }
         }
     }
@@ -308,6 +317,63 @@ class GameRepository(private val dao: VortexDao) {
             dao.insertOrUpdateProfile(profile.copy(vortexCredits = profile.vortexCredits + 100))
         } else if (isElite && tierEntity.eliteReward.contains("BP")) {
             dao.insertOrUpdateProfile(profile.copy(bpCoins = profile.bpCoins + 800))
+        }
+    }
+
+    suspend fun claimAllBattlePassEligible(maxUnlockedTier: Int): Int {
+        val tiers = dao.getBattlePassTiers().firstOrNull() ?: return 0
+        val profile = dao.getUserProfileOnce() ?: return 0
+        var count = 0
+        var bpBonus = 0
+        var creditsBonus = 0
+        tiers.filter { it.tier <= maxUnlockedTier }.forEach { tierEntity ->
+            var changed = false
+            var next = tierEntity
+            if (!next.isFreeClaimed) {
+                next = next.copy(isFreeClaimed = true)
+                changed = true
+                count++
+                if (next.freeReward.contains("BP")) bpBonus += next.freeRewardAmount
+            }
+            if (profile.hasElitePass && !next.isEliteClaimed) {
+                next = next.copy(isEliteClaimed = true)
+                changed = true
+                count++
+                if (next.eliteReward.contains("Credits")) creditsBonus += 100
+                else if (next.eliteReward.contains("BP")) bpBonus += 800
+            }
+            if (changed) dao.updateBattlePassTier(next)
+        }
+        if (bpBonus > 0 || creditsBonus > 0) {
+            dao.insertOrUpdateProfile(
+                profile.copy(
+                    bpCoins = profile.bpCoins + bpBonus,
+                    vortexCredits = profile.vortexCredits + creditsBonus
+                )
+            )
+        }
+        return count
+    }
+
+    suspend fun upgradeToElitePass(): Boolean {
+        val profile = dao.getUserProfileOnce() ?: return false
+        if (profile.hasElitePass || profile.vortexCredits < 300) return false
+        dao.insertOrUpdateProfile(
+            profile.copy(
+                vortexCredits = profile.vortexCredits - 300,
+                hasElitePass = true
+            )
+        )
+        return true
+    }
+
+    suspend fun updateEquippedMelee(meleeId: String) {
+        val profile = dao.getUserProfileOnce() ?: UserProfileEntity()
+        dao.insertOrUpdateProfile(profile.copy(equippedMeleeId = meleeId))
+        val item = dao.getInventoryItemById("melee_${meleeId.lowercase()}")
+        if (item != null && item.isOwned) {
+            dao.unequipAllOfType("MELEE")
+            dao.updateInventoryItem(item.copy(isEquipped = true))
         }
     }
 

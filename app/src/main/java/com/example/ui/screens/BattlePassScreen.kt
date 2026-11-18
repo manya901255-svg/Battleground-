@@ -1,6 +1,7 @@
 package com.example.ui.screens
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -20,6 +21,8 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Lock
@@ -82,10 +85,14 @@ fun BattlePassScreen(
     var statusText by remember { mutableStateOf<String?>(null) }
 
     val currentTier = ((profile?.level ?: 1) / 2).coerceIn(1, 50)
+    val hasElitePass = profile?.hasElitePass ?: false
     val xpFraction = if ((profile?.maxXp ?: 1) > 0) {
         ((profile?.xp ?: 0).toFloat() / (profile?.maxXp ?: 1).toFloat()).coerceIn(0f, 1f)
     } else 0f
 
+    val eligiblePassClaimCount = tiers.count { t ->
+        t.tier <= currentTier && (!t.isFreeClaimed || (hasElitePass && !t.isEliteClaimed))
+    }
     val eligibleLocalCount = missions.count { !it.isClaimed && it.currentProgress >= it.targetCount }
     val eligibleCloudCount = cloudMissions.count { !it.isClaimed && it.currentProgress >= it.targetCount }
 
@@ -135,31 +142,96 @@ fun BattlePassScreen(
 
         Spacer(modifier = Modifier.height(10.dp))
 
-        // Progress bar to next tier
-        Column(
+        // Progress bar + Checkered Nobility Elite Pass Banner
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(12.dp))
                 .background(TacticalSurface)
-                .padding(12.dp)
+                .border(1.2.dp, if (hasElitePass) AirdropGold else CyberOrange.copy(alpha = 0.55f), RoundedCornerShape(12.dp))
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text("Tier $currentTier Progress", color = TextSecondary, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                Text("${profile?.xp ?: 0} / ${profile?.maxXp ?: 5000} XP", color = CyberOrange, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+            Canvas(modifier = Modifier.matchParentSize()) {
+                val cell = 22.dp.toPx()
+                val cols = (size.width / cell).toInt() + 1
+                val rows = (size.height / cell).toInt() + 1
+                for (r in 0..rows) {
+                    for (c in 0..cols) {
+                        if ((r + c) % 2 == 0) {
+                            drawRect(
+                                color = if (hasElitePass) Color(0x14FFD54F) else Color(0x10E5192B),
+                                topLeft = Offset(c * cell, r * cell),
+                                size = Size(cell, cell)
+                            )
+                        }
+                    }
+                }
             }
-            Spacer(modifier = Modifier.height(6.dp))
-            LinearProgressIndicator(
-                progress = { xpFraction },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(8.dp)
-                    .clip(RoundedCornerShape(4.dp)),
-                color = CyberOrange,
-                trackColor = Color.DarkGray
-            )
+            Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = if (hasElitePass) "CHECKERED NOBILITY • ELITE PASS ACTIVE ✓" else "CHECKERED NOBILITY • UPGRADE ELITE PASS",
+                            color = if (hasElitePass) AirdropGold else HazardYellow,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Black
+                        )
+                        Text(
+                            "Tier $currentTier Progress • ${profile?.xp ?: 0} / ${profile?.maxXp ?: 5000} XP",
+                            color = TextSecondary,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        if (selectedTab == 0) {
+                            Button(
+                                enabled = eligiblePassClaimCount > 0,
+                                onClick = {
+                                    scope.launch {
+                                        val claimed = repository.claimAllBattlePassEligible(currentTier)
+                                        statusText = if (claimed > 0) "Claimed $claimed Battle Pass reward(s)!" else "No unlocked rewards left."
+                                    }
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = HealthGreen, disabledContainerColor = TacticalSurfaceVariant),
+                                modifier = Modifier.height(34.dp).testTag("claim_all_bp_button")
+                            ) {
+                                Text("CLAIM ALL ($eligiblePassClaimCount)", color = Color.Black, fontWeight = FontWeight.Black, fontSize = 10.sp)
+                            }
+                        }
+                        if (!hasElitePass) {
+                            Button(
+                                onClick = {
+                                    scope.launch {
+                                        val upgraded = repository.upgradeToElitePass()
+                                        statusText = if (upgraded) {
+                                            "Elite Pass Unlocked! Claim your gold track rewards!"
+                                        } else {
+                                            "Requires 300 Vortex Credits (VC) to unlock Elite Pass."
+                                        }
+                                    }
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = AirdropGold),
+                                modifier = Modifier.height(34.dp).testTag("upgrade_elite_pass_button")
+                            ) {
+                                Text("ELITE (300 VC)", color = Color.Black, fontWeight = FontWeight.Black, fontSize = 10.sp)
+                            }
+                        }
+                    }
+                }
+                LinearProgressIndicator(
+                    progress = { xpFraction },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(8.dp)
+                        .clip(RoundedCornerShape(4.dp)),
+                    color = if (hasElitePass) AirdropGold else CyberOrange,
+                    trackColor = Color.DarkGray
+                )
+            }
         }
 
         Spacer(modifier = Modifier.height(10.dp))
@@ -184,6 +256,7 @@ fun BattlePassScreen(
                     BattlePassTierCard(
                         tier = tier,
                         userCurrentTier = currentTier,
+                        hasElitePass = hasElitePass,
                         onClaimFree = {
                             scope.launch {
                                 repository.claimBattlePassTier(tier, isElite = false)
@@ -191,9 +264,13 @@ fun BattlePassScreen(
                             }
                         },
                         onClaimElite = {
-                            scope.launch {
-                                repository.claimBattlePassTier(tier, isElite = true)
-                                statusText = "Claimed Tier ${tier.tier} Elite Reward"
+                            if (hasElitePass) {
+                                scope.launch {
+                                    repository.claimBattlePassTier(tier, isElite = true)
+                                    statusText = "Claimed Tier ${tier.tier} Elite Reward"
+                                }
+                            } else {
+                                statusText = "Upgrade to Elite Pass (300 VC) to claim Tier ${tier.tier} Elite!"
                             }
                         }
                     )
@@ -338,6 +415,7 @@ fun BattlePassScreen(
 fun BattlePassTierCard(
     tier: BattlePassTierEntity,
     userCurrentTier: Int,
+    hasElitePass: Boolean = true,
     onClaimFree: () -> Unit,
     onClaimElite: () -> Unit
 ) {
@@ -390,13 +468,19 @@ fun BattlePassTierCard(
                 Text(tier.eliteReward, color = HazardYellow, fontWeight = FontWeight.Bold, fontSize = 12.sp)
                 if (tier.isEliteClaimed) {
                     Text("CLAIMED", color = HealthGreen, fontSize = 9.sp, fontWeight = FontWeight.Bold)
-                } else if (isUnlocked) {
+                } else if (isUnlocked && hasElitePass) {
                     Button(
                         onClick = onClaimElite,
                         colors = ButtonDefaults.buttonColors(containerColor = AirdropGold),
                         modifier = Modifier.height(28.dp)
                     ) {
                         Text("CLAIM", color = Color.Black, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                    }
+                } else if (isUnlocked) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Lock, contentDescription = "Elite Pass Required", tint = AirdropGold, modifier = Modifier.size(14.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("ELITE ONLY", color = AirdropGold, fontSize = 9.sp, fontWeight = FontWeight.Bold)
                     }
                 } else {
                     Icon(Icons.Default.Lock, contentDescription = "Locked", tint = Color.Gray, modifier = Modifier.size(16.dp))

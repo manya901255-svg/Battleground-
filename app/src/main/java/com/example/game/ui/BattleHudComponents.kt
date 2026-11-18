@@ -655,7 +655,7 @@ fun WeaponInventoryPanel(
 
                     // Crisp Weapon Silhouette
                     Canvas(modifier = Modifier.width(74.dp).height(26.dp)) {
-                        drawWeaponSilhouette(activeWeapon?.category ?: WeaponCategory.ASSAULT_RIFLE)
+                        drawWeaponSilhouette(activeWeapon?.category ?: WeaponCategory.ASSAULT_RIFLE, activeWeapon?.id ?: "")
                     }
                 }
 
@@ -681,7 +681,7 @@ fun WeaponInventoryPanel(
             }
         }
 
-        // 3 Sub-Slot Cards (Secondary/Alt Primary, Pistol, Melee/Fist ∞)
+        // 3 Sub-Slot Cards (Secondary/Alt Primary, Pistol, Melee ∞)
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(3.dp)
@@ -707,7 +707,7 @@ fun WeaponInventoryPanel(
             WeaponMiniSlotCard(
                 weapon = user.melee,
                 fallbackCategory = WeaponCategory.MELEE,
-                ammoText = "∞",
+                ammoText = "${user.melee?.name?.take(6)?.uppercase() ?: "MELEE"} ∞",
                 isSelected = user.activeSlot == 4,
                 testTag = "weapon_slot_4",
                 modifier = Modifier.weight(1f),
@@ -742,25 +742,26 @@ private fun WeaponMiniSlotCard(
             .testTag(testTag)
     ) {
         Canvas(modifier = Modifier.fillMaxSize().padding(bottom = 8.dp)) {
-            drawWeaponSilhouette(weapon?.category ?: fallbackCategory)
+            drawWeaponSilhouette(weapon?.category ?: fallbackCategory, weapon?.id ?: "")
         }
         Text(
             text = ammoText,
             color = Color.White,
-            fontSize = 10.sp,
+            fontSize = 8.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
             fontWeight = FontWeight.Black,
             modifier = Modifier.align(Alignment.BottomStart)
         )
     }
 }
 
-private fun DrawScope.drawWeaponSilhouette(category: WeaponCategory) {
+private fun DrawScope.drawWeaponSilhouette(category: WeaponCategory, weaponId: String = "") {
     val w = size.width
     val h = size.height
     val c = Color.White
     when (category) {
         WeaponCategory.ASSAULT_RIFLE, WeaponCategory.SMG -> {
-            // Barrel + Receiver + Stock + Magazine
             drawRect(c, topLeft = Offset(w * 0.08f, h * 0.34f), size = Size(w * 0.82f, h * 0.18f))
             drawRect(c, topLeft = Offset(w * 0.06f, h * 0.36f), size = Size(w * 0.18f, h * 0.30f))
             drawRect(c, topLeft = Offset(w * 0.42f, h * 0.50f), size = Size(w * 0.11f, h * 0.36f))
@@ -776,8 +777,36 @@ private fun DrawScope.drawWeaponSilhouette(category: WeaponCategory) {
             drawRect(c, topLeft = Offset(w * 0.24f, h * 0.25f), size = Size(w * 0.52f, h * 0.22f))
             drawRect(c, topLeft = Offset(w * 0.26f, h * 0.45f), size = Size(w * 0.16f, h * 0.38f))
         }
+        WeaponCategory.MELEE -> {
+            when (weaponId.lowercase()) {
+                "katana" -> {
+                    rotate(degrees = -22f) {
+                        drawRect(c, topLeft = Offset(w * 0.10f, h * 0.46f), size = Size(w * 0.78f, h * 0.11f))
+                        drawRect(HazardYellow, topLeft = Offset(w * 0.28f, h * 0.34f), size = Size(w * 0.05f, h * 0.34f))
+                    }
+                }
+                "scythe" -> {
+                    drawRect(c, topLeft = Offset(w * 0.12f, h * 0.48f), size = Size(w * 0.72f, h * 0.10f))
+                    drawArc(RedZoneBombardment, startAngle = -110f, sweepAngle = 150f, useCenter = false, topLeft = Offset(w * 0.58f, h * 0.10f), size = Size(w * 0.32f, h * 0.72f), style = Stroke(width = 4.5f))
+                }
+                "bat" -> {
+                    rotate(degrees = -18f) {
+                        drawRoundRect(c, topLeft = Offset(w * 0.14f, h * 0.40f), size = Size(w * 0.74f, h * 0.20f), cornerRadius = CornerRadius(8f, 8f))
+                    }
+                }
+                "machete" -> {
+                    rotate(degrees = -15f) {
+                        drawRect(c, topLeft = Offset(w * 0.12f, h * 0.44f), size = Size(w * 0.24f, h * 0.14f))
+                        drawRect(c, topLeft = Offset(w * 0.36f, h * 0.34f), size = Size(w * 0.50f, h * 0.28f))
+                    }
+                }
+                else -> {
+                    drawOval(c, topLeft = Offset(w * 0.34f, h * 0.18f), size = Size(w * 0.46f, h * 0.62f))
+                    drawRect(c, topLeft = Offset(w * 0.12f, h * 0.44f), size = Size(w * 0.26f, h * 0.14f))
+                }
+            }
+        }
         else -> {
-            // Tactical Fist silhouette
             drawRoundRect(c, topLeft = Offset(w * 0.30f, h * 0.24f), size = Size(w * 0.40f, h * 0.52f), cornerRadius = CornerRadius(6f, 6f))
         }
     }
@@ -1046,8 +1075,8 @@ fun BottomCenterStatusAndPerks(
         ) {
             // Helmet & Vest Level Icons
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
-                GearLevelBadge(label = "${user.helmetLevel.coerceAtLeast(1)}", isHelmet = true)
-                GearLevelBadge(label = "${user.armorLevel.coerceAtLeast(1)}", isHelmet = false)
+                GearLevelBadge(level = user.helmetLevel.coerceIn(1, 4), isHelmet = true)
+                GearLevelBadge(level = user.armorLevel.coerceIn(1, 4), isHelmet = false)
             }
 
             Column(
@@ -1172,21 +1201,39 @@ private fun SkillChipButton(
 }
 
 @Composable
-private fun GearLevelBadge(label: String, isHelmet: Boolean) {
+private fun GearLevelBadge(level: Int, isHelmet: Boolean) {
+    val tierColor = when (level) {
+        4 -> Color(0xFFFF3846)
+        3 -> Color(0xFF00E5FF)
+        2 -> Color(0xFFE69122)
+        else -> Color(0xFF8AA29E)
+    }
     Box(modifier = Modifier.size(22.dp)) {
         Canvas(modifier = Modifier.fillMaxSize()) {
             if (isHelmet) {
                 drawArc(
-                    color = HazardYellow,
+                    color = tierColor,
                     startAngle = 180f,
                     sweepAngle = 180f,
                     useCenter = true,
                     topLeft = Offset(size.width * 0.1f, size.height * 0.15f),
                     size = Size(size.width * 0.8f, size.height * 0.8f)
                 )
+                if (level >= 4) {
+                    drawCircle(
+                        color = HazardYellow,
+                        center = Offset(size.width * 0.38f, size.height * 0.58f),
+                        radius = 2.2f
+                    )
+                    drawCircle(
+                        color = HazardYellow,
+                        center = Offset(size.width * 0.62f, size.height * 0.58f),
+                        radius = 2.2f
+                    )
+                }
             } else {
                 drawRoundRect(
-                    color = HazardYellow,
+                    color = tierColor,
                     topLeft = Offset(size.width * 0.18f, size.height * 0.14f),
                     size = Size(size.width * 0.64f, size.height * 0.74f),
                     cornerRadius = CornerRadius(4f, 4f)
@@ -1194,13 +1241,13 @@ private fun GearLevelBadge(label: String, isHelmet: Boolean) {
             }
         }
         Text(
-            text = label,
-            color = Color.White,
-            fontSize = 8.sp,
+            text = "Lv$level",
+            color = if (level >= 4) HazardYellow else Color.White,
+            fontSize = 7.sp,
             fontWeight = FontWeight.Black,
             modifier = Modifier
                 .align(Alignment.BottomEnd)
-                .background(Color.Black.copy(alpha = 0.75f), RoundedCornerShape(3.dp))
+                .background(Color.Black.copy(alpha = 0.82f), RoundedCornerShape(3.dp))
                 .padding(horizontal = 2.dp)
         )
     }

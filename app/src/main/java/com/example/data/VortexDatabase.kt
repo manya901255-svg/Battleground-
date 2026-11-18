@@ -40,7 +40,13 @@ data class UserProfileEntity(
     val seasonId: String = "S54",
     val petVisible: Boolean = true,
     val voiceCalloutsEnabled: Boolean = true,
-    val equippedWeaponId: String = "m416"
+    val equippedWeaponId: String = "m416",
+    val equippedMeleeId: String = "katana",
+    val equippedGlooWallId: String = "gloo_cyber",
+    val equippedParachuteId: String = "para_flame",
+    val equippedVehicleSkinId: String = "vehicle_uaz_camo",
+    val gliderEnabled: Boolean = true,
+    val hasElitePass: Boolean = false
 ) {
     val kdRatio: Float
         get() = if (deaths > 0) kills.toFloat() / deaths.toFloat() else kills.toFloat()
@@ -216,7 +222,7 @@ interface VortexDao {
         GameSettingsEntity::class,
         MissionEntity::class
     ],
-    version = 9,
+    version = 10,
     exportSchema = false
 )
 abstract class VortexDatabase : RoomDatabase() {

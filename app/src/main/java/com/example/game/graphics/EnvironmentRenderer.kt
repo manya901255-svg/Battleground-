@@ -253,9 +253,10 @@ class EnvironmentRenderer(
 
         // 8. Military Compounds, Watchtower, Tents, Shipping Containers, Cooling Tower & Radio Mast
         if ((focusX - 250f) * (focusX - 250f) + (focusZ - 250f) * (focusZ - 250f) < drawDist * drawDist) {
-            // Intermodal Ribbed Shipping Containers
+            // Intermodal Ribbed Shipping Containers (Cobalt Blue, Olive Drab & High-Vis Crimson)
             drawMesh(meshes.corrugatedContainer, MaterialId.CORRUGATED_METAL, 264f, 1.7f, 240f, 0f, -15f, 0f, 7.6f, 3.4f, 3.2f, 0.12f, 0.48f, 0.82f, 1f, 0.36f, 0.82f, uvScaleX = 4f, uvScaleY = 1.5f)
             drawMesh(meshes.corrugatedContainer, MaterialId.CORRUGATED_METAL, 234f, 1.7f, 263f, 0f, 72f, 0f, 7.2f, 3.3f, 3.1f, 0.22f, 0.40f, 0.28f, 1f, 0.38f, 0.78f, uvScaleX = 4f, uvScaleY = 1.5f)
+            drawMesh(meshes.corrugatedContainer, MaterialId.CORRUGATED_METAL, 242f, 1.7f, 234f, 0f, 18f, 0f, 7.4f, 3.3f, 3.1f, 0.80f, 0.14f, 0.18f, 1f, 0.34f, 0.76f, uvScaleX = 4f, uvScaleY = 1.5f)
 
             // Field Military Canvas Tent & Fortified Sandbag Bunker
             val gyTent = TerrainHeightfield.groundHeightGl(mapConfig, 2240f, 2340f)
@@ -281,10 +282,9 @@ class EnvironmentRenderer(
             drawMesh(meshes.chamferedStructure, MaterialId.WOOD_CRATE, 261f, 2.55f, 244.2f, 0f, -8f, 0f, 1.7f, 1.7f, 1.7f, 0.75f, 0.56f, 0.32f, 1f, 0.70f, 0.04f)
             drawMesh(meshes.sandbagRow, MaterialId.DESERT_SAND, 242f, 0.65f, 260f, 0f, 12f, 0f, 6.2f, 1.3f, 1.1f, 0.64f, 0.54f, 0.38f, 1f, 0.84f, 0.02f)
 
-            // Highway Billboard
-            drawMesh(meshes.columnBeam, MaterialId.CORRUGATED_METAL, 272f, 3.2f, 232f, 0f, 0f, 0f, 0.58f, 6.4f, 0.58f, 0.26f, 0.28f, 0.32f, 1f, 0.3f, 0.85f)
-            drawMesh(meshes.chamferedStructure, MaterialId.CORRUGATED_METAL, 272f, 6.8f, 232f, 0f, -20f, 0f, 7.6f, 3.6f, 0.45f, 0.10f, 0.12f, 0.20f, 1f, 0.28f, 0.82f)
-            drawMesh(meshes.chamferedStructure, MaterialId.VEHICLE_COAT, 272f, 6.8f, 232.18f, 0f, -20f, 0f, 7.0f, 3.0f, 0.25f, 1.0f, 0.72f, 0.10f, 1f, 0.2f, 0.4f, emissive = 0.75f)
+            // Dual-Support Cobalt & Gold Highway Billboards
+            drawHighwayBillboard(272f, 232f, -20f)
+            drawHighwayBillboard(224f, 272f, 34f)
 
             // Cylindrical Industrial Cooling Tower + Radio Lattice Mast + Radome Sphere
             drawMesh(meshes.treeTrunk, MaterialId.CONCRETE_WALL, 295f, 10.5f, 195f, 0f, 0f, 0f, 11.5f, 21f, 11.5f, 0.60f, 0.64f, 0.68f, 1f, 0.82f, 0.05f, uvScaleX = 4f, uvScaleY = 3f)
@@ -293,6 +293,25 @@ class EnvironmentRenderer(
             val beaconPulse = 0.55f + 0.45f * sin(frameTimeSec * 4.5f)
             drawMesh(meshes.radomeSphere, MaterialId.SKIN_DETAIL, 318f, 20.6f, 212f, 0f, 0f, 0f, 0.85f, 0.85f, 0.85f, 1.0f, 0.16f * beaconPulse, 0.12f, 1f, 0.2f, 0f, emissive = 1.0f, useTex = 0f)
         }
+    }
+
+    private fun drawHighwayBillboard(x: Float, z: Float, rotY: Float) {
+        val rad = Math.toRadians(rotY.toDouble())
+        val rightX = cos(rad).toFloat()
+        val rightZ = -sin(rad).toFloat()
+        for (pOff in listOf(-2.4f, 2.4f)) {
+            drawMesh(
+                meshes.columnBeam, MaterialId.CORRUGATED_METAL,
+                x + rightX * pOff, 3.2f, z + rightZ * pOff,
+                0f, rotY, 0f, 0.42f, 6.4f, 0.42f,
+                0.22f, 0.25f, 0.30f, 1f, 0.32f, 0.85f
+            )
+        }
+        val normX = sin(rad).toFloat()
+        val normZ = cos(rad).toFloat()
+        drawMesh(meshes.chamferedStructure, MaterialId.CORRUGATED_METAL, x, 7.1f, z, 0f, rotY, 0f, 8.2f, 4.0f, 0.44f, 0.10f, 0.22f, 0.44f, 1f, 0.30f, 0.76f)
+        drawMesh(meshes.chamferedStructure, MaterialId.VEHICLE_COAT, x + normX * 0.18f, 7.15f, z + normZ * 0.18f, 0f, rotY, 0f, 7.4f, 3.2f, 0.22f, 0.98f, 0.74f, 0.12f, 1f, 0.22f, 0.35f, emissive = 0.55f)
+        drawMesh(meshes.chamferedStructure, MaterialId.VEHICLE_COAT, x + normX * 0.24f, 6.1f, z + normZ * 0.24f, 0f, rotY, 0f, 6.8f, 0.72f, 0.20f, 0.88f, 0.12f, 0.16f, 1f, 0.25f, 0.3f, emissive = 0.65f, useTex = 0f)
     }
 
     private fun drawStreetLamp(x: Float, z: Float, rotY: Float, isNightMode: Boolean) {

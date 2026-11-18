@@ -401,6 +401,26 @@ fun MainApp(
     val equippedWeaponSkin = remember(weaponSkinMap, equippedWeaponId) {
         weaponSkinMap[equippedWeaponId.lowercase()] ?: "Tactical Slate"
     }
+    val equippedMeleeId = remember(effectiveProfile, allInventory) {
+        allInventory.firstOrNull { it.type == "MELEE" && it.isOwned && it.isEquipped }?.targetItemId
+            ?: effectiveProfile?.equippedMeleeId?.ifBlank { null }
+            ?: "katana"
+    }
+    val equippedGlooWallId = remember(effectiveProfile, allInventory) {
+        allInventory.firstOrNull { it.type == "GLOO_WALL" && it.isOwned && it.isEquipped }?.id
+            ?: effectiveProfile?.equippedGlooWallId?.ifBlank { null }
+            ?: "gloo_cyber"
+    }
+    val equippedParachuteId = remember(effectiveProfile, allInventory) {
+        allInventory.firstOrNull { it.type == "PARACHUTE" && it.isOwned && it.isEquipped }?.id
+            ?: effectiveProfile?.equippedParachuteId?.ifBlank { null }
+            ?: "para_flame"
+    }
+    val equippedVehicleSkinId = remember(effectiveProfile, allInventory) {
+        allInventory.firstOrNull { it.type == "VEHICLE" && it.isOwned && it.isEquipped }?.id
+            ?: effectiveProfile?.equippedVehicleSkinId?.ifBlank { null }
+            ?: "vehicle_uaz_camo"
+    }
 
     if (effectiveProfile == null) {
         Box(
@@ -480,6 +500,10 @@ fun MainApp(
                             cameraSensitivity = settings?.cameraSensitivity ?: 1.0f,
                             adsSensitivity = settings?.adsSensitivity ?: 0.85f,
                             equippedPrimaryWeaponId = equippedWeaponId,
+                            equippedMeleeId = equippedMeleeId,
+                            glooWallSkinId = equippedGlooWallId,
+                            parachuteSkinId = equippedParachuteId,
+                            vehicleSkinId = equippedVehicleSkinId,
                             weaponSkinMap = weaponSkinMap,
                             weaponUpgradeMap = weaponUpgradeMap,
                             onMatchFinished = { placement, kills, damage, durationSec ->
@@ -531,6 +555,7 @@ fun MainApp(
                     onNavigateToInventory = { soundSynthesizer.playUiClick(); currentScreen = ScreenState.INVENTORY },
                     equippedWeaponId = equippedWeaponId,
                     equippedWeaponSkin = equippedWeaponSkin,
+                    equippedVehicleSkinId = equippedVehicleSkinId,
                     onNavigateToSettings = { soundSynthesizer.playUiClick(); currentScreen = ScreenState.SETTINGS },
                     onNavigateToAdmin = { soundSynthesizer.playUiClick(); currentScreen = ScreenState.ADMIN },
                     onPlayEmote = { soundSynthesizer.playVictoryFanfare() }

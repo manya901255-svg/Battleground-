@@ -204,6 +204,54 @@ object WeaponCatalog {
         upgradeLevel = upgradeLevel
     )
 
+    fun createMP40(skin: String = "Tactical Noir"): Weapon = Weapon(
+        id = "mp40",
+        name = "MP40",
+        category = WeaponCategory.SMG,
+        ammoType = AmmoType.AMMO_9MM,
+        baseDamage = 33f,
+        fireRateMs = 74L,
+        bulletSpeed = 430f,
+        baseRecoil = 0.36f,
+        maxCapacity = 28,
+        currentAmmo = 28,
+        supportedFireModes = listOf(FireMode.FULL_AUTO),
+        activeFireMode = FireMode.FULL_AUTO,
+        skinName = skin
+    )
+
+    fun createM1887(skin: String = "Rapper Underworld"): Weapon = Weapon(
+        id = "m1887",
+        name = "M1887",
+        category = WeaponCategory.SHOTGUN,
+        ammoType = AmmoType.AMMO_12GAUGE,
+        baseDamage = 28f * 7f,
+        fireRateMs = 460L,
+        bulletSpeed = 380f,
+        baseRecoil = 1.55f,
+        maxCapacity = 2,
+        currentAmmo = 2,
+        supportedFireModes = listOf(FireMode.SINGLE),
+        activeFireMode = FireMode.SINGLE,
+        skinName = skin
+    )
+
+    fun createGatling(skin: String = "Obsidian Vulcan"): Weapon = Weapon(
+        id = "gatling",
+        name = "Gatling",
+        category = WeaponCategory.ASSAULT_RIFLE,
+        ammoType = AmmoType.AMMO_556,
+        baseDamage = 28f,
+        fireRateMs = 55L,
+        bulletSpeed = 780f,
+        baseRecoil = 0.65f,
+        maxCapacity = 100,
+        currentAmmo = 100,
+        supportedFireModes = listOf(FireMode.FULL_AUTO),
+        activeFireMode = FireMode.FULL_AUTO,
+        skinName = skin
+    )
+
     fun createPan(skin: String = "Golden Winner"): Weapon = Weapon(
         id = "pan",
         name = "Cast Iron Pan",
@@ -220,15 +268,86 @@ object WeaponCatalog {
         skinName = skin
     )
 
+    fun createKatana(skin: String = "Cyber Neon Edge"): Weapon = Weapon(
+        id = "katana",
+        name = "Katana",
+        category = WeaponCategory.MELEE,
+        ammoType = AmmoType.NONE,
+        baseDamage = 92f,
+        fireRateMs = 520L,
+        bulletSpeed = 0f,
+        baseRecoil = 0f,
+        maxCapacity = 0,
+        currentAmmo = 0,
+        supportedFireModes = listOf(FireMode.SINGLE),
+        activeFireMode = FireMode.SINGLE,
+        skinName = skin
+    )
+
+    fun createBat(skin: String = "Spiked Slugger"): Weapon = Weapon(
+        id = "bat",
+        name = "Bat",
+        category = WeaponCategory.MELEE,
+        ammoType = AmmoType.NONE,
+        baseDamage = 84f,
+        fireRateMs = 620L,
+        bulletSpeed = 0f,
+        baseRecoil = 0f,
+        maxCapacity = 0,
+        currentAmmo = 0,
+        supportedFireModes = listOf(FireMode.SINGLE),
+        activeFireMode = FireMode.SINGLE,
+        skinName = skin
+    )
+
+    fun createScythe(skin: String = "Crimson Crescent"): Weapon = Weapon(
+        id = "scythe",
+        name = "Scythe",
+        category = WeaponCategory.MELEE,
+        ammoType = AmmoType.NONE,
+        baseDamage = 96f,
+        fireRateMs = 590L,
+        bulletSpeed = 0f,
+        baseRecoil = 0f,
+        maxCapacity = 0,
+        currentAmmo = 0,
+        supportedFireModes = listOf(FireMode.SINGLE),
+        activeFireMode = FireMode.SINGLE,
+        skinName = skin
+    )
+
+    fun createMachete(skin: String = "Shadow Cleaver"): Weapon = Weapon(
+        id = "machete",
+        name = "Machete",
+        category = WeaponCategory.MELEE,
+        ammoType = AmmoType.NONE,
+        baseDamage = 88f,
+        fireRateMs = 560L,
+        bulletSpeed = 0f,
+        baseRecoil = 0f,
+        maxCapacity = 0,
+        currentAmmo = 0,
+        supportedFireModes = listOf(FireMode.SINGLE),
+        activeFireMode = FireMode.SINGLE,
+        skinName = skin
+    )
+
     fun createById(id: String, skin: String? = null, upgradeLevel: Int = 1): Weapon {
         val base = when (id.lowercase()) {
             "akm" -> createAKM(skin ?: "Dragonfire")
             "awm" -> createAWM(skin ?: "Cyber Gold")
             "kar98k" -> createKar98k(skin ?: "Vintage Walnut")
             "ump45" -> createUMP45(skin ?: "Arctic Camo")
+            "mp40" -> createMP40(skin ?: "Tactical Noir")
             "s12k" -> createS12K(skin ?: "Breacher Steel")
+            "m1887" -> createM1887(skin ?: "Rapper Underworld")
+            "gatling" -> createGatling(skin ?: "Obsidian Vulcan")
             "deagle" -> createDesertEagle(skin ?: "Chrome Plated", upgradeLevel)
             "pan" -> createPan(skin ?: "Golden Winner")
+            "katana" -> createKatana(skin ?: "Cyber Neon Edge")
+            "bat" -> createBat(skin ?: "Spiked Slugger")
+            "scythe" -> createScythe(skin ?: "Crimson Crescent")
+            "machete" -> createMachete(skin ?: "Shadow Cleaver")
             else -> createM416(skin ?: "Tactical Slate")
         }
         return base.copy(upgradeLevel = upgradeLevel.coerceIn(1, 5))
@@ -237,11 +356,22 @@ object WeaponCatalog {
     fun primaryFirearms(): List<Weapon> = listOf(
         createM416(),
         createAKM(),
+        createMP40(),
         createUMP45(),
+        createM1887(),
         createS12K(),
         createAWM(),
         createKar98k(),
+        createGatling(),
         createDesertEagle()
+    )
+
+    fun meleeWeapons(): List<Weapon> = listOf(
+        createKatana(),
+        createScythe(),
+        createBat(),
+        createMachete(),
+        createPan()
     )
 }
 
@@ -375,13 +505,55 @@ enum class WeatherType(val id: String, val displayName: String) {
     NIGHT_OPS("NIGHT_OPS", "Night Ops")
 }
 
-enum class EmotePreset(val id: String, val label: String, val badge: String) {
-    SALUTE("salute", "Tactical Salute", "🫡"),
-    VICTORY_DANCE("victory", "Booyah Groove", "🏆"),
-    RESPECT("respect", "Operative Honor", "🤝"),
-    SHIELD_FLEX("flex", "Titan Flex", "🛡️"),
-    SCAN_PING("scan", "Radar Lock", "📡"),
-    CHAMPION_ROAR("roar", "Apex Battle Cry", "🔥")
+enum class EmotePreset(val id: String, val label: String, val badge: String, val rarity: String = "RARE") {
+    SALUTE("salute", "Tactical Salute", "🫡", "COMMON"),
+    VICTORY_DANCE("victory", "Booyah Groove", "🏆", "EPIC"),
+    RESPECT("respect", "Operative Honor", "🤝", "RARE"),
+    SHIELD_FLEX("flex", "Titan Flex", "🛡️", "EPIC"),
+    SCAN_PING("scan", "Radar Lock", "📡", "RARE"),
+    CHAMPION_ROAR("roar", "Apex Battle Cry", "🔥", "LEGENDARY"),
+    BACKFLIP("backflip", "Acro Backflip", "🤸", "EPIC"),
+    THRONE_SIT("throne", "King's Throne", "👑", "MYTHIC"),
+    HIGH_KICK("high_kick", "Dragon High Kick", "🥋", "LEGENDARY"),
+    DJ_MIX("dj_mix", "Neon DJ Drop", "🎧", "EPIC"),
+    DAB("dab", "Winner Dab", "⚡", "RARE"),
+    KUNGFU_STANCE("kungfu", "Master Stance", "🐉", "LEGENDARY")
+}
+
+enum class RankTierBadge(
+    val title: String,
+    val minRp: Int,
+    val primaryHex: Long,
+    val secondaryHex: Long,
+    val accentHex: Long,
+    val divisionCount: Int = 3
+) {
+    BRONZE("Bronze", 1000, 0xFFCD7F32, 0xFF7B4318, 0xFFFFB074),
+    SILVER("Silver", 1500, 0xFFB8C7D6, 0xFF5D6B7A, 0xFFEAF2FA),
+    GOLD("Gold", 2000, 0xFFFFC107, 0xFF8E5C00, 0xFFFFEB84, 4),
+    PLATINUM("Platinum", 2600, 0xFF26D6DA, 0xFF0E6873, 0xFFA2F7FA, 4),
+    DIAMOND("Diamond", 3200, 0xFF6B7CFF, 0xFF2B328C, 0xFFBCC5FF, 4),
+    HEROIC("Heroic", 3900, 0xFFFF2A3C, 0xFF7D0A18, 0xFFFFC107, 1),
+    GRANDMASTER("Grandmaster", 4600, 0xFFFF1744, 0xFFFFC400, 0xFFFFFFFF, 1);
+
+    companion object {
+        fun fromRp(rp: Int): RankTierBadge = entries.lastOrNull { rp >= it.minRp } ?: BRONZE
+
+        fun formattedRankLabel(rp: Int): String {
+            val tier = fromRp(rp)
+            if (tier.divisionCount == 1) return tier.title
+            val nextMin = entries.getOrNull(entries.indexOf(tier) + 1)?.minRp ?: (tier.minRp + 800)
+            val span = (nextMin - tier.minRp).coerceAtLeast(100)
+            val rel = ((rp - tier.minRp).coerceIn(0, span - 1) * tier.divisionCount) / span
+            val roman = when (tier.divisionCount - rel) {
+                4 -> "IV"
+                3 -> "III"
+                2 -> "II"
+                else -> "I"
+            }
+            return "${tier.title} $roman"
+        }
+    }
 }
 
 enum class CharacterPreset(
@@ -401,7 +573,8 @@ enum class CharacterPreset(
     val unlockCredits: Int = 0,
     val mobilityStat: Int = 80,
     val combatStat: Int = 80,
-    val survivalStat: Int = 80
+    val survivalStat: Int = 80,
+    val styleTag: String = "TACTICAL"
 ) {
     VORTEX_GHOST(
         id = "vortex_ghost",
@@ -418,7 +591,8 @@ enum class CharacterPreset(
         starterUnlocked = true,
         mobilityStat = 88,
         combatStat = 90,
-        survivalStat = 78
+        survivalStat = 78,
+        styleTag = "HALF_MASK"
     ),
     NOVA_VALKYRIE(
         id = "nova_valkyrie",
@@ -435,7 +609,8 @@ enum class CharacterPreset(
         starterUnlocked = true,
         mobilityStat = 86,
         combatStat = 76,
-        survivalStat = 94
+        survivalStat = 94,
+        styleTag = "PONYTAIL"
     ),
     BLAZE_STRIKER(
         id = "blaze_striker",
@@ -453,7 +628,8 @@ enum class CharacterPreset(
         unlockBp = 6000,
         mobilityStat = 78,
         combatStat = 94,
-        survivalStat = 86
+        survivalStat = 86,
+        styleTag = "HEAVY_JACKET"
     ),
     CYBER_VIPER(
         id = "cyber_viper",
@@ -471,7 +647,8 @@ enum class CharacterPreset(
         unlockBp = 7500,
         mobilityStat = 95,
         combatStat = 84,
-        survivalStat = 80
+        survivalStat = 80,
+        styleTag = "VISOR"
     ),
     FROST_RECON(
         id = "frost_recon",
@@ -489,7 +666,8 @@ enum class CharacterPreset(
         unlockCredits = 480,
         mobilityStat = 82,
         combatStat = 96,
-        survivalStat = 76
+        survivalStat = 76,
+        styleTag = "VISOR"
     ),
     SERAPH_ECHO(
         id = "seraph_echo",
@@ -507,7 +685,8 @@ enum class CharacterPreset(
         unlockCredits = 550,
         mobilityStat = 84,
         combatStat = 86,
-        survivalStat = 92
+        survivalStat = 92,
+        styleTag = "PONYTAIL"
     ),
     APEX_TITAN(
         id = "apex_titan",
@@ -525,7 +704,141 @@ enum class CharacterPreset(
         unlockCredits = 680,
         mobilityStat = 72,
         combatStat = 90,
-        survivalStat = 98
+        survivalStat = 98,
+        styleTag = "HEAVY_JACKET"
+    ),
+    KITSUNE_SHRINE(
+        id = "kitsune_shrine",
+        displayName = "Kitsune Miko",
+        gender = "Female",
+        roleTitle = "Crimson Shrine Fox",
+        activeSkillName = "Foxfire Surge",
+        activeSkillDesc = "+24% move speed & +15 EP burst",
+        passiveSkillName = "Spirit Evasion",
+        passiveSkillDesc = "+10% agile crouch sprint",
+        armorRgb = Triple(0.92f, 0.90f, 0.92f),
+        accentRgb = Triple(0.94f, 0.12f, 0.22f),
+        visorRgb = Triple(1.0f, 0.76f, 0.16f),
+        starterUnlocked = false,
+        unlockBp = 6800,
+        mobilityStat = 94,
+        combatStat = 85,
+        survivalStat = 84,
+        styleTag = "KITSUNE"
+    ),
+    FLAME_SKULL(
+        id = "flame_skull",
+        displayName = "Inferno Skull",
+        gender = "Male",
+        roleTitle = "Ember Hood Revenant",
+        activeSkillName = "Hellfire Overload",
+        activeSkillDesc = "+18% AR & Shotgun close punch",
+        passiveSkillName = "Cinder Ward",
+        passiveSkillDesc = "+10 Max Tactical Shield",
+        armorRgb = Triple(0.14f, 0.08f, 0.08f),
+        accentRgb = Triple(1.0f, 0.38f, 0.06f),
+        visorRgb = Triple(1.0f, 0.78f, 0.15f),
+        starterUnlocked = false,
+        unlockCredits = 720,
+        mobilityStat = 84,
+        combatStat = 96,
+        survivalStat = 86,
+        styleTag = "FLAME_HOOD"
+    ),
+    NEON_SAMURAI(
+        id = "neon_samurai",
+        displayName = "Neon Ronin",
+        gender = "Male",
+        roleTitle = "Cyber Shogun",
+        activeSkillName = "Blade Blink",
+        activeSkillDesc = "+30% dash & katana strike speed",
+        passiveSkillName = "Bushido Edge",
+        passiveSkillDesc = "+25% melee damage multiplier",
+        armorRgb = Triple(0.16f, 0.08f, 0.26f),
+        accentRgb = Triple(0.0f, 0.90f, 1.0f),
+        visorRgb = Triple(1.0f, 0.16f, 0.65f),
+        starterUnlocked = false,
+        unlockCredits = 780,
+        mobilityStat = 92,
+        combatStat = 93,
+        survivalStat = 82,
+        styleTag = "SAMURAI_CLOAK"
+    ),
+    CYBER_AFRO(
+        id = "cyber_afro",
+        displayName = "Volt Groove",
+        gender = "Male",
+        roleTitle = "Neon Street Punk",
+        activeSkillName = "Arc Pulse",
+        activeSkillDesc = "Restores +35 EP & speed aura",
+        passiveSkillName = "Rhythm Reload",
+        passiveSkillDesc = "+14% SMG fire stability",
+        armorRgb = Triple(0.86f, 0.88f, 0.12f),
+        accentRgb = Triple(0.12f, 0.85f, 1.0f),
+        visorRgb = Triple(1.0f, 0.25f, 0.68f),
+        starterUnlocked = false,
+        unlockBp = 5800,
+        mobilityStat = 93,
+        combatStat = 86,
+        survivalStat = 80,
+        styleTag = "CYBER_AFRO"
+    ),
+    ROYAL_COMMANDER(
+        id = "royal_commander",
+        displayName = "Sovereign Gold",
+        gender = "Male",
+        roleTitle = "Royal Vanguard Lord",
+        activeSkillName = "Royal Decree",
+        activeSkillDesc = "Deploys reinforced gold Gloo wall",
+        passiveSkillName = "Sovereign Plate",
+        passiveSkillDesc = "+10 Max Shield & +10% reload",
+        armorRgb = Triple(0.90f, 0.90f, 0.92f),
+        accentRgb = Triple(0.98f, 0.76f, 0.16f),
+        visorRgb = Triple(1.0f, 0.92f, 0.45f),
+        starterUnlocked = false,
+        unlockCredits = 890,
+        mobilityStat = 80,
+        combatStat = 90,
+        survivalStat = 95,
+        styleTag = "CROWN_COAT"
+    ),
+    STREET_MAFIA(
+        id = "street_mafia",
+        displayName = "Don Crimson",
+        gender = "Male",
+        roleTitle = "Ivory Syndicate",
+        activeSkillName = "Syndicate Focus",
+        activeSkillDesc = "+15% precision sniper & rifle accuracy",
+        passiveSkillName = "Cold Resolve",
+        passiveSkillDesc = "+12 HP siphon on knockout",
+        armorRgb = Triple(0.86f, 0.86f, 0.88f),
+        accentRgb = Triple(0.75f, 0.10f, 0.18f),
+        visorRgb = Triple(0.18f, 0.18f, 0.20f),
+        starterUnlocked = false,
+        unlockBp = 8200,
+        mobilityStat = 85,
+        combatStat = 91,
+        survivalStat = 85,
+        styleTag = "MAFIA_CAPE"
+    ),
+    VIOLET_BLADE(
+        id = "violet_blade",
+        displayName = "Violet Phantom",
+        gender = "Female",
+        roleTitle = "Amethyst Assassin",
+        activeSkillName = "Phase Shroud",
+        activeSkillDesc = "Radar cloaking & +28% sprint burst",
+        passiveSkillName = "Shadow Reflex",
+        passiveSkillDesc = "+15% headshot critical focus",
+        armorRgb = Triple(0.24f, 0.12f, 0.36f),
+        accentRgb = Triple(0.78f, 0.32f, 1.0f),
+        visorRgb = Triple(0.0f, 0.95f, 1.0f),
+        starterUnlocked = false,
+        unlockCredits = 690,
+        mobilityStat = 96,
+        combatStat = 90,
+        survivalStat = 82,
+        styleTag = "HALF_MASK"
     );
 
     companion object {
@@ -541,7 +854,22 @@ data class DeployableShield(
     val angleDegrees: Float,
     var health: Float = 260f,
     val maxHealth: Float = 260f,
-    var remainingSec: Float = 16f
+    var remainingSec: Float = 16f,
+    val skinId: String = "gloo_cyber"
+)
+
+data class WarriorLootTrap(
+    val id: String = UUID.randomUUID().toString(),
+    val x: Float,
+    val y: Float,
+    val victimName: String,
+    var fuseRemainingSec: Float = 9.0f,
+    val totalFuseSec: Float = 9.0f,
+    var isLooted: Boolean = false,
+    var isDetonated: Boolean = false,
+    val rewardWeapon: Weapon? = null,
+    val rewardArmorLevel: Int = 4,
+    val rewardHelmetLevel: Int = 4
 )
 
 data class ExplosiveBarrel(
@@ -559,7 +887,8 @@ enum class PetPreset(
     val skillTitle: String,
     val skillDesc: String,
     val bodyRgb: Triple<Float, Float, Float>,
-    val glowRgb: Triple<Float, Float, Float>
+    val glowRgb: Triple<Float, Float, Float>,
+    val modelShape: String = "HOVER_DRONE"
 ) {
     DRACO_FLAME(
         id = "draco_flame",
@@ -567,7 +896,8 @@ enum class PetPreset(
         skillTitle = "Dragon Ember",
         skillDesc = "+15 EP gained per elimination",
         bodyRgb = Triple(0.58f, 0.16f, 0.42f),
-        glowRgb = Triple(1.0f, 0.42f, 0.08f)
+        glowRgb = Triple(1.0f, 0.42f, 0.08f),
+        modelShape = "DRAGON"
     ),
     CYBER_PUP(
         id = "cyber_pup",
@@ -575,7 +905,8 @@ enum class PetPreset(
         skillTitle = "Tactical Sense",
         skillDesc = "Extended Pulse radar range",
         bodyRgb = Triple(0.18f, 0.42f, 0.72f),
-        glowRgb = Triple(0.0f, 0.90f, 1.0f)
+        glowRgb = Triple(0.0f, 0.90f, 1.0f),
+        modelShape = "CANINE"
     ),
     FROST_OWL(
         id = "frost_owl",
@@ -583,7 +914,8 @@ enum class PetPreset(
         skillTitle = "Glacial Ward",
         skillDesc = "+15 Max Tactical Shield capacity",
         bodyRgb = Triple(0.75f, 0.88f, 0.96f),
-        glowRgb = Triple(0.35f, 0.85f, 1.0f)
+        glowRgb = Triple(0.35f, 0.85f, 1.0f),
+        modelShape = "OWL"
     ),
     VORTEX_ROBO(
         id = "vortex_robo",
@@ -591,7 +923,35 @@ enum class PetPreset(
         skillTitle = "Overclocked Mag",
         skillDesc = "+15% faster weapon reload speed",
         bodyRgb = Triple(0.24f, 0.26f, 0.30f),
-        glowRgb = Triple(1.0f, 0.84f, 0.0f)
+        glowRgb = Triple(1.0f, 0.84f, 0.0f),
+        modelShape = "HOVER_DRONE"
+    ),
+    PANDA_DETECTIVE(
+        id = "panda_detective",
+        displayName = "Detective Panda",
+        skillTitle = "Panda's Blessings",
+        skillDesc = "Restores +12 HP on every elimination",
+        bodyRgb = Triple(0.95f, 0.95f, 0.97f),
+        glowRgb = Triple(0.18f, 0.82f, 0.48f),
+        modelShape = "PANDA"
+    ),
+    CYBER_ORBIT(
+        id = "cyber_orbit",
+        displayName = "Neko Cyber Orb",
+        skillTitle = "Orbital Resonance",
+        skillDesc = "Reduces Tactical Shield cooldown by 20%",
+        bodyRgb = Triple(0.18f, 0.19f, 0.24f),
+        glowRgb = Triple(0.0f, 0.95f, 1.0f),
+        modelShape = "CYBER_ORB"
+    ),
+    WAGGOR_PENGUIN(
+        id = "waggor_penguin",
+        displayName = "Mr. Waggor",
+        skillTitle = "Smooth Gloo",
+        skillDesc = "Generates passive Gloo Shield recharge",
+        bodyRgb = Triple(0.12f, 0.15f, 0.22f),
+        glowRgb = Triple(0.20f, 0.88f, 1.0f),
+        modelShape = "PENGUIN"
     );
 
     companion object {

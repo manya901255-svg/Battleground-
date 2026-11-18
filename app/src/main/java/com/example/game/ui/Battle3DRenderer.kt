@@ -63,6 +63,9 @@ class Battle3DRenderer(
             graphicsConfig = GraphicsConfig.fromPreset(value)
         }
 
+    @Volatile
+    var freeLookOffsetDeg: Float = 0f
+
     private val shader = PbrShaderProgram()
     private val textures = PbrTextureAtlas()
     private val resolutionScaler = GlResolutionScaler()
@@ -143,7 +146,7 @@ class Battle3DRenderer(
         smoothFov += (desiredFov - smoothFov) * 0.22f
         Matrix.perspectiveM(projectionMatrix, 0, smoothFov, aspect, 0.4f, drawDist + 160f)
 
-        val yawRad = Math.toRadians(engine.cameraYawDegrees.toDouble())
+        val yawRad = Math.toRadians((engine.cameraYawDegrees + freeLookOffsetDeg).toDouble())
         val pitchRad = Math.toRadians(engine.cameraPitchDegrees.toDouble())
         val fx = cos(yawRad).toFloat()
         val fz = sin(yawRad).toFloat()
@@ -242,11 +245,15 @@ class Battle3DRenderer(
         envRenderer.setViewProjection(vpMatrix)
         actorRenderer.setViewProjection(vpMatrix)
 
-        // Orbiting C-130 Supply Aircraft in sky
+        // Orbiting C-130 Supply Aircraft + High-Altitude Descending Parachutists in Sky
         val orbitAng = frameTimeSec * 0.14f
         renderSupplyPlane(pivotX + cos(orbitAng) * 95f, 48f, pivotZ + sin(orbitAng) * 95f, -Math.toDegrees(orbitAng.toDouble()).toFloat() + 90f)
         if (state.phase == MatchPhase.PLANE_FLIGHT || state.phase == MatchPhase.WAITING_IN_LOBBY) {
             renderSupplyPlane(state.planeX * TerrainHeightfield.WORLD_SCALE, 62f, state.planeY * TerrainHeightfield.WORLD_SCALE, -45f)
+        } else {
+            val dropBob = (frameTimeSec * 0.85f) % 12f
+            renderAtmosphericParachutist(pivotX + cos(orbitAng + 0.35f) * 74f, 34f - dropBob, pivotZ + sin(orbitAng + 0.35f) * 74f, -35f)
+            renderAtmosphericParachutist(pivotX + cos(orbitAng + 0.58f) * 86f, 40f - ((dropBob + 5f) % 12f), pivotZ + sin(orbitAng + 0.58f) * 86f, 20f)
         }
 
         // 4. Environment (Heightfield Terrain, Mountains, Bridges, Houses, Military Compounds, Conifers, Boulders, Grass)
@@ -263,7 +270,7 @@ class Battle3DRenderer(
         // 5. Explosive Hazard Barrels, Loot Beacons, Vehicles, Shields, Airdrops, Silhouette Targets
         renderDynamicWorldProps(state, pivotX, pivotZ, drawDist, cfg.shadowQuality)
 
-        // 6. Articulated 3D Players & Companion Pet
+        // 6. Articulated 3D Players, Companion Pet & Hovering UAV Recon Drone
         val radarActive = state.radarScanActiveSec > 0f
         val petPreset = PetPreset.fromId(state.activePetId)
         state.playersSnapshot.filter { it.isAlive }.forEach { p ->
@@ -272,9 +279,25 @@ class Battle3DRenderer(
             val dx = px - pivotX; val dz = pz - pivotZ
             if (dx * dx + dz * dz < drawDist * drawDist) {
                 val pGround = TerrainHeightfield.groundHeightGl(engine.mapConfig, p.x, p.y)
-                actorRenderer.renderSoldier3D(p, pGround, user.teamId, cfg.shadowQuality, radarActive, frameTimeSec)
+                actorRenderer.renderSoldier3D(
+                    player = p,
+                    groundY = pGround,
+                    userTeamId = user.teamId,
+                    shadowQuality = cfg.shadowQuality,
+                    radarActive = radarActive,
+                    frameTimeSec = frameTimeSec,
+                    parachuteSkinId = if (p.isUser) engine.parachuteSkinId else "para_flame"
+                )
                 if (state.petVisible && p.isUser && p.vehicleId == null && p.z < 5f) {
                     actorRenderer.renderCompanionPet(p, pGround, petPreset, frameTimeSec)
+                }
+                if (radarActive && p.isUser) {
+                    val uavAng = frameTimeSec * 2.2f
+                    val uavX = px + cos(uavAng) * 1.4f
+                    val uavZ = pz + sin(uavAng) * 1.4f
+                    val uavY = pGround + p.z * TerrainHeightfield.WORLD_SCALE + 3.4f + sin(frameTimeSec * 4f) * 0.14f
+                    drawMesh(meshes.radomeSphere, MaterialId.CORRUGATED_METAL, uavX, uavY, uavZ, 0f, -frameTimeSec * 90f, 0f, 0.58f, 0.24f, 0.58f, 0.15f, 0.18f, 0.24f, 1f, 0.2f, 0.85f, 0.25f)
+                    drawMesh(meshes.sweptAircraftWing, MaterialId.VEHICLE_COAT, uavX, uavY, uavZ, 0f, -frameTimeSec * 90f, 0f, 0.35f, 0.08f, 1.35f, 0.0f, 0.90f, 1.0f, 0.95f, 0.2f, 0.6f, 0.88f)
                 }
             }
         }
@@ -329,8 +352,9 @@ class Battle3DRenderer(
             val dx = bx - focusX; val dz = bz - focusZ
             if (dx * dx + dz * dz < drawDist * drawDist) {
                 val gy = TerrainHeightfield.groundHeightGl(engine.mapConfig, barrel.x, barrel.y)
-                drawMesh(meshes.treeTrunk, MaterialId.CORRUGATED_METAL, bx, gy + 0.85f, bz, 0f, 0f, 0f, 1.05f, 1.70f, 1.05f, 0.86f, 0.14f, 0.14f, 1f, 0.35f, 0.7f, 0f)
-                drawMesh(meshes.treeTrunk, MaterialId.VEHICLE_COAT, bx, gy + 0.90f, bz, 0f, 0f, 0f, 1.08f, 0.32f, 1.08f, 1.0f, 0.82f, 0.08f, 1f, 0.25f, 0.4f, 0.25f)
+                drawMesh(meshes.treeTrunk, MaterialId.CORRUGATED_METAL, bx, gy + 0.85f, bz, 0f, 0f, 0f, 1.05f, 1.70f, 1.05f, 0.88f, 0.12f, 0.14f, 1f, 0.32f, 0.72f, 0f)
+                drawMesh(meshes.treeTrunk, MaterialId.VEHICLE_COAT, bx, gy + 0.90f, bz, 0f, 0f, 0f, 1.09f, 0.30f, 1.09f, 1.0f, 0.82f, 0.08f, 1f, 0.25f, 0.4f, 0.25f)
+                drawMesh(meshes.treeTrunk, MaterialId.CORRUGATED_METAL, bx, gy + 1.62f, bz, 0f, 0f, 0f, 1.08f, 0.18f, 1.08f, 0.18f, 0.20f, 0.24f, 1f, 0.3f, 0.8f, 0f)
             }
         }
 
@@ -357,7 +381,7 @@ class Battle3DRenderer(
             val dx = vx - focusX; val dz = vz - focusZ
             if (dx * dx + dz * dz < drawDist * drawDist) {
                 val gy = TerrainHeightfield.groundHeightGl(engine.mapConfig, v.x, v.y)
-                actorRenderer.renderVehicle3D(v, gy, frameTimeSec, shadowQuality)
+                actorRenderer.renderVehicle3D(v, gy, frameTimeSec, shadowQuality, engine.vehicleSkinId)
             }
         }
 
@@ -366,8 +390,30 @@ class Battle3DRenderer(
             val sz = shield.y * TerrainHeightfield.WORLD_SCALE
             val gy = TerrainHeightfield.groundHeightGl(engine.mapConfig, shield.x, shield.y)
             val rot = -shield.angleDegrees
-            drawMesh(meshes.shieldHexBarrier, MaterialId.CORRUGATED_METAL, sx, gy + 1.35f, sz, 0f, rot, 0f, 0.42f, 2.65f, 4.4f, 0.06f, 0.78f, 1.0f, 0.68f, 0.15f, 0.7f, 0.82f)
-            drawMesh(meshes.chamferedStructure, MaterialId.VEHICLE_COAT, sx, gy + 2.72f, sz, 0f, rot, 0f, 0.40f, 0.18f, 4.5f, 0.75f, 0.96f, 1.0f, 0.92f, 0.1f, 0.5f, 1f)
+            val (sR, sG, sB) = when {
+                shield.skinId.contains("flame") -> Triple(1.0f, 0.24f, 0.08f)
+                shield.skinId.contains("samurai") -> Triple(0.64f, 0.72f, 0.80f)
+                shield.skinId.contains("neon_mech") -> Triple(1.0f, 0.86f, 0.08f)
+                shield.skinId.contains("purple") -> Triple(0.84f, 0.20f, 1.0f)
+                else -> Triple(0.06f, 0.78f, 1.0f)
+            }
+            drawMesh(meshes.shieldHexBarrier, MaterialId.CORRUGATED_METAL, sx, gy + 1.35f, sz, 0f, rot, 0f, 0.42f, 2.65f, 4.4f, sR, sG, sB, 0.72f, 0.15f, 0.7f, 0.85f)
+            drawMesh(meshes.chamferedStructure, MaterialId.VEHICLE_COAT, sx, gy + 2.72f, sz, 0f, rot, 0f, 0.40f, 0.18f, 4.5f, 0.92f, 0.96f, 1.0f, 0.92f, 0.1f, 0.5f, 1f)
+        }
+
+        // Warrior's Loot Timed Bomb-Crates with Glowing Holographic Emblem
+        state.warriorLootTrapsSnapshot.filter { !it.isLooted && !it.isDetonated }.forEach { trap ->
+            val tx = trap.x * TerrainHeightfield.WORLD_SCALE
+            val tz = trap.y * TerrainHeightfield.WORLD_SCALE
+            val dx = tx - focusX; val dz = tz - focusZ
+            if (dx * dx + dz * dz < 140f * 140f) {
+                val gy = TerrainHeightfield.groundHeightGl(engine.mapConfig, trap.x, trap.y)
+                val pulse = 0.65f + 0.35f * sin(frameTimeSec * 10f)
+                // Dark armored crate base + fiery neon-orange holographic core & floating emblem panel
+                drawMesh(meshes.bevelPack, MaterialId.CORRUGATED_METAL, tx, gy + 0.52f, tz, 0f, frameTimeSec * 25f, 0f, 1.25f, 0.92f, 1.05f, 0.14f, 0.14f, 0.16f, 1f, 0.25f, 0.85f, 0.1f)
+                drawMesh(meshes.chamferedStructure, MaterialId.VEHICLE_COAT, tx, gy + 0.52f, tz, 0f, frameTimeSec * 25f, 0f, 1.32f, 0.22f, 1.12f, 1.0f, 0.34f, 0.04f, 1f, 0.15f, 0.3f, 0.95f * pulse, 0f)
+                drawMesh(meshes.chamferedStructure, MaterialId.SKIN_DETAIL, tx, gy + 1.55f + pulse * 0.15f, tz, 0f, frameTimeSec * 65f, 0f, 0.88f, 0.92f, 0.08f, 1.0f, 0.42f, 0.06f, 0.68f, 0.2f, 0f, 1.0f, 0f)
+            }
         }
 
         state.airdrops.forEach { drop ->
@@ -503,6 +549,11 @@ class Battle3DRenderer(
         drawMesh(meshes.aircraftTailFin, MaterialId.VEHICLE_COAT, px, py + 2.35f, pz, 0f, rotDeg, 0f, 2.6f, 3.0f, 0.50f, 0.86f, 0.18f, 0.18f, 1f, 0.34f, 0.68f, 0.22f)
         drawMesh(meshes.rifleBarrel, MaterialId.CORRUGATED_METAL, px + 1.2f, py - 0.15f, pz + 4.4f, 0f, rotDeg, 0f, 2.6f, 0.72f, 0.72f, 0.22f, 0.25f, 0.30f, 1f, 0.25f, 0.88f, 0.1f)
         drawMesh(meshes.rifleBarrel, MaterialId.CORRUGATED_METAL, px + 1.2f, py - 0.15f, pz - 4.4f, 0f, rotDeg, 0f, 2.6f, 0.72f, 0.72f, 0.22f, 0.25f, 0.30f, 1f, 0.25f, 0.88f, 0.1f)
+    }
+
+    private fun renderAtmosphericParachutist(x: Float, y: Float, z: Float, yawDeg: Float) {
+        drawMesh(meshes.curvedParachuteCanopy, MaterialId.TACTICAL_FABRIC, x, y + 2.2f, z, 0f, yawDeg, 0f, 3.2f, 1.05f, 1.8f, 0.16f, 0.62f, 0.95f, 0.95f, 0.5f, 0.1f, 0.2f)
+        drawMesh(meshes.limbCapsule, MaterialId.TACTICAL_FABRIC, x, y, z, 0f, yawDeg, 0f, 0.32f, 0.95f, 0.32f, 0.15f, 0.16f, 0.20f, 1f, 0.6f, 0.1f, 0f)
     }
 
     private fun drawMesh(

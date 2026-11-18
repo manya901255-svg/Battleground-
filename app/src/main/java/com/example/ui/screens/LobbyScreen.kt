@@ -71,6 +71,7 @@ import com.example.ui.lobby.LobbyMissionsDialog
 import com.example.ui.lobby.LobbyModeAndMapDialog
 import com.example.ui.lobby.LobbyRightSideMenu
 import com.example.ui.lobby.LobbyThemeAndUtilityModals
+import com.example.ui.components.RankGuideDialog
 import com.example.ui.lobby.LobbyTopBar
 import com.example.ui.lobby.LobbyVipAndSeasonDialog
 import com.example.ui.theme.CyberOrange
@@ -118,6 +119,7 @@ fun LobbyScreen(
     onNavigateToInventory: () -> Unit = { onNavigateToCustomizationTab(3) },
     equippedWeaponId: String = profile.equippedWeaponId,
     equippedWeaponSkin: String = "Tactical Slate",
+    equippedVehicleSkinId: String = "vehicle_uaz_camo",
     onNavigateToSettings: () -> Unit,
     onNavigateToAdmin: () -> Unit,
     onPlayEmote: () -> Unit = {}
@@ -135,6 +137,7 @@ fun LobbyScreen(
     var showNewsDialog by remember { mutableStateOf(false) }
     var showNotificationsDialog by remember { mutableStateOf(false) }
     var showVipDialog by remember { mutableStateOf(false) }
+    var showRankGuideDialog by remember { mutableStateOf(false) }
     var showSupportDialog by remember { mutableStateOf(false) }
     var supportSubject by remember { mutableStateOf("") }
     var supportMessage by remember { mutableStateOf("") }
@@ -224,6 +227,7 @@ fun LobbyScreen(
             petVisible = profile.petVisible,
             equippedWeaponId = equippedWeaponId,
             equippedWeaponSkin = equippedWeaponSkin,
+            equippedVehicleSkinId = equippedVehicleSkinId,
             soldierYawOffset = soldierYaw,
             emoteTriggerTick = emoteTriggerTick,
             wallpaperTheme = currentTheme,
@@ -271,6 +275,7 @@ fun LobbyScreen(
             onOpenThemes = { showThemeDialog = true },
             onOpenAdmin = onNavigateToAdmin,
             onOpenSettings = onNavigateToSettings,
+            onOpenRankGuide = { showRankGuideDialog = true },
             modifier = Modifier.align(Alignment.TopCenter)
         )
 
@@ -292,6 +297,7 @@ fun LobbyScreen(
                 showMissionsDialog = true
             },
             onOpenMail = { showMailboxDialog = true },
+            onOpenBattlePass = onNavigateToBattlePass,
             modifier = Modifier
                 .align(Alignment.CenterStart)
                 .windowInsetsPadding(WindowInsets.safeDrawing)
@@ -358,7 +364,7 @@ fun LobbyScreen(
             Icon(Icons.Default.SupportAgent, contentDescription = "Support Desk", tint = ElectricBlueSafe, modifier = Modifier.size(13.dp))
             Spacer(modifier = Modifier.width(5.dp))
             Text(
-                text = lobbyToastText ?: "[Squad] ${profile.username}: Drag stage to inspect operative • Tap for Support",
+                text = lobbyToastText ?: "[World] ${profile.username}: Squad Invite Ready • Drag stage to rotate • Support",
                 color = if (lobbyToastText != null) HealthGreen else TextSecondary,
                 fontSize = 9.sp,
                 fontWeight = FontWeight.SemiBold
@@ -458,6 +464,13 @@ fun LobbyScreen(
             onOpenStore = { onNavigateToShopTab(0) },
             onOpenBattlePass = onNavigateToBattlePass,
             onDismiss = { showVipDialog = false }
+        )
+    }
+
+    if (showRankGuideDialog) {
+        RankGuideDialog(
+            currentRp = profile.rankPoints,
+            onDismiss = { showRankGuideDialog = false }
         )
     }
 

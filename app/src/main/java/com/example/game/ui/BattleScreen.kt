@@ -25,12 +25,14 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.ElectricBolt
+import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
@@ -39,6 +41,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -106,6 +109,7 @@ fun BattleScreen(
     var activeGraphics by remember(graphicsQuality) { mutableStateOf(graphicsQuality) }
     var activeConfig by remember(graphicsConfig) { mutableStateOf(graphicsConfig) }
     var surfaceViewRef by remember { mutableStateOf<Battle3DSurfaceView?>(null) }
+    var freeLookDeg by remember { mutableFloatStateOf(0f) }
     val customSlots = remember(hudLayoutJson) { HudLayoutCodec.parse(hudLayoutJson) }
 
     val renderer = remember(engine) {
@@ -114,11 +118,24 @@ fun BattleScreen(
     LaunchedEffect(activeConfig) {
         renderer.graphicsConfig = activeConfig
     }
+    LaunchedEffect(freeLookDeg) {
+        renderer.freeLookOffsetDeg = freeLookDeg
+    }
 
     val damagePaint = remember {
         Paint(Paint.ANTI_ALIAS_FLAG).apply {
             textAlign = Paint.Align.CENTER
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            style = Paint.Style.FILL
+        }
+    }
+    val damageOutlinePaint = remember {
+        Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            textAlign = Paint.Align.CENTER
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            style = Paint.Style.STROKE
+            strokeJoin = Paint.Join.ROUND
+            strokeWidth = 7.5f
         }
     }
 
@@ -176,28 +193,29 @@ fun BattleScreen(
                     }
                 }
 
-            // Floating 3D Damage Popups (Red bold crits matching reference HUD)
+            // Floating 3D Damage Popups (Bold outlined crimson/gold crits matching combat reference)
             state.damagePopups.forEach { pop ->
                 val progress = (pop.ageSec / pop.durationSec).coerceIn(0f, 1f)
-                val proj = renderer.projectWorldToScreen(pop.worldX, pop.worldY, pop.worldZ + progress * 22f)
+                val proj = renderer.projectWorldToScreen(pop.worldX, pop.worldY, pop.worldZ + progress * 24f)
                 if (proj.isVisible) {
-                    val alphaInt = ((1f - progress) * 255).toInt().coerceIn(0, 255)
-                    damagePaint.textSize = if (pop.isHeadshot) 48f else 36f
+                    val alphaInt = ((1f - progress * 0.92f) * 255).toInt().coerceIn(0, 255)
+                    val popScale = if (progress < 0.16f) 0.85f + (progress / 0.16f) * 0.30f else 1.15f - (progress - 0.16f) * 0.22f
+                    val sizedPx = (if (pop.isHeadshot) 58f else 44f) * popScale
+                    damageOutlinePaint.textSize = sizedPx
+                    damageOutlinePaint.color = android.graphics.Color.argb(alphaInt, 10, 12, 16)
+                    damagePaint.textSize = sizedPx
                     damagePaint.color = when {
-                        pop.isHeadshot -> android.graphics.Color.argb(alphaInt, 255, 40, 48)
+                        pop.isHeadshot -> android.graphics.Color.argb(alphaInt, 255, 36, 48)
                         pop.isShieldHit -> android.graphics.Color.argb(alphaInt, 0, 224, 255)
-                        else -> android.graphics.Color.argb(alphaInt, 255, 224, 48)
+                        else -> android.graphics.Color.argb(alphaInt, 255, 214, 42)
                     }
-                    drawContext.canvas.nativeCanvas.drawText(
-                        if (pop.isHeadshot) "${pop.amount}" else "${pop.amount}",
-                        proj.x,
-                        proj.y,
-                        damagePaint
-                    )
+                    val dmgLabel = "${pop.amount}"
+                    drawContext.canvas.nativeCanvas.drawText(dmgLabel, proj.x, proj.y, damageOutlinePaint)
+                    drawContext.canvas.nativeCanvas.drawText(dmgLabel, proj.x, proj.y, damagePaint)
                 }
             }
 
-            // Dynamic Crosshair & Red/White Hitmarker X
+            // Dynamic Crosshair & Crisp Outlined Red/White Hitmarker X
             if (state.phase == MatchPhase.ACTIVE_COMBAT && !state.isSpectating) {
                 if (engine.isAimingDownSights) {
                     drawScopeReticle(user.activeWeapon?.equippedScope ?: ScopeType.RED_DOT, cx, cy)
@@ -212,14 +230,19 @@ fun BattleScreen(
                     drawCircle(CyberOrange, center = Offset(cx, cy), radius = 2.8f)
                 }
 
-                if (System.currentTimeMillis() - state.lastHitTimestampMs < 220L) {
+                if (System.currentTimeMillis() - state.lastHitTimestampMs < 240L) {
                     val hmColor = if (state.lastHitWasHeadshot) RedZoneBombardment else Color.White
-                    val d1 = 8f
-                    val d2 = 22f
-                    drawLine(hmColor, Offset(cx - d2, cy - d2), Offset(cx - d1, cy - d1), strokeWidth = 4.2f)
-                    drawLine(hmColor, Offset(cx + d1, cy - d1), Offset(cx + d2, cy - d2), strokeWidth = 4.2f)
-                    drawLine(hmColor, Offset(cx - d2, cy + d2), Offset(cx - d1, cy + d1), strokeWidth = 4.2f)
-                    drawLine(hmColor, Offset(cx + d1, cy + d1), Offset(cx + d2, cy + d2), strokeWidth = 4.2f)
+                    val hmOutline = Color.Black.copy(alpha = 0.72f)
+                    val d1 = 9f
+                    val d2 = 26f
+                    drawLine(hmOutline, Offset(cx - d2, cy - d2), Offset(cx - d1, cy - d1), strokeWidth = 7.4f)
+                    drawLine(hmOutline, Offset(cx + d1, cy - d1), Offset(cx + d2, cy - d2), strokeWidth = 7.4f)
+                    drawLine(hmOutline, Offset(cx - d2, cy + d2), Offset(cx - d1, cy + d1), strokeWidth = 7.4f)
+                    drawLine(hmOutline, Offset(cx + d1, cy + d1), Offset(cx + d2, cy + d2), strokeWidth = 7.4f)
+                    drawLine(hmColor, Offset(cx - d2, cy - d2), Offset(cx - d1, cy - d1), strokeWidth = 4.6f)
+                    drawLine(hmColor, Offset(cx + d1, cy - d1), Offset(cx + d2, cy - d2), strokeWidth = 4.6f)
+                    drawLine(hmColor, Offset(cx - d2, cy + d2), Offset(cx - d1, cy + d1), strokeWidth = 4.6f)
+                    drawLine(hmColor, Offset(cx + d1, cy + d1), Offset(cx + d2, cy + d2), strokeWidth = 4.6f)
                 }
             }
         }
@@ -504,6 +527,65 @@ fun BattleScreen(
                 )
             }
 
+            // UAV RECON DRONE ACTIVE BADGE
+            if (state.radarScanActiveSec > 0f && !state.isSpectating) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .padding(top = 116.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Color(0xD80A1624))
+                        .border(1.2.dp, ElectricBlueSafe, RoundedCornerShape(8.dp))
+                        .padding(horizontal = 12.dp, vertical = 4.dp)
+                ) {
+                    Text(
+                        text = "UAV DRONE SCANNING • ${state.radarScanActiveSec.roundToInt()}s",
+                        color = ElectricBlueSafe,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Black
+                    )
+                }
+            }
+
+            // WARRIOR'S LOOT BOMB CRATE COUNTDOWN & DISARM CTA
+            val nearbyTrap = state.nearbyWarriorTrap
+            if (nearbyTrap != null && !state.isSpectating) {
+                Row(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(bottom = 172.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(Color(0xEB1A080C))
+                        .border(1.8.dp, CyberOrange, RoundedCornerShape(10.dp))
+                        .padding(horizontal = 12.dp, vertical = 6.dp)
+                        .testTag("warrior_loot_trap_banner"),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Column {
+                        Text(
+                            text = "WARRIOR'S LOOT BOMB • ${String.format(java.util.Locale.US, "%.1fs", nearbyTrap.fuseRemainingSec.coerceAtLeast(0f))}",
+                            color = HazardYellow,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Black
+                        )
+                        Text(
+                            text = "Explodes if not looted! Drops Lv4 Armor + ${nearbyTrap.rewardWeapon?.name ?: "Vault Gun"}",
+                            color = TextPrimary,
+                            fontSize = 9.sp
+                        )
+                    }
+                    Button(
+                        onClick = { engine.disarmAndLootWarriorTrap(nearbyTrap.id) },
+                        colors = ButtonDefaults.buttonColors(containerColor = CyberOrange, contentColor = Color.White),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.height(34.dp).testTag("disarm_warrior_loot_button")
+                    ) {
+                        Text("DISARM & LOOT", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Black)
+                    }
+                }
+            }
+
             // NEARBY LOOT QUICK-PICKUP
             if (state.nearbyLoot.isNotEmpty() && !state.isSpectating) {
                 NearbyLootOverlay(
@@ -552,15 +634,15 @@ fun BattleScreen(
             if (state.nearbyVehicle != null && user.vehicleId == null && !state.isSpectating) {
                 Button(
                     onClick = { engine.enterVehicle(state.nearbyVehicle!!) },
-                    colors = ButtonDefaults.buttonColors(containerColor = CyberOrange),
+                    colors = ButtonDefaults.buttonColors(containerColor = CyberOrange, contentColor = Color.White),
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
                         .padding(bottom = 86.dp)
                         .testTag("drive_vehicle_button")
                 ) {
-                    Icon(Icons.Default.DirectionsCar, contentDescription = "Drive")
+                    Icon(Icons.Default.DirectionsCar, contentDescription = "Drive", tint = Color.White)
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text("DRIVE ${state.nearbyVehicle!!.type.displayName}", fontWeight = FontWeight.Bold)
+                    Text("DRIVE ${state.nearbyVehicle!!.type.displayName}", color = Color.White, fontWeight = FontWeight.Bold)
                 }
             } else if (user.vehicleId != null && !state.isSpectating) {
                 Row(
@@ -578,15 +660,16 @@ fun BattleScreen(
                         Text("${state.vehicleSpeedKmh}", color = HazardYellow, fontSize = 18.sp, fontWeight = FontWeight.Black)
                         Text("KM/H • FUEL 92%", color = TextSecondary, fontSize = 8.sp, fontWeight = FontWeight.Bold)
                     }
+                    val nitroFg = if (state.vehicleNitroActive) Color.Black else Color.White
                     Button(
                         onClick = { engine.triggerNitroBoost() },
-                        colors = ButtonDefaults.buttonColors(containerColor = if (state.vehicleNitroActive) HazardYellow else CyberOrange),
+                        colors = ButtonDefaults.buttonColors(containerColor = if (state.vehicleNitroActive) HazardYellow else CyberOrange, contentColor = nitroFg),
                         shape = RoundedCornerShape(10.dp),
                         modifier = Modifier.height(34.dp).testTag("nitro_button")
                     ) {
-                        Icon(Icons.Default.ElectricBolt, contentDescription = "Nitro", tint = Color.Black, modifier = Modifier.size(16.dp))
+                        Icon(Icons.Default.ElectricBolt, contentDescription = "Nitro", tint = nitroFg, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text(if (state.vehicleNitroActive) "NITRO!" else "NITRO", color = Color.Black, fontWeight = FontWeight.ExtraBold, fontSize = 11.sp)
+                        Text(if (state.vehicleNitroActive) "NITRO!" else "NITRO", color = nitroFg, fontWeight = FontWeight.ExtraBold, fontSize = 11.sp)
                     }
                     Button(
                         onClick = { engine.honkVehicleHorn() },
@@ -657,16 +740,56 @@ fun BattleScreen(
                     }
                     Button(
                         onClick = { engine.exitSpectatingToSettlement() },
-                        colors = ButtonDefaults.buttonColors(containerColor = CyberOrange),
+                        colors = ButtonDefaults.buttonColors(containerColor = CyberOrange, contentColor = Color.White),
                         modifier = Modifier.testTag("exit_spectating_button")
                     ) {
-                        Text("VIEW RESULTS", color = Color.Black, fontSize = 11.sp, fontWeight = FontWeight.ExtraBold)
+                        Text("VIEW RESULTS", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.ExtraBold)
                     }
                 }
             }
 
             // MAIN PLAYABLE COMBAT HUD CONTROLS
             if (!state.isSpectating) {
+                // FREE-LOOK 360° EYE PEEK ORB (Drag to peek around operative without turning aim)
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier
+                        .align(Alignment.CenterEnd)
+                        .padding(end = 14.dp, bottom = 52.dp)
+                        .size(48.dp)
+                        .clip(CircleShape)
+                        .background(Color.Black.copy(alpha = if (freeLookDeg != 0f) 0.72f else 0.42f))
+                        .border(
+                            width = 1.4.dp,
+                            color = if (freeLookDeg != 0f) HazardYellow else Color.White.copy(alpha = 0.68f),
+                            shape = CircleShape
+                        )
+                        .pointerInput(Unit) {
+                            detectDragGestures(
+                                onDragEnd = {
+                                    freeLookDeg = 0f
+                                    renderer.freeLookOffsetDeg = 0f
+                                },
+                                onDragCancel = {
+                                    freeLookDeg = 0f
+                                    renderer.freeLookOffsetDeg = 0f
+                                }
+                            ) { change, dragAmount ->
+                                change.consume()
+                                freeLookDeg = (freeLookDeg + dragAmount.x * 0.45f).coerceIn(-165f, 165f)
+                                renderer.freeLookOffsetDeg = freeLookDeg
+                            }
+                        }
+                        .testTag("eye_peek_button")
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Visibility,
+                        contentDescription = "Free Look Eye Peek",
+                        tint = if (freeLookDeg != 0f) HazardYellow else Color.White,
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
+
                 // LEFT CLAW FIRE BUTTON (3-finger/4-finger Free Fire & BGMI style)
                 if (leftHandFireEnabled) {
                     LeftHandFireButton(

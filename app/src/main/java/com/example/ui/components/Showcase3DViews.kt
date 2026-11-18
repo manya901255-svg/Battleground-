@@ -30,6 +30,7 @@ import com.example.game.graphics.PbrTextureAtlas
 import com.example.game.model.CharacterPreset
 import com.example.game.model.MagType
 import com.example.game.model.MuzzleType
+import com.example.game.model.PetPreset
 import com.example.game.model.Player
 import com.example.game.model.PlayerStance
 import com.example.game.model.ScopeType
@@ -48,6 +49,7 @@ fun Character3DShowcaseView(
     weaponSkin: String = "Tactical Slate",
     animMode: String = "IDLE",
     autoRotate: Boolean = false,
+    showSupplyCrate: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     val isPreview = LocalInspectionMode.current
@@ -58,20 +60,21 @@ fun Character3DShowcaseView(
         Box(
             modifier = modifier
                 .fillMaxSize()
-                .background(Brush.verticalGradient(listOf(Color(0xFF162238), Color(0xFF0A0F1A))))
+                .background(Brush.verticalGradient(listOf(Color(0xFF141822), Color(0xFF07090E))))
         )
         return
     }
 
     val renderer = remember { CharacterShowcaseRenderer() }
 
-    LaunchedEffect(characterPresetId, weaponId, weaponSkin, animMode, autoRotate, yawDeg) {
+    LaunchedEffect(characterPresetId, weaponId, weaponSkin, animMode, autoRotate, yawDeg, showSupplyCrate) {
         renderer.characterPresetId = characterPresetId
         renderer.weaponId = weaponId
         renderer.weaponSkin = weaponSkin
         renderer.animMode = animMode
         renderer.autoRotate = autoRotate
         renderer.userYawDeg = yawDeg
+        renderer.showSupplyCrate = showSupplyCrate
     }
 
     val surfaceView = remember(context) {
@@ -86,7 +89,7 @@ fun Character3DShowcaseView(
     }
 
     if (surfaceView == null) {
-        Box(modifier = modifier.fillMaxSize().background(Color(0xFF0A0F1A)))
+        Box(modifier = modifier.fillMaxSize().background(Color(0xFF080B10)))
         return
     }
 
@@ -181,6 +184,146 @@ fun Weapon3DShowcaseView(
     }
 }
 
+@Composable
+fun Pet3DShowcaseView(
+    petPresetId: String,
+    modifier: Modifier = Modifier
+) {
+    val isPreview = LocalInspectionMode.current
+    val context = LocalContext.current
+    var yawDeg by remember { mutableFloatStateOf(24f) }
+
+    if (isPreview) {
+        Box(
+            modifier = modifier
+                .fillMaxSize()
+                .background(Brush.radialGradient(listOf(Color(0xFF1A2838), Color(0xFF090D14))))
+        )
+        return
+    }
+
+    val renderer = remember { PetShowcaseRenderer() }
+
+    LaunchedEffect(petPresetId, yawDeg) {
+        renderer.petPresetId = petPresetId
+        renderer.yawDeg = yawDeg
+    }
+
+    val surfaceView = remember(context) {
+        runCatching {
+            GLSurfaceView(context).apply {
+                setEGLContextClientVersion(2)
+                preserveEGLContextOnPause = true
+                setRenderer(renderer)
+                renderMode = GLSurfaceView.RENDERMODE_CONTINUOUSLY
+            }
+        }.getOrNull()
+    }
+
+    if (surfaceView == null) {
+        Box(modifier = modifier.fillMaxSize().background(Color(0xFF0A0F18)))
+        return
+    }
+
+    DisposableEffect(surfaceView) {
+        surfaceView.onResume()
+        onDispose { surfaceView.onPause() }
+    }
+
+    Box(
+        modifier = modifier.pointerInput(Unit) {
+            detectDragGestures { change, dragAmount ->
+                change.consume()
+                yawDeg = (yawDeg + dragAmount.x * 0.55f) % 360f
+            }
+        }
+    ) {
+        AndroidView(factory = { surfaceView }, modifier = Modifier.fillMaxSize())
+    }
+}
+
+private class PetShowcaseRenderer : GLSurfaceView.Renderer {
+    @Volatile var petPresetId: String = "draco_flame"
+    @Volatile var yawDeg: Float = 24f
+
+    private val shader = PbrShaderProgram()
+    private val textures = PbrTextureAtlas()
+    private lateinit var meshes: MeshLibrary
+    private lateinit var actorRenderer: CharacterAndVehicleRenderer
+
+    private val projectionMatrix = FloatArray(16)
+    private val viewMatrix = FloatArray(16)
+    private val vpMatrix = FloatArray(16)
+    private var viewportW = 480
+    private var viewportH = 360
+    private var frameSec = 0f
+    private var lastNs = System.nanoTime()
+
+    private val dummyOwner = Player(
+        id = "pet_stage",
+        name = "Stage",
+        isUser = true,
+        teamId = 1,
+        x = 0f,
+        y = 0f,
+        z = 0f,
+        angle = 0f
+    )
+
+    override fun onSurfaceCreated(gl: GL10?, config: EGLConfig?) {
+        GLES20.glEnable(GLES20.GL_DEPTH_TEST)
+        GLES20.glEnable(GLES20.GL_BLEND)
+        GLES20.glBlendFunc(GLES20.GL_SRC_ALPHA, GLES20.GL_ONE_MINUS_SRC_ALPHA)
+        shader.init()
+        meshes = MeshLibrary()
+        textures.ensureInitialized(256, true)
+        actorRenderer = CharacterAndVehicleRenderer(meshes, textures, shader)
+    }
+
+    override fun onSurfaceChanged(gl: GL10?, width: Int, height: Int) {
+        viewportW = width.coerceAtLeast(1)
+        viewportH = height.coerceAtLeast(1)
+        GLES20.glViewport(0, 0, viewportW, viewportH)
+    }
+
+    override fun onDrawFrame(gl: GL10?) {
+        val now = System.nanoTime()
+        val dt = ((now - lastNs) / 1_000_000_000f).coerceIn(0.004f, 0.05f)
+        lastNs = now
+        frameSec += dt
+
+        val pet = PetPreset.fromId(petPresetId)
+        val (gr, gg, gb) = pet.glowRgb
+        GLES20.glClearColor(0.04f, 0.06f, 0.11f, 1f)
+        GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT or GLES20.GL_DEPTH_BUFFER_BIT)
+
+        val aspect = viewportW.toFloat() / viewportH.toFloat()
+        Matrix.perspectiveM(projectionMatrix, 0, 38f, aspect, 0.2f, 40f)
+        Matrix.setLookAtM(viewMatrix, 0, 0.85f, 1.35f, 2.35f, 0.0f, 0.72f, 0.25f, 0f, 1f, 0f)
+        Matrix.multiplyMM(vpMatrix, 0, projectionMatrix, 0, viewMatrix, 0)
+
+        GLES20.glUseProgram(shader.worldProgram)
+        GLES20.glEnableVertexAttribArray(shader.aPos)
+        GLES20.glEnableVertexAttribArray(shader.aNorm)
+        GLES20.glEnableVertexAttribArray(shader.aUv)
+
+        GLES20.glUniform1i(shader.uDiffuseTex, 0)
+        GLES20.glUniform1i(shader.uNormalTex, 1)
+        GLES20.glUniform3f(shader.uCameraPos, 0.85f, 1.35f, 2.35f)
+        GLES20.glUniform3f(shader.uLightDir, 0.55f, 0.75f, 0.45f)
+        GLES20.glUniform3f(shader.uSunColor, 1.0f, 0.96f, 0.90f)
+        GLES20.glUniform3f(shader.uSkyZenith, 0.14f, 0.26f, 0.46f)
+        GLES20.glUniform3f(shader.uSkyHorizon, 0.20f, 0.30f, 0.48f)
+        GLES20.glUniform3f(shader.uGroundBounce, gr * 0.4f, gg * 0.4f, gb * 0.4f)
+        GLES20.glUniform3f(shader.uFogColor, 0.04f, 0.06f, 0.11f)
+        GLES20.glUniform1f(shader.uFogMaxDist, 35f)
+
+        actorRenderer.setViewProjection(vpMatrix)
+        dummyOwner.angle = 35f + yawDeg + frameSec * 18f
+        actorRenderer.renderCompanionPet(dummyOwner, 0f, pet, frameSec)
+    }
+}
+
 private class CharacterShowcaseRenderer : GLSurfaceView.Renderer {
     @Volatile var characterPresetId: String = "vortex_ghost"
     @Volatile var weaponId: String = "m416"
@@ -188,6 +331,7 @@ private class CharacterShowcaseRenderer : GLSurfaceView.Renderer {
     @Volatile var animMode: String = "IDLE"
     @Volatile var autoRotate: Boolean = false
     @Volatile var userYawDeg: Float = 20f
+    @Volatile var showSupplyCrate: Boolean = false
 
     private val shader = PbrShaderProgram()
     private val textures = PbrTextureAtlas()
@@ -246,13 +390,16 @@ private class CharacterShowcaseRenderer : GLSurfaceView.Renderer {
         val preset = CharacterPreset.fromId(characterPresetId)
         val (ar, ag, ab) = preset.accentRgb
 
-        GLES20.glClearColor(0.05f, 0.08f, 0.14f, 1f)
+        val bgR = if (showSupplyCrate) 0.032f else 0.05f
+        val bgG = if (showSupplyCrate) 0.036f else 0.08f
+        val bgB = if (showSupplyCrate) 0.052f else 0.14f
+        GLES20.glClearColor(bgR, bgG, bgB, 1f)
         GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT or GLES20.GL_DEPTH_BUFFER_BIT)
 
         val aspect = viewportW.toFloat() / viewportH.toFloat()
         Matrix.perspectiveM(projectionMatrix, 0, 38f, aspect, 0.25f, 50f)
         val camY = 1.38f
-        val camZ = 3.55f
+        val camZ = if (showSupplyCrate) 3.75f else 3.55f
         Matrix.setLookAtM(viewMatrix, 0, 0f, camY, camZ, 0f, 1.05f, 0f, 0f, 1f, 0f)
         Matrix.multiplyMM(vpMatrix, 0, projectionMatrix, 0, viewMatrix, 0)
 
@@ -266,17 +413,24 @@ private class CharacterShowcaseRenderer : GLSurfaceView.Renderer {
         GLES20.glUniform3f(shader.uCameraPos, 0f, camY, camZ)
         GLES20.glUniform3f(shader.uLightDir, 0.48f, 0.72f, 0.50f)
         GLES20.glUniform3f(shader.uSunColor, 1.0f, 0.94f, 0.86f)
-        GLES20.glUniform3f(shader.uSkyZenith, 0.16f, 0.28f, 0.48f)
-        GLES20.glUniform3f(shader.uSkyHorizon, 0.24f, 0.34f, 0.48f)
+        GLES20.glUniform3f(shader.uSkyZenith, 0.14f, 0.24f, 0.42f)
+        GLES20.glUniform3f(shader.uSkyHorizon, 0.20f, 0.28f, 0.42f)
         GLES20.glUniform3f(shader.uGroundBounce, ar * 0.4f, ag * 0.4f, ab * 0.4f)
-        GLES20.glUniform3f(shader.uFogColor, 0.05f, 0.08f, 0.14f)
+        GLES20.glUniform3f(shader.uFogColor, bgR, bgG, bgB)
         GLES20.glUniform1f(shader.uFogMaxDist, 45f)
 
         actorRenderer.setViewProjection(vpMatrix)
 
-        // Glowing Holographic Turntable Pedestal
-        drawStudioMesh(meshes.wheelCylinder, MaterialId.CONCRETE_WALL, 0f, 0.06f, 0f, 90f, 0f, 0f, 1.55f, 1.55f, 0.12f, 0.14f, 0.18f, 0.26f, 1f, 0.3f, 0.7f, 0.05f)
+        // Glowing Holographic Turntable Pedestal + Optional Obsidian Supply Crate Backdrop
+        drawStudioMesh(meshes.wheelCylinder, MaterialId.CONCRETE_WALL, 0f, 0.06f, 0f, 90f, 0f, 0f, 1.55f, 1.55f, 0.12f, 0.12f, 0.15f, 0.22f, 1f, 0.35f, 0.7f, 0.04f)
         drawStudioMesh(meshes.wheelCylinder, MaterialId.VEHICLE_COAT, 0f, 0.13f, 0f, 90f, frameSec * 18f, 0f, 1.42f, 1.42f, 0.03f, ar, ag, ab, 0.9f, 0.2f, 0.3f, 0.85f)
+
+        if (showSupplyCrate) {
+            // Red ribbed drop-crate body with cobalt-blue tarp lid behind/left of operative
+            drawStudioMesh(meshes.corrugatedContainer, MaterialId.CORRUGATED_METAL, -0.45f, 0.78f, -1.05f, 0f, 14f, 0f, 1.65f, 1.28f, 1.15f, 0.58f, 0.10f, 0.12f, 1f, 0.38f, 0.65f, 0.04f)
+            drawStudioMesh(meshes.chamferedStructure, MaterialId.TACTICAL_FABRIC, -0.45f, 1.44f, -1.05f, 0f, 14f, 0f, 1.72f, 0.24f, 1.22f, 0.12f, 0.38f, 0.72f, 1f, 0.55f, 0.20f, 0.06f)
+            drawStudioMesh(meshes.chamferedStructure, MaterialId.CORRUGATED_METAL, -0.45f, 0.82f, -0.46f, 0f, 14f, 0f, 0.22f, 1.24f, 0.06f, 0.10f, 0.11f, 0.14f, 1f, 0.3f, 0.85f, 0f)
+        }
 
         val wKey = "${weaponId}_${weaponSkin}"
         if (wKey != lastWKey) {
@@ -445,6 +599,34 @@ private class WeaponShowcaseRenderer : GLSurfaceView.Renderer {
         Matrix.rotateM(rootMatrix, 0, inspectYaw, 0f, 1f, 0f)
         Matrix.rotateM(rootMatrix, 0, inspectRoll, 1f, 0f, 0f)
 
+        val glowStrength = 0.22f + (upgradeLevel - 1).coerceIn(0, 4) * 0.16f
+
+        if (weaponCategory == WeaponCategory.MELEE) {
+            when (weaponId.lowercase()) {
+                "katana" -> {
+                    drawWeaponPart(meshes.ergoGrip, MaterialId.TACTICAL_FABRIC, -0.52f, -0.02f, 0f, 0f, 0f, 0f, 0.36f, 0.08f, 0.08f, 0.12f, 0.12f, 0.16f, 0.55f, 0.2f, 0f)
+                    drawWeaponPart(meshes.chamferedStructure, MaterialId.VEHICLE_COAT, -0.32f, -0.01f, 0f, 0f, 0f, 0f, 0.06f, 0.18f, 0.18f, skinR, skinG, skinB, 0.2f, 0.85f, 0.6f)
+                    drawWeaponPart(meshes.katanaBlade, MaterialId.VEHICLE_COAT, 0.24f, 0.04f, 0f, 0f, 0f, 6f, 1.15f, 0.55f, 1.2f, skinR, skinG, skinB, 0.12f, 0.94f, glowStrength)
+                }
+                "scythe" -> {
+                    drawWeaponPart(meshes.rifleBarrel, MaterialId.CORRUGATED_METAL, -0.10f, -0.02f, 0f, 0f, 0f, 0f, 1.35f, 0.06f, 0.06f, 0.20f, 0.20f, 0.25f, 0.28f, 0.85f, 0f)
+                    drawWeaponPart(meshes.crescentScythe, MaterialId.VEHICLE_COAT, 0.52f, 0.06f, 0f, 0f, 0f, -18f, 0.82f, 0.82f, 1.0f, skinR, skinG, skinB, 0.15f, 0.90f, glowStrength + 0.25f)
+                }
+                "bat" -> {
+                    drawWeaponPart(meshes.rifleBarrel, MaterialId.TACTICAL_FABRIC, 0.0f, 0f, 0f, 0f, 0f, 5f, 1.25f, 0.13f, 0.13f, skinR, skinG, skinB, 0.35f, 0.45f, 0.25f)
+                }
+                "machete" -> {
+                    drawWeaponPart(meshes.ergoGrip, MaterialId.TACTICAL_FABRIC, -0.44f, -0.02f, 0f, 0f, 0f, 0f, 0.28f, 0.08f, 0.07f, 0.14f, 0.14f, 0.16f, 0.6f, 0.2f, 0f)
+                    drawWeaponPart(meshes.chamferedStructure, MaterialId.CORRUGATED_METAL, 0.14f, 0.02f, 0f, 0f, 0f, 0f, 0.95f, 0.18f, 0.035f, 0.78f, 0.82f, 0.88f, 0.18f, 0.94f, glowStrength * 0.4f)
+                }
+                else -> { // Cast Iron Pan
+                    drawWeaponPart(meshes.ergoGrip, MaterialId.TACTICAL_FABRIC, -0.36f, 0f, 0f, 0f, 0f, 0f, 0.38f, 0.07f, 0.07f, 0.12f, 0.12f, 0.14f, 0.6f, 0.2f, 0f)
+                    drawWeaponPart(meshes.wheelCylinder, MaterialId.VEHICLE_COAT, 0.14f, 0f, 0f, 90f, 0f, 0f, 0.68f, 0.62f, 0.14f, skinR, skinG, skinB, 0.2f, 0.88f, glowStrength * 0.4f)
+                }
+            }
+            return
+        }
+
         val lenFactor = when (weaponCategory) {
             WeaponCategory.SNIPER_RIFLE -> 1.34f
             WeaponCategory.SHOTGUN -> 1.10f
@@ -452,17 +634,20 @@ private class WeaponShowcaseRenderer : GLSurfaceView.Renderer {
             WeaponCategory.PISTOL -> 0.50f
             else -> 1.0f
         }
-        val glowStrength = 0.22f + (upgradeLevel - 1).coerceIn(0, 4) * 0.16f
 
         // 1. Upper & Lower Sculpted Receiver
         drawWeaponPart(meshes.weaponReceiver, MaterialId.CORRUGATED_METAL, -0.05f, 0.02f, 0f, 0f, 0f, 0f, 0.72f * lenFactor.coerceAtLeast(0.75f), 0.16f, 0.11f, 0.18f, 0.20f, 0.24f, 0.28f, 0.86f, 0f)
         // Accent anodized Picatinny receiver shroud (skin finish)
         drawWeaponPart(meshes.chamferedStructure, MaterialId.VEHICLE_COAT, -0.02f, 0.065f, 0f, 0f, 0f, 0f, 0.62f * lenFactor.coerceAtLeast(0.7f), 0.07f, 0.115f, skinR, skinG, skinB, 0.18f, 0.78f, glowStrength)
 
-        // 2. Barrel Assembly
-        drawWeaponPart(meshes.rifleBarrel, MaterialId.CORRUGATED_METAL, 0.44f * lenFactor, 0.05f, 0f, 0f, 0f, 0f, 0.62f * lenFactor, 0.055f, 0.055f, 0.24f, 0.26f, 0.30f, 0.20f, 0.92f, 0f)
+        // 2. Barrel Assembly (Twin barrels for M1887, Rotary cluster for Gatling)
+        if (weaponId.equals("m1887", ignoreCase = true)) {
+            drawWeaponPart(meshes.rifleBarrel, MaterialId.CORRUGATED_METAL, 0.44f * lenFactor, 0.065f, 0f, 0f, 0f, 0f, 0.62f * lenFactor, 0.048f, 0.048f, skinR, skinG, skinB, 0.18f, 0.90f, glowStrength * 0.6f)
+            drawWeaponPart(meshes.rifleBarrel, MaterialId.CORRUGATED_METAL, 0.44f * lenFactor, 0.025f, 0f, 0f, 0f, 0f, 0.62f * lenFactor, 0.048f, 0.048f, 0.24f, 0.26f, 0.30f, 0.20f, 0.92f, 0f)
+        } else {
+            drawWeaponPart(meshes.rifleBarrel, MaterialId.CORRUGATED_METAL, 0.44f * lenFactor, 0.05f, 0f, 0f, 0f, 0f, 0.62f * lenFactor, 0.055f, 0.055f, 0.24f, 0.26f, 0.30f, 0.20f, 0.92f, 0f)
+        }
         if (weaponCategory != WeaponCategory.PISTOL) {
-            // Ventilated Shroud / Gas Block Handguard
             drawWeaponPart(meshes.chamferedStructure, MaterialId.TACTICAL_FABRIC, 0.30f * lenFactor, 0.045f, 0f, 0f, 0f, 0f, 0.38f * lenFactor, 0.105f, 0.095f, skinR * 0.72f, skinG * 0.72f, skinB * 0.72f, 0.36f, 0.65f, glowStrength * 0.5f)
         }
 
@@ -489,12 +674,17 @@ private class WeaponShowcaseRenderer : GLSurfaceView.Renderer {
         val magTilt = if (weaponId == "akm") -22f else -10f
         drawWeaponPart(meshes.curvedMagazine, MaterialId.CORRUGATED_METAL, 0.06f, -0.14f, 0f, 0f, 0f, magTilt, 0.11f, magHeight, 0.065f, skinR * 0.85f, skinG * 0.85f, skinB * 0.85f, 0.28f, 0.75f, glowStrength * 0.6f)
 
-        // 6. Optic Scope on Top Rail
+        // 6. Optic Scope on Top Rail + AWM Crimson Butterfly Wings
         when (scopeType) {
             ScopeType.SCOPE_8X, ScopeType.SCOPE_4X -> {
                 val len = if (scopeType == ScopeType.SCOPE_8X) 0.42f else 0.28f
                 drawWeaponPart(meshes.rifleBarrel, MaterialId.CORRUGATED_METAL, 0.0f, 0.16f, 0f, 0f, 0f, 0f, len, 0.085f, 0.085f, 0.10f, 0.12f, 0.15f, 0.18f, 0.90f, 0f)
                 drawWeaponPart(meshes.curvedVisor, MaterialId.VEHICLE_COAT, len * 0.48f, 0.16f, 0f, 0f, 0f, 0f, 0.04f, 0.075f, 0.075f, 0.1f, 0.88f, 1.0f, 0.08f, 0.9f, 0.8f)
+                if (skinName.contains("Butterfly", ignoreCase = true)) {
+                    val flap = sin(frameSec * 4.5f) * 9f
+                    drawWeaponPart(meshes.butterflyWing, MaterialId.VEHICLE_COAT, 0.24f, 0.22f, 0.04f, flap, 0f, 0f, 0.56f, 0.54f, 0.54f, 1.0f, 0.12f, 0.28f, 0.18f, 0.3f, 0.95f)
+                    drawWeaponPart(meshes.butterflyWing, MaterialId.VEHICLE_COAT, 0.24f, 0.22f, -0.04f, -flap, 0f, 0f, 0.56f, 0.54f, -0.54f, 1.0f, 0.12f, 0.28f, 0.18f, 0.3f, 0.95f)
+                }
             }
             ScopeType.RED_DOT, ScopeType.HOLO -> {
                 drawWeaponPart(meshes.opticBody, MaterialId.CORRUGATED_METAL, 0.02f, 0.145f, 0f, 0f, 0f, 0f, 0.12f, 0.08f, 0.085f, 0.12f, 0.14f, 0.18f, 0.22f, 0.85f, 0f)
@@ -577,8 +767,10 @@ private class WeaponShowcaseRenderer : GLSurfaceView.Renderer {
     private fun resolveSkinTint(skinName: String): Triple<Float, Float, Float> {
         val lower = skinName.lowercase()
         return when {
+            lower.contains("bunny") -> Triple(0.68f, 0.94f, 0.08f)
+            lower.contains("rapper") || lower.contains("underworld") -> Triple(0.75f, 0.22f, 1.0f)
+            lower.contains("butterfly") || lower.contains("dragon") || lower.contains("crimson") || lower.contains("inferno") || lower.contains("koi") -> Triple(1.0f, 0.24f, 0.26f)
             lower.contains("glacier") || lower.contains("frost") || lower.contains("arctic") -> Triple(0.18f, 0.88f, 1.0f)
-            lower.contains("dragon") || lower.contains("crimson") || lower.contains("inferno") -> Triple(1.0f, 0.24f, 0.16f)
             lower.contains("gold") || lower.contains("royal") || lower.contains("solar") -> Triple(1.0f, 0.82f, 0.16f)
             lower.contains("neon") || lower.contains("cyber") -> Triple(0.05f, 0.95f, 0.85f)
             lower.contains("cobalt") -> Triple(0.24f, 0.56f, 1.0f)

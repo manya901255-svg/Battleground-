@@ -673,4 +673,88 @@ class ExampleRobolectricTest {
         composeTestRule.onNodeWithTag("guest_sign_in_button").performClick()
         assertTrue(guestEntered)
     }
+
+    @Test
+    fun `test rank tier ladder, expanded roster, melee weapons, pets, gloo walls, warrior trap, and elite pass`() = kotlinx.coroutines.runBlocking {
+        // 1. Verify RankTierBadge ladder progression & formatting
+        assertEquals(7, com.example.game.model.RankTierBadge.entries.size)
+        assertEquals(com.example.game.model.RankTierBadge.BRONZE, com.example.game.model.RankTierBadge.fromRp(1000))
+        assertEquals(com.example.game.model.RankTierBadge.SILVER, com.example.game.model.RankTierBadge.fromRp(1600))
+        assertEquals(com.example.game.model.RankTierBadge.GOLD, com.example.game.model.RankTierBadge.fromRp(2100))
+        assertEquals(com.example.game.model.RankTierBadge.PLATINUM, com.example.game.model.RankTierBadge.fromRp(2750))
+        assertEquals(com.example.game.model.RankTierBadge.DIAMOND, com.example.game.model.RankTierBadge.fromRp(3400))
+        assertEquals(com.example.game.model.RankTierBadge.HEROIC, com.example.game.model.RankTierBadge.fromRp(4050))
+        assertEquals(com.example.game.model.RankTierBadge.GRANDMASTER, com.example.game.model.RankTierBadge.fromRp(4900))
+        assertEquals("Heroic", com.example.game.model.RankTierBadge.formattedRankLabel(4050))
+        assertEquals("Grandmaster", com.example.game.model.RankTierBadge.formattedRankLabel(4800))
+
+        // 2. Verify expanded character, pet, emote, weapon, melee, and gloo catalog
+        assertEquals(14, com.example.game.model.CharacterPreset.entries.size)
+        assertEquals(7, com.example.game.model.PetPreset.entries.size)
+        assertEquals(12, com.example.game.model.EmotePreset.entries.size)
+        assertEquals(5, WeaponCatalog.meleeWeapons().size)
+        assertEquals(10, WeaponCatalog.primaryFirearms().size)
+        assertEquals(11, com.example.data.StoreCategory.entries.size)
+        assertNotNull(com.example.data.StoreCatalog.findSpec("skin_awm_butterfly"))
+        assertNotNull(com.example.data.StoreCatalog.findSpec("skin_m1887_rapper"))
+        assertNotNull(com.example.data.StoreCatalog.findSpec("skin_mp40_bunny"))
+        assertNotNull(com.example.data.StoreCatalog.findSpec("gloo_flame_skull"))
+        assertNotNull(com.example.data.StoreCatalog.findSpec("char_neon_samurai"))
+
+        // 3. Engine: Melee loadout, Cyber Orbit faster shield cooldown, Gloo wall skin binding, WarriorLootTrap disarm
+        val engine = BattleRoyaleEngine(
+            gameMode = GameModeType.OFFLINE_PRACTICE,
+            mapConfig = MapCatalog.getKavalaIsland(),
+            soundSynthesizer = null,
+            teamSize = 1,
+            characterPresetId = "neon_samurai",
+            activePetId = com.example.game.model.PetPreset.CYBER_ORBIT.id,
+            equippedMeleeId = "scythe",
+            glooWallSkinId = "gloo_flame_skull",
+            parachuteSkinId = "para_glider_aero",
+            vehicleSkinId = "vehicle_supercar_crimson",
+            onMatchFinished = { _, _, _, _ -> }
+        )
+
+        assertEquals("scythe", engine.userPlayer.melee?.id)
+        engine.deployTacticalShield()
+        assertEquals(1, engine.deployableShields.size)
+        assertEquals("gloo_flame_skull", engine.deployableShields.first().skinId)
+        assertEquals(2.8f, engine.engineState.value.shieldCooldownSec, 0.1f)
+
+        // Warrior's Loot Trap grants Lv.4 Armor/Helmet, Med Kit, reward weapon & coins upon disarming
+        val trap = com.example.game.model.WarriorLootTrap(
+            x = engine.userPlayer.x + 15f,
+            y = engine.userPlayer.y + 10f,
+            victimName = "Hostile_Sniper",
+            rewardWeapon = WeaponCatalog.createM1887("Rapper Underworld"),
+            rewardArmorLevel = 4,
+            rewardHelmetLevel = 4
+        )
+        engine.warriorLootTraps.add(trap)
+        val medBefore = engine.userPlayer.consumableInventory[ConsumableType.MEDKIT] ?: 0
+        engine.disarmAndLootWarriorTrap(trap.id)
+        assertEquals(4, engine.userPlayer.armorLevel)
+        assertEquals(4, engine.userPlayer.helmetLevel)
+        assertEquals(medBefore + 1, engine.userPlayer.consumableInventory[ConsumableType.MEDKIT] ?: 0)
+        assertTrue(engine.warriorLootTraps.isEmpty())
+
+        // 4. Repository: Melee equip + Upgrade Elite Pass + Claim All Battle Pass rewards
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val repository = com.example.data.GameRepository.create(context)
+        repository.initializeDefaultDataIfEmpty()
+
+        repository.updateEquippedMelee("scythe")
+        assertEquals("scythe", repository.userProfile.first()?.equippedMeleeId)
+
+        repository.grantTestCurrency(bp = 0, credits = 500)
+        val vcBefore = repository.userProfile.first()?.vortexCredits ?: 0
+        assertTrue(repository.upgradeToElitePass())
+        val upgradedProfile = repository.userProfile.first()!!
+        assertTrue(upgradedProfile.hasElitePass)
+        assertEquals(vcBefore - 300, upgradedProfile.vortexCredits)
+
+        val claimed = repository.claimAllBattlePassEligible(maxUnlockedTier = 3)
+        assertEquals(6, claimed) // 3 free + 3 elite unlocked tiers
+    }
 }
