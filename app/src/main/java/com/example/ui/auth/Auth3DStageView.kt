@@ -214,10 +214,10 @@ private class Auth3DRenderer(
         val camSwayY = cos(frameTimeSec * 0.38f) * 0.06f
         // Camera looks slightly toward the right so characters stay anchored in the left 45% of the screen
         val camX = focusX + 0.90f + camSwayX
-        val camY = baseGroundY + 2.08f + camSwayY
-        val camZ = focusZ + 4.85f
+        val camY = baseGroundY + 1.80f + camSwayY
+        val camZ = focusZ + 4.45f
         val lookX = focusX + 0.65f
-        val lookY = baseGroundY + 1.50f
+        val lookY = baseGroundY + 1.28f
         val lookZ = focusZ - 4.0f
 
         Matrix.setLookAtM(viewMatrix, 0, camX, camY, camZ, lookX, lookY, lookZ, 0f, 1f, 0f)
@@ -252,6 +252,8 @@ private class Auth3DRenderer(
         GLES20.glUniform3f(shader.uGroundBounce, 0.28f, 0.24f, 0.26f)
         GLES20.glUniform3f(shader.uFogColor, horizonR, horizonG, horizonB)
         GLES20.glUniform1f(shader.uFogMaxDist, drawDist * 0.95f)
+        GLES20.glUniform1f(shader.uTime, frameTimeSec)
+        GLES20.glUniform1f(shader.uSurfaceMode, 0f)
 
         envRenderer.setViewProjection(vpMatrix)
         actorRenderer.setViewProjection(vpMatrix)
@@ -299,7 +301,10 @@ private class Auth3DRenderer(
             showHelmetAndVisor = false,
             halfMaskRgb = Triple(0.08f, 0.08f, 0.10f),
             halfMaskAccentRgb = Triple(0.96f, 0.12f, 0.18f),
-            hasPonytailHair = false
+            hasPonytailHair = false,
+            frameDtSec = dt,
+            sunDirX = sunDirX,
+            sunDirZ = sunDirZ
         )
 
         // Female Overwatch Operative (Dark Hair + High Red-Tipped Ponytail, Crimson/Black Combat Vest)
@@ -317,7 +322,10 @@ private class Auth3DRenderer(
             showHelmetAndVisor = false,
             halfMaskRgb = null,
             halfMaskAccentRgb = null,
-            hasPonytailHair = true
+            hasPonytailHair = true,
+            frameDtSec = dt,
+            sunDirX = sunDirX,
+            sunDirZ = sunDirZ
         )
 
         // Embers & Crimson Smoke Flare VFX
@@ -325,10 +333,11 @@ private class Auth3DRenderer(
 
         resolutionScaler.endScaledPassAndPresent(viewportWidth, viewportHeight)
 
-        if (cfg.targetFps <= 32) {
+        if (cfg.targetFps < 115) {
+            val targetMs = (1000L / cfg.targetFps.coerceIn(30, 120)).coerceAtLeast(8L)
             val elapsedMs = (System.nanoTime() - nowNs) / 1_000_000L
-            val remain = 32L - elapsedMs
-            if (remain in 2..28) {
+            val remain = targetMs - elapsedMs
+            if (remain in 2..30) {
                 try { Thread.sleep(remain) } catch (_: InterruptedException) {}
             }
         }
@@ -384,9 +393,17 @@ private class Auth3DRenderer(
 
     private fun renderParachutist(x: Float, y: Float, z: Float, phase: Float) {
         val sway = sin(phase * 1.9f) * 8f
-        drawMesh(meshes.curvedParachuteCanopy, MaterialId.TACTICAL_FABRIC, x, y + 1.25f, z, 0f, 0f, sway, 2.3f, 0.85f, 1.50f, 0.14f, 0.15f, 0.18f, 0.96f, 0.65f, 0.05f, 0f)
-        drawMesh(meshes.chamferedStructure, MaterialId.VEHICLE_COAT, x, y + 1.45f, z, 0f, 0f, sway, 1.5f, 0.20f, 0.90f, 0.95f, 0.16f, 0.20f, 0.95f, 0.35f, 0.2f, 0.4f, useTex = 0f)
-        drawMesh(meshes.limbCapsule, MaterialId.TACTICAL_FABRIC, x, y + 0.18f, z, 0f, 0f, sway, 0.22f, 0.65f, 0.22f, 0.10f, 0.12f, 0.16f, 1f, 0.6f, 0.1f, 0f)
+        actorRenderer.renderArticulatedParachutist(
+            x = x,
+            y = y,
+            z = z,
+            yawDeg = 20f,
+            swayDeg = sway,
+            canopyR = 0.92f,
+            canopyG = 0.14f,
+            canopyB = 0.18f,
+            scale = 0.78f
+        )
     }
 
     private fun updateAndDrawAuthVfx(dt: Float, focusX: Float, baseGroundY: Float, focusZ: Float) {

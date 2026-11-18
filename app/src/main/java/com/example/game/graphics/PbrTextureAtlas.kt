@@ -185,21 +185,23 @@ class PbrTextureAtlas {
                         height = 0.44f + drift * 0.42f + fbm * 0.14f
                     }
                     MaterialId.ASPHALT_ROAD -> {
-                        val aggregate = (fbm - 0.5f) * 38f
-                        r = 172f + aggregate
-                        g = 175f + aggregate
-                        b = 182f + aggregate
-                        height = 0.35f + fbm * 0.65f
+                        val fineGrain = smoothNoise2d(u, v, 36, seed + 61)
+                        val aggregate = (fbm - 0.5f) * 28f + (fineGrain - 0.5f) * 22f
+                        val wearTrack = 1f - 0.06f * (sin(u * Math.PI * 2.0 * 2.0).toFloat() * 0.5f + 0.5f)
+                        r = (168f + aggregate) * wearTrack
+                        g = (172f + aggregate) * wearTrack
+                        b = (180f + aggregate) * wearTrack
+                        height = 0.34f + fbm * 0.42f + fineGrain * 0.24f
                     }
                     MaterialId.CONCRETE_WALL -> {
-                        val seamV = smoothEdge(sin(v * Math.PI * 4.0).toFloat())
-                        val seamU = smoothEdge(sin(u * Math.PI * 2.0).toFloat())
-                        val seam = 0.80f + 0.20f * seamU * seamV
-                        val plaster = 0.90f + fbm * 0.12f
-                        r = (208f + fbm * 26f) * seam * plaster
-                        g = (210f + fbm * 24f) * seam * plaster
-                        b = (214f + fbm * 22f) * seam * plaster
-                        height = 0.25f * (1f - seamU * seamV) + (0.45f + fbm * 0.45f)
+                        // Fine architectural stucco & hairline panel reveals without coarse tile grids
+                        val fineGrain = smoothNoise2d(u, v, 30, seed + 29)
+                        val plaster = 0.88f + fbm * 0.12f + (fineGrain - 0.5f) * 0.06f
+                        val microReveal = 0.94f + 0.06f * smoothEdge(sin(v * Math.PI * 2.0).toFloat())
+                        r = (212f + fbm * 22f) * plaster * microReveal
+                        g = (214f + fbm * 20f) * plaster * microReveal
+                        b = (218f + fbm * 18f) * plaster * microReveal
+                        height = 0.42f + fbm * 0.36f + fineGrain * 0.20f
                     }
                     MaterialId.CORRUGATED_METAL -> {
                         val rib = sin(u * Math.PI * 2.0 * 10.0).toFloat() * 0.5f + 0.5f
@@ -218,18 +220,20 @@ class PbrTextureAtlas {
                         height = 0.32f * plankGroove + grain * 0.45f
                     }
                     MaterialId.TREE_BARK -> {
-                        val furrow = sin(u * Math.PI * 2.0 * 8.0 + sin(v * Math.PI * 2.0) * 0.8f + fbm * 1.6f).toFloat() * 0.5f + 0.5f
-                        r = 158f + furrow * 68f + fbm * 20f
-                        g = 144f + furrow * 56f + fbm * 18f
-                        b = 132f + furrow * 46f
-                        height = 0.20f + furrow * 0.75f
+                        val fineBark = smoothNoise2d(u, v, 24, seed + 53)
+                        val furrow = sin(u * Math.PI * 2.0 * 9.0 + sin(v * Math.PI * 2.0) * 0.9f + fbm * 2.0f).toFloat() * 0.5f + 0.5f
+                        r = 148f + furrow * 64f + fineBark * 24f
+                        g = 134f + furrow * 54f + fineBark * 20f
+                        b = 122f + furrow * 44f + fineBark * 16f
+                        height = 0.16f + furrow * 0.68f + fineBark * 0.16f
                     }
                     MaterialId.PINE_FOLIAGE -> {
-                        val needle = abs(sin((u * 12.0 + v * 8.0 + fbm * 1.2) * Math.PI)).toFloat()
-                        r = 152f + needle * 48f
-                        g = 192f + needle * 52f + fbm * 16f
-                        b = 148f + needle * 42f
-                        height = 0.30f + needle * 0.62f
+                        val cluster = smoothNoise2d(u, v, 20, seed + 37)
+                        val leaf = abs(sin((u * 10.0 + v * 7.0 + fbm * 1.4) * Math.PI)).toFloat() * 0.65f + cluster * 0.35f
+                        r = 146f + leaf * 52f
+                        g = 188f + leaf * 58f + fbm * 16f
+                        b = 142f + leaf * 44f
+                        height = 0.26f + leaf * 0.68f
                     }
                     MaterialId.TACTICAL_FABRIC -> {
                         val twill = sin((u * 24.0 + v * 24.0) * Math.PI * 2.0).toFloat() * 0.5f + 0.5f
@@ -240,12 +244,12 @@ class PbrTextureAtlas {
                         height = 0.40f + twill * 0.36f
                     }
                     MaterialId.SKIN_DETAIL -> {
-                        // Subtle organic subsurface warmth variation, zero blocky noise
-                        val pore = (fbm - 0.5f) * 10f
-                        r = 238f + pore
-                        g = 222f + pore * 0.85f
-                        b = 216f + pore * 0.75f
-                        height = 0.48f + fbm * 0.08f
+                        // Ultra-smooth organic subsurface warmth without harsh noise
+                        val pore = (fbm - 0.5f) * 6f
+                        r = 242f + pore
+                        g = 228f + pore * 0.85f
+                        b = 220f + pore * 0.75f
+                        height = 0.49f + fbm * 0.04f
                     }
                     MaterialId.VEHICLE_COAT -> {
                         val panel = 0.82f + 0.18f * smoothEdge(sin(u * Math.PI * 2.0).toFloat()) * smoothEdge(sin(v * Math.PI * 2.0).toFloat())

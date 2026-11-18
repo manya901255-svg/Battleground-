@@ -172,7 +172,7 @@ fun BattleScreen(
             state.playersSnapshot
                 .filter { !it.isUser && it.isAlive && it.teamId != user.teamId && (showAllEnemyBars || it.health < it.maxHealth || it.shield < it.maxShield) }
                 .forEach { enemy ->
-                    val proj = renderer.projectWorldToScreen(enemy.x, enemy.y, enemy.z + 27f)
+                    val proj = renderer.projectWorldToScreen(enemy.x, enemy.y, enemy.z + 20.5f)
                     if (proj.isVisible) {
                         val barW = 64f
                         drawRect(
@@ -930,7 +930,11 @@ fun BattleScreen(
                 showInMatchSettings = false
                 onExitToLobby()
             },
-            onDismiss = { showInMatchSettings = false }
+            onDismiss = { showInMatchSettings = false },
+            currentFps = activeConfig.targetFps,
+            onSelectFps = { fpsVal ->
+                activeConfig = activeConfig.copy(targetFps = fpsVal)
+            }
         )
     }
 

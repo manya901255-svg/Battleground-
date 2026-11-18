@@ -306,13 +306,14 @@ class BattleRoyaleEngine(
 
         val petMaxShieldBonus = if (activePetId == PetPreset.FROST_OWL.id) 15f else 0f
         val charShieldBonus = if (characterPresetId == "blaze_striker") 10f else 0f
+        val (safeUserX, safeUserY) = findSafeSpawnPosition(2500f, 2500f, 24f)
         userPlayer = Player(
             id = "user_player_0",
             name = "VortexGhost",
             isUser = true,
             teamId = 1,
-            x = 2500f,
-            y = 2500f,
+            x = safeUserX,
+            y = safeUserY,
             angle = cameraYawDegrees,
             backpackLevel = 2,
             armorLevel = if (isInstantCombat) 2 else 1,
@@ -370,16 +371,17 @@ class BattleRoyaleEngine(
             }
             // Spawn squadmates close by and initial opponents near Pochinki / center for immediate TPS combat
             val nearCenter = i <= 14
-            val bx = when {
+            val rawBx = when {
                 isSquadmate -> 2500f + (Random.nextFloat() - 0.5f) * 160f
                 nearCenter -> 2500f + (Random.nextFloat() - 0.5f) * 860f
                 else -> 900f + Random.nextFloat() * 3200f
             }
-            val by = when {
+            val rawBy = when {
                 isSquadmate -> 2500f + (Random.nextFloat() - 0.5f) * 160f
                 nearCenter -> 2500f + (Random.nextFloat() - 0.5f) * 860f
                 else -> 900f + Random.nextFloat() * 3200f
             }
+            val (bx, by) = findSafeSpawnPosition(rawBx, rawBy, 20f)
 
             val bot = Player(
                 id = "bot_$i",
@@ -1176,16 +1178,17 @@ class BattleRoyaleEngine(
                     val angleToUser = Math.toDegrees(atan2((userPlayer.y - bot.y).toDouble(), (userPlayer.x - bot.x).toDouble())).toFloat()
                     bot.angle = angleToUser + (Random.nextFloat() - 0.5f) * diff.accuracyJitterDeg
 
-                    // Tactical strafing + occasional jump on Veteran AI
-                    if (distToUser > 210f) {
-                        val rad = Math.toRadians(bot.angle.toDouble())
-                        bot.x += (cos(rad) * 115f * diff.moveSpeedMul * deltaSec).toFloat()
-                        bot.y += (sin(rad) * 115f * diff.moveSpeedMul * deltaSec).toFloat()
+                    // Tactical strafing + building wall sliding + occasional jump on Veteran AI
+                    val moveRad = if (distToUser > 210f) {
+                        Math.toRadians(bot.angle.toDouble())
                     } else {
-                        val strafeRad = Math.toRadians((bot.angle + 90f).toDouble())
-                        bot.x += (cos(strafeRad) * 70f * diff.moveSpeedMul * deltaSec).toFloat()
-                        bot.y += (sin(strafeRad) * 70f * diff.moveSpeedMul * deltaSec).toFloat()
+                        Math.toRadians((bot.angle + 90f).toDouble())
                     }
+                    val moveSpd = if (distToUser > 210f) 115f else 70f
+                    val nextX = (bot.x + (cos(moveRad) * moveSpd * diff.moveSpeedMul * deltaSec).toFloat()).coerceIn(100f, 4900f)
+                    val nextY = (bot.y + (sin(moveRad) * moveSpd * diff.moveSpeedMul * deltaSec).toFloat()).coerceIn(100f, 4900f)
+                    if (!isCollidingWithBuildings(nextX, bot.y, 16f)) bot.x = nextX
+                    if (!isCollidingWithBuildings(bot.x, nextY, 16f)) bot.y = nextY
                     bot.animWalkPhase += deltaSec * 8f
 
                     if (diff == BotDifficulty.VETERAN && bot.z <= 0f && Random.nextFloat() < 0.015f) {
@@ -1202,8 +1205,10 @@ class BattleRoyaleEngine(
                     val angleToSafe = Math.toDegrees(atan2((bot.botTargetY - bot.y).toDouble(), (bot.botTargetX - bot.x).toDouble())).toFloat()
                     bot.angle = angleToSafe
                     val rad = Math.toRadians(bot.angle.toDouble())
-                    bot.x += (cos(rad) * 200f * diff.moveSpeedMul * deltaSec).toFloat()
-                    bot.y += (sin(rad) * 200f * diff.moveSpeedMul * deltaSec).toFloat()
+                    val nextX = (bot.x + (cos(rad) * 200f * diff.moveSpeedMul * deltaSec).toFloat()).coerceIn(100f, 4900f)
+                    val nextY = (bot.y + (sin(rad) * 200f * diff.moveSpeedMul * deltaSec).toFloat()).coerceIn(100f, 4900f)
+                    if (!isCollidingWithBuildings(nextX, bot.y, 16f)) bot.x = nextX
+                    if (!isCollidingWithBuildings(bot.x, nextY, 16f)) bot.y = nextY
                     bot.animWalkPhase += deltaSec * 10f
                 }
                 else -> {
@@ -1211,8 +1216,13 @@ class BattleRoyaleEngine(
                         bot.angle += (Random.nextFloat() - 0.5f) * 90f
                     }
                     val rad = Math.toRadians(bot.angle.toDouble())
-                    bot.x = (bot.x + cos(rad) * 95f * deltaSec).toFloat().coerceIn(100f, 4900f)
-                    bot.y = (bot.y + sin(rad) * 95f * deltaSec).toFloat().coerceIn(100f, 4900f)
+                    val nextX = (bot.x + cos(rad) * 95f * deltaSec).toFloat().coerceIn(100f, 4900f)
+                    val nextY = (bot.y + sin(rad) * 95f * deltaSec).toFloat().coerceIn(100f, 4900f)
+                    val blockedX = isCollidingWithBuildings(nextX, bot.y, 16f)
+                    val blockedY = isCollidingWithBuildings(bot.x, nextY, 16f)
+                    if (!blockedX) bot.x = nextX
+                    if (!blockedY) bot.y = nextY
+                    if (blockedX && blockedY) bot.angle = (bot.angle + 115f) % 360f
                     bot.animWalkPhase += deltaSec * 6f
                 }
             }
@@ -1343,7 +1353,7 @@ class BattleRoyaleEngine(
                         DamagePopup(
                             worldX = hitDummy.first,
                             worldY = hitDummy.second,
-                            worldZ = 22f,
+                            worldZ = 18.5f,
                             amount = dmgAmt,
                             isHeadshot = b.isSniper,
                             isShieldHit = false
@@ -1477,7 +1487,7 @@ class BattleRoyaleEngine(
                     DamagePopup(
                         worldX = victim.x + (Random.nextFloat() - 0.5f) * 14f,
                         worldY = victim.y + (Random.nextFloat() - 0.5f) * 14f,
-                        worldZ = victim.z + 24f,
+                        worldZ = victim.z + 18.5f,
                         amount = finalDamage.toInt(),
                         isHeadshot = isHeadshot,
                         isShieldHit = shieldHit && victim.shield > 0f
@@ -1618,7 +1628,7 @@ class BattleRoyaleEngine(
                             DamagePopup(
                                 worldX = target.x,
                                 worldY = target.y,
-                                worldZ = target.z + 24f,
+                                worldZ = target.z + 18.5f,
                                 amount = damage.toInt(),
                                 isHeadshot = lastHitWasHeadshot,
                                 isShieldHit = target.shield > 0f
@@ -1668,7 +1678,7 @@ class BattleRoyaleEngine(
                         DamagePopup(
                             worldX = p.x,
                             worldY = p.y,
-                            worldZ = p.z + 26f,
+                            worldZ = p.z + 19f,
                             amount = dmg.toInt(),
                             isHeadshot = false,
                             isShieldHit = false
@@ -1732,7 +1742,7 @@ class BattleRoyaleEngine(
                             DamagePopup(
                                 worldX = p.x,
                                 worldY = p.y,
-                                worldZ = p.z + 26f,
+                                worldZ = p.z + 19f,
                                 amount = dmg.toInt(),
                                 isHeadshot = true,
                                 isShieldHit = false
@@ -2028,6 +2038,22 @@ class BattleRoyaleEngine(
             }
         }
         return false
+    }
+
+    private fun findSafeSpawnPosition(targetX: Float, targetY: Float, radius: Float = 22f): Pair<Float, Float> {
+        val baseX = targetX.coerceIn(120f, 4880f)
+        val baseY = targetY.coerceIn(120f, 4880f)
+        if (!isCollidingWithBuildings(baseX, baseY, radius)) return baseX to baseY
+        for (ring in 1..12) {
+            val step = ring * 38f
+            for (k in 0 until 8) {
+                val ang = k * (Math.PI / 4.0)
+                val cx = (baseX + (cos(ang) * step).toFloat()).coerceIn(120f, 4880f)
+                val cy = (baseY + (sin(ang) * step).toFloat()).coerceIn(120f, 4880f)
+                if (!isCollidingWithBuildings(cx, cy, radius)) return cx to cy
+            }
+        }
+        return baseX to baseY
     }
 
     fun honkVehicleHorn() {

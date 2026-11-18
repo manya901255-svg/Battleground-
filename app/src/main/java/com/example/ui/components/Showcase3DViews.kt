@@ -317,6 +317,8 @@ private class PetShowcaseRenderer : GLSurfaceView.Renderer {
         GLES20.glUniform3f(shader.uGroundBounce, gr * 0.4f, gg * 0.4f, gb * 0.4f)
         GLES20.glUniform3f(shader.uFogColor, 0.04f, 0.06f, 0.11f)
         GLES20.glUniform1f(shader.uFogMaxDist, 35f)
+        GLES20.glUniform1f(shader.uTime, frameSec)
+        GLES20.glUniform1f(shader.uSurfaceMode, 0f)
 
         actorRenderer.setViewProjection(vpMatrix)
         dummyOwner.angle = 35f + yawDeg + frameSec * 18f
@@ -398,9 +400,9 @@ private class CharacterShowcaseRenderer : GLSurfaceView.Renderer {
 
         val aspect = viewportW.toFloat() / viewportH.toFloat()
         Matrix.perspectiveM(projectionMatrix, 0, 38f, aspect, 0.25f, 50f)
-        val camY = 1.38f
-        val camZ = if (showSupplyCrate) 3.75f else 3.55f
-        Matrix.setLookAtM(viewMatrix, 0, 0f, camY, camZ, 0f, 1.05f, 0f, 0f, 1f, 0f)
+        val camY = 1.18f
+        val camZ = if (showSupplyCrate) 3.45f else 3.15f
+        Matrix.setLookAtM(viewMatrix, 0, 0f, camY, camZ, 0f, 0.96f, 0f, 0f, 1f, 0f)
         Matrix.multiplyMM(vpMatrix, 0, projectionMatrix, 0, viewMatrix, 0)
 
         GLES20.glUseProgram(shader.worldProgram)
@@ -418,6 +420,8 @@ private class CharacterShowcaseRenderer : GLSurfaceView.Renderer {
         GLES20.glUniform3f(shader.uGroundBounce, ar * 0.4f, ag * 0.4f, ab * 0.4f)
         GLES20.glUniform3f(shader.uFogColor, bgR, bgG, bgB)
         GLES20.glUniform1f(shader.uFogMaxDist, 45f)
+        GLES20.glUniform1f(shader.uTime, frameSec)
+        GLES20.glUniform1f(shader.uSurfaceMode, 0f)
 
         actorRenderer.setViewProjection(vpMatrix)
 
@@ -465,7 +469,8 @@ private class CharacterShowcaseRenderer : GLSurfaceView.Renderer {
             userTeamId = 1,
             shadowQuality = 2,
             radarActive = false,
-            frameTimeSec = frameSec
+            frameTimeSec = frameSec,
+            frameDtSec = dt
         )
     }
 
@@ -584,6 +589,8 @@ private class WeaponShowcaseRenderer : GLSurfaceView.Renderer {
         GLES20.glUniform3f(shader.uGroundBounce, skinR * 0.45f, skinG * 0.45f, skinB * 0.45f)
         GLES20.glUniform3f(shader.uFogColor, 0.045f, 0.068f, 0.12f)
         GLES20.glUniform1f(shader.uFogMaxDist, 30f)
+        GLES20.glUniform1f(shader.uTime, frameSec)
+        GLES20.glUniform1f(shader.uSurfaceMode, 0f)
 
         val inspectYaw = if (autoInspect) frameSec * 38f else yawDeg
         val inspectRoll = if (autoInspect) sin(frameSec * 1.9f) * 11f else pitchDeg

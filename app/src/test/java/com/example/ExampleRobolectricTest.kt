@@ -444,6 +444,7 @@ class ExampleRobolectricTest {
         assertEquals("High", high.presetName)
         assertEquals("Ultra", ultra.presetName)
         assertEquals("Smooth", com.example.game.graphics.GraphicsConfig.fromPreset("Low").presetName)
+        assertEquals("Standard", com.example.game.graphics.GraphicsConfig.fromPreset("Medium").presetName)
         assertTrue(smooth.resolutionScale < standard.resolutionScale)
         assertTrue(standard.resolutionScale < ultra.resolutionScale)
         assertEquals(0, smooth.shadowQuality)
@@ -491,7 +492,22 @@ class ExampleRobolectricTest {
         assertTrue(meshes.curvedParachuteCanopy.vertexCount > 40)
         assertTrue(meshes.wheelCylinder.vertexCount > 100)
         assertTrue(meshes.foliageCone.vertexCount > 40)
+        assertTrue(meshes.foliageCrown.vertexCount > 100)
         assertTrue(meshes.boulderRock.vertexCount > 150)
+        assertTrue(meshes.facialMouth.vertexCount >= 24)
+        assertTrue(meshes.hairBangs.vertexCount >= 36)
+        assertTrue(meshes.sculptedFingers.vertexCount >= 90)
+        assertTrue(meshes.sculptedThumb.vertexCount >= 24)
+        assertTrue(meshes.hippedShingleRoof.vertexCount >= 18)
+        assertTrue(meshes.staircaseFlight.vertexCount >= 36)
+        assertTrue(meshes.pelvisHip.vertexCount > 60)
+        assertTrue(meshes.contouredVest.vertexCount > 60)
+        assertTrue(meshes.tacticalBackpack.vertexCount > 60)
+        assertTrue(meshes.contouredHalfMask.vertexCount > 40)
+        assertTrue(meshes.curvedBand.vertexCount > 40)
+        assertTrue(meshes.crownDiadem.vertexCount > 60)
+        assertTrue(meshes.tacticalCapBrim.vertexCount > 40)
+        assertTrue(meshes.contouredSole.vertexCount > 40)
 
         val kavala = MapCatalog.getKavalaIsland()
         val terrainMesh = meshes.buildTerrainMeshForMap(kavala, gridRes = 48)
@@ -756,5 +772,65 @@ class ExampleRobolectricTest {
 
         val claimed = repository.claimAllBattlePassEligible(maxUnlockedTier = 3)
         assertEquals(6, claimed) // 3 free + 3 elite unlocked tiers
+    }
+
+    @Test
+    fun `test tps camera framing separates waiting lobby from plane flight and spawns clear of buildings`() {
+        val lobbyCam = com.example.game.ui.Battle3DRenderer.computeCameraSpec(
+            phase = com.example.game.model.MatchPhase.WAITING_IN_LOBBY,
+            isAimingDownSights = false,
+            isSprinting = false,
+            inVehicle = false,
+            stance = com.example.game.model.PlayerStance.STAND,
+            scopeMagnification = 1.5f
+        )
+        assertFalse(lobbyCam.usePlaneOrbit)
+        assertEquals(3.90f, lobbyCam.camDist, 0.01f)
+        assertEquals(50f, lobbyCam.desiredFov, 0.1f)
+        assertEquals(1.18f, lobbyCam.pivotHeightOffset, 0.01f)
+
+        val planeCam = com.example.game.ui.Battle3DRenderer.computeCameraSpec(
+            phase = com.example.game.model.MatchPhase.PLANE_FLIGHT,
+            isAimingDownSights = false,
+            isSprinting = false,
+            inVehicle = false,
+            stance = com.example.game.model.PlayerStance.STAND,
+            scopeMagnification = 1.5f
+        )
+        assertTrue(planeCam.usePlaneOrbit)
+
+        val adsCam = com.example.game.ui.Battle3DRenderer.computeCameraSpec(
+            phase = com.example.game.model.MatchPhase.ACTIVE_COMBAT,
+            isAimingDownSights = true,
+            isSprinting = false,
+            inVehicle = false,
+            stance = com.example.game.model.PlayerStance.CROUCH,
+            scopeMagnification = 2.0f
+        )
+        assertFalse(adsCam.usePlaneOrbit)
+        assertEquals(1.95f, adsCam.camDist, 0.01f)
+        assertEquals(25f, adsCam.desiredFov, 0.1f)
+        assertEquals(0.82f, adsCam.pivotHeightOffset, 0.01f)
+
+        // All initial players and bots must spawn clear of building footprints
+        MapCatalog.getAllMaps().forEach { map ->
+            val engine = BattleRoyaleEngine(
+                gameMode = GameModeType.CLASSIC_BR,
+                mapConfig = map,
+                soundSynthesizer = null,
+                teamSize = 4,
+                onMatchFinished = { _, _, _, _ -> }
+            )
+            assertFalse(
+                "User player spawned inside a building on ${map.id}",
+                engine.isCollidingWithBuildings(engine.userPlayer.x, engine.userPlayer.y, 16f)
+            )
+            engine.players.forEach { p ->
+                assertFalse(
+                    "Player ${p.id} spawned inside a building on ${map.id}",
+                    engine.isCollidingWithBuildings(p.x, p.y, 16f)
+                )
+            }
+        }
     }
 }

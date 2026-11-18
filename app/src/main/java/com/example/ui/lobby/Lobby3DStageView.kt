@@ -261,11 +261,11 @@ private class Lobby3DRenderer(
         Matrix.perspectiveM(projectionMatrix, 0, 44f, aspect, 0.35f, drawDist + 140f)
 
         val camSway = sin(frameTimeSec * 0.55f) * 0.14f
-        val camX = px - 0.55f + camSway
-        val camY = groundY + 1.92f
-        val camZ = pz + 4.35f
-        val lookX = px - 0.38f
-        val lookY = groundY + 1.38f
+        val camX = px - 0.50f + camSway
+        val camY = groundY + 1.48f
+        val camZ = pz + 3.85f
+        val lookX = px - 0.35f
+        val lookY = groundY + 1.10f
         val lookZ = pz - 1.2f
 
         Matrix.setLookAtM(viewMatrix, 0, camX, camY, camZ, lookX, lookY, lookZ, 0f, 1f, 0f)
@@ -295,6 +295,8 @@ private class Lobby3DRenderer(
         GLES20.glUniform3f(shader.uGroundBounce, palette.groundR, palette.groundG, palette.groundB)
         GLES20.glUniform3f(shader.uFogColor, palette.horizonR, palette.horizonG, palette.horizonB)
         GLES20.glUniform1f(shader.uFogMaxDist, drawDist * 0.92f)
+        GLES20.glUniform1f(shader.uTime, frameTimeSec)
+        GLES20.glUniform1f(shader.uSurfaceMode, 0f)
 
         envRenderer.setViewProjection(vpMatrix)
         actorRenderer.setViewProjection(vpMatrix)
@@ -369,14 +371,17 @@ private class Lobby3DRenderer(
             userTeamId = 1,
             shadowQuality = cfg.shadowQuality,
             radarActive = false,
-            frameTimeSec = frameTimeSec
+            frameTimeSec = frameTimeSec,
+            frameDtSec = dt,
+            sunDirX = palette.sunDirX,
+            sunDirZ = palette.sunDirZ
         )
 
-        // Flanking Signature WarX Partner Operative & WarX Crimson Cliff Banner
+        // Flanking Signature WarX Partner Operative (positioned cleanly on the 1.90m tactical pedestal)
         partnerOperative.characterPresetId =
             if (characterPresetId == "nova_valkyrie") "vortex_ghost" else "nova_valkyrie"
-        partnerOperative.x = showcasePlayer.x - 16.5f
-        partnerOperative.y = showcasePlayer.y - 11.5f
+        partnerOperative.x = showcasePlayer.x - 12.5f
+        partnerOperative.y = showcasePlayer.y - 8.5f
         partnerOperative.angle = 104f + soldierYawOffset * 0.6f + cos(frameTimeSec * 0.65f) * 2.5f
         actorRenderer.renderSoldier3D(
             player = partnerOperative,
@@ -384,7 +389,10 @@ private class Lobby3DRenderer(
             userTeamId = 1,
             shadowQuality = cfg.shadowQuality,
             radarActive = false,
-            frameTimeSec = frameTimeSec + 1.2f
+            frameTimeSec = frameTimeSec + 1.2f,
+            frameDtSec = dt,
+            sunDirX = palette.sunDirX,
+            sunDirZ = palette.sunDirZ
         )
 
         // WarX Crimson Crown Cliff Flagpole on left side of command pedestal
@@ -426,10 +434,11 @@ private class Lobby3DRenderer(
 
         resolutionScaler.endScaledPassAndPresent(viewportWidth, viewportHeight)
 
-        if (cfg.targetFps <= 32) {
+        if (cfg.targetFps < 115) {
+            val targetMs = (1000L / cfg.targetFps.coerceIn(30, 120)).coerceAtLeast(8L)
             val elapsedMs = (System.nanoTime() - nowNs) / 1_000_000L
-            val remain = 32L - elapsedMs
-            if (remain in 2..28) {
+            val remain = targetMs - elapsedMs
+            if (remain in 2..30) {
                 try { Thread.sleep(remain) } catch (_: InterruptedException) {}
             }
         }
@@ -494,8 +503,17 @@ private class Lobby3DRenderer(
     }
 
     private fun renderDistantParachutist(x: Float, y: Float, z: Float, yawDeg: Float) {
-        drawMesh(meshes.curvedParachuteCanopy, MaterialId.TACTICAL_FABRIC, x, y + 1.8f, z, 0f, yawDeg, 0f, 2.8f, 0.95f, 1.6f, 0.18f, 0.64f, 0.96f, 0.95f, 0.5f, 0.1f, 0.25f)
-        drawMesh(meshes.limbCapsule, MaterialId.TACTICAL_FABRIC, x, y, z, 0f, yawDeg, 0f, 0.28f, 0.85f, 0.28f, 0.15f, 0.16f, 0.20f, 1f, 0.6f, 0.1f, 0f)
+        actorRenderer.renderArticulatedParachutist(
+            x = x,
+            y = y,
+            z = z,
+            yawDeg = yawDeg,
+            swayDeg = sin(frameTimeSec * 1.7f) * 7f,
+            canopyR = 0.18f,
+            canopyG = 0.64f,
+            canopyB = 0.96f,
+            scale = 0.88f
+        )
     }
 
     private fun updateAndDrawLobbyParticles(

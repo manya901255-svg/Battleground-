@@ -175,7 +175,12 @@ fun SettingsScreen(
                 Text("GRAPHICS PRESET", color = TextSecondary, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                 Spacer(modifier = Modifier.height(8.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    listOf("Smooth", "Standard", "High", "Ultra").forEach { q ->
+                    listOf(
+                        "Smooth" to "LOW",
+                        "Standard" to "MEDIUM",
+                        "High" to "HIGH",
+                        "Ultra" to "ULTRA"
+                    ).forEach { (q, tierLabel) ->
                         val isSelected = graphics.equals(q, ignoreCase = true) ||
                             (q == "Smooth" && graphics.equals("Low", true)) ||
                             (q == "Standard" && (graphics.equals("Medium", true) || graphics.equals("Balanced", true))) ||
@@ -202,12 +207,20 @@ fun SettingsScreen(
                                 .testTag("graphics_preset_${q.lowercase()}"),
                             contentAlignment = Alignment.Center
                         ) {
-                            Text(
-                                q,
-                                color = if (isSelected) Color.Black else TextPrimary,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 11.sp
-                            )
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text(
+                                    tierLabel,
+                                    color = if (isSelected) Color.Black else TextPrimary,
+                                    fontWeight = FontWeight.Black,
+                                    fontSize = 11.sp
+                                )
+                                Text(
+                                    q,
+                                    color = if (isSelected) Color.Black.copy(alpha = 0.78f) else TextSecondary,
+                                    fontWeight = FontWeight.SemiBold,
+                                    fontSize = 9.sp
+                                )
+                            }
                         }
                     }
                 }

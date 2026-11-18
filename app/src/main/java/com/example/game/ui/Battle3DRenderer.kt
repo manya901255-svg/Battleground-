@@ -134,16 +134,15 @@ class Battle3DRenderer(
 
         // 1. Third-Person Camera Framing + Smooth Zoom + Raycast Obstacle Collision
         val aspect = viewportWidth.toFloat() / viewportHeight.toFloat()
-        val desiredFov = when {
-            engine.isAimingDownSights -> {
-                val mag = user.activeWeapon?.equippedScope?.magnification ?: 1.5f
-                (56f / mag.coerceIn(1.25f, 4.5f)).coerceIn(14f, 44f)
-            }
-            user.isSprinting -> 65f
-            state.phase == MatchPhase.SKYDIVING -> 68f
-            else -> 57f
-        }
-        smoothFov += (desiredFov - smoothFov) * 0.22f
+        val framing = computeCameraSpec(
+            phase = state.phase,
+            isAimingDownSights = engine.isAimingDownSights,
+            isSprinting = user.isSprinting,
+            inVehicle = activeTarget.vehicleId != null,
+            stance = activeTarget.stance,
+            scopeMagnification = user.activeWeapon?.equippedScope?.magnification ?: 1.5f
+        )
+        smoothFov += (framing.desiredFov - smoothFov) * 0.22f
         Matrix.perspectiveM(projectionMatrix, 0, smoothFov, aspect, 0.4f, drawDist + 160f)
 
         val yawRad = Math.toRadians((engine.cameraYawDegrees + freeLookOffsetDeg).toDouble())
@@ -157,47 +156,29 @@ class Battle3DRenderer(
         val pivotX: Float
         val pivotY: Float
         val pivotZ: Float
-        val camDist: Float
-        val shoulderOffset: Float
-        val camHeightOffset: Float
+        val camDist = framing.camDist
+        val shoulderOffset = framing.shoulderOffset
+        val camHeightOffset = framing.camHeightOffset
 
-        when (state.phase) {
-            MatchPhase.PLANE_FLIGHT, MatchPhase.WAITING_IN_LOBBY -> {
-                pivotX = state.planeX * TerrainHeightfield.WORLD_SCALE
-                pivotY = 62f
-                pivotZ = state.planeY * TerrainHeightfield.WORLD_SCALE
-                camDist = 28f
-                shoulderOffset = 0f
-                camHeightOffset = 9f
-            }
-            MatchPhase.SKYDIVING -> {
-                pivotX = activeTarget.x * TerrainHeightfield.WORLD_SCALE
-                pivotY = (targetGroundY + activeTarget.z * TerrainHeightfield.WORLD_SCALE).coerceAtLeast(1.8f)
-                pivotZ = activeTarget.y * TerrainHeightfield.WORLD_SCALE
-                camDist = 11.5f
-                shoulderOffset = 1.0f
-                camHeightOffset = 4.2f
-            }
-            else -> {
-                val crouchDip = when (activeTarget.stance) {
-                    PlayerStance.CROUCH -> -0.45f
-                    PlayerStance.PRONE, PlayerStance.SWIMMING -> -0.92f
-                    else -> 0f
-                }
-                pivotX = activeTarget.x * TerrainHeightfield.WORLD_SCALE
-                pivotY = targetGroundY + activeTarget.z * TerrainHeightfield.WORLD_SCALE + 1.68f + crouchDip
-                pivotZ = activeTarget.y * TerrainHeightfield.WORLD_SCALE
-                camDist = if (activeTarget.vehicleId != null) 9.8f else if (engine.isAimingDownSights) 2.2f else 5.8f
-                shoulderOffset = if (activeTarget.vehicleId != null) 0.4f else if (engine.isAimingDownSights) 0.68f else 1.24f
-                camHeightOffset = if (activeTarget.vehicleId != null) 3.4f else 0.76f
-            }
+        if (framing.usePlaneOrbit) {
+            pivotX = state.planeX * TerrainHeightfield.WORLD_SCALE
+            pivotY = 62f
+            pivotZ = state.planeY * TerrainHeightfield.WORLD_SCALE
+        } else if (state.phase == MatchPhase.SKYDIVING) {
+            pivotX = activeTarget.x * TerrainHeightfield.WORLD_SCALE
+            pivotY = (targetGroundY + activeTarget.z * TerrainHeightfield.WORLD_SCALE).coerceAtLeast(1.8f)
+            pivotZ = activeTarget.y * TerrainHeightfield.WORLD_SCALE
+        } else {
+            pivotX = activeTarget.x * TerrainHeightfield.WORLD_SCALE
+            pivotY = targetGroundY + activeTarget.z * TerrainHeightfield.WORLD_SCALE + framing.pivotHeightOffset
+            pivotZ = activeTarget.y * TerrainHeightfield.WORLD_SCALE
         }
 
         val desiredCamX = pivotX - fx * camDist * cos(pitchRad).toFloat() + rx * shoulderOffset
         val desiredCamY = pivotY + camHeightOffset + camDist * sin(pitchRad).toFloat()
         val desiredCamZ = pivotZ - fz * camDist * cos(pitchRad).toFloat() + rz * shoulderOffset
 
-        val safeCam = if (state.phase == MatchPhase.ACTIVE_COMBAT || state.phase == MatchPhase.SPECTATING) {
+        val safeCam = if (state.phase == MatchPhase.ACTIVE_COMBAT || state.phase == MatchPhase.WAITING_IN_LOBBY || state.phase == MatchPhase.SPECTATING) {
             TerrainHeightfield.resolveCameraCollision(
                 engine.mapConfig, pivotX, pivotY, pivotZ, desiredCamX, desiredCamY, desiredCamZ
             )
@@ -209,9 +190,9 @@ class Battle3DRenderer(
         smoothCamY += (safeCam.y - smoothCamY) * 0.36f
         smoothCamZ += (safeCam.z - smoothCamZ) * 0.36f
 
-        val lookX = pivotX + fx * 24f + rx * shoulderOffset * 0.52f
+        val lookX = pivotX + fx * 24f + rx * shoulderOffset * 0.45f
         val lookY = (pivotY - sin(pitchRad).toFloat() * 14f).coerceAtLeast(-10f)
-        val lookZ = pivotZ + fz * 24f + rz * shoulderOffset * 0.52f
+        val lookZ = pivotZ + fz * 24f + rz * shoulderOffset * 0.45f
 
         Matrix.setLookAtM(viewMatrix, 0, smoothCamX, smoothCamY, smoothCamZ, lookX, lookY, lookZ, 0f, 1f, 0f)
         Matrix.multiplyMM(vpMatrix, 0, projectionMatrix, 0, viewMatrix, 0)
@@ -241,6 +222,8 @@ class Battle3DRenderer(
         GLES20.glUniform3f(shader.uGroundBounce, atmos.groundR, atmos.groundG, atmos.groundB)
         GLES20.glUniform3f(shader.uFogColor, atmos.fogR, atmos.fogG, atmos.fogB)
         GLES20.glUniform1f(shader.uFogMaxDist, atmos.fogDist(drawDist))
+        GLES20.glUniform1f(shader.uTime, frameTimeSec)
+        GLES20.glUniform1f(shader.uSurfaceMode, 0f)
 
         envRenderer.setViewProjection(vpMatrix)
         actorRenderer.setViewProjection(vpMatrix)
@@ -248,7 +231,7 @@ class Battle3DRenderer(
         // Orbiting C-130 Supply Aircraft + High-Altitude Descending Parachutists in Sky
         val orbitAng = frameTimeSec * 0.14f
         renderSupplyPlane(pivotX + cos(orbitAng) * 95f, 48f, pivotZ + sin(orbitAng) * 95f, -Math.toDegrees(orbitAng.toDouble()).toFloat() + 90f)
-        if (state.phase == MatchPhase.PLANE_FLIGHT || state.phase == MatchPhase.WAITING_IN_LOBBY) {
+        if (state.phase == MatchPhase.PLANE_FLIGHT) {
             renderSupplyPlane(state.planeX * TerrainHeightfield.WORLD_SCALE, 62f, state.planeY * TerrainHeightfield.WORLD_SCALE, -45f)
         } else {
             val dropBob = (frameTimeSec * 0.85f) % 12f
@@ -286,7 +269,11 @@ class Battle3DRenderer(
                     shadowQuality = cfg.shadowQuality,
                     radarActive = radarActive,
                     frameTimeSec = frameTimeSec,
-                    parachuteSkinId = if (p.isUser) engine.parachuteSkinId else "para_flame"
+                    parachuteSkinId = if (p.isUser) engine.parachuteSkinId else "para_flame",
+                    frameDtSec = dt,
+                    aimPitchDeg = if (p == activeTarget) engine.cameraPitchDegrees else 0f,
+                    sunDirX = atmos.sunDirX,
+                    sunDirZ = atmos.sunDirZ
                 )
                 if (state.petVisible && p.isUser && p.vehicleId == null && p.z < 5f) {
                     actorRenderer.renderCompanionPet(p, pGround, petPreset, frameTimeSec)
@@ -308,11 +295,12 @@ class Battle3DRenderer(
 
         resolutionScaler.endScaledPassAndPresent(viewportWidth, viewportHeight)
 
-        // Frame pacing for battery-saving 30 FPS mode if selected
-        if (cfg.targetFps <= 32) {
+        // Adaptive frame pacing for selected target FPS (30 / 60 / 90 / 120)
+        if (cfg.targetFps < 115) {
+            val targetMs = (1000L / cfg.targetFps.coerceIn(30, 120)).coerceAtLeast(8L)
             val elapsedMs = (System.nanoTime() - frameStartNs) / 1_000_000L
-            val remain = 32L - elapsedMs
-            if (remain in 2..28) {
+            val remain = targetMs - elapsedMs
+            if (remain in 2..30) {
                 try { Thread.sleep(remain) } catch (_: InterruptedException) {}
             }
         }
@@ -552,8 +540,14 @@ class Battle3DRenderer(
     }
 
     private fun renderAtmosphericParachutist(x: Float, y: Float, z: Float, yawDeg: Float) {
-        drawMesh(meshes.curvedParachuteCanopy, MaterialId.TACTICAL_FABRIC, x, y + 2.2f, z, 0f, yawDeg, 0f, 3.2f, 1.05f, 1.8f, 0.16f, 0.62f, 0.95f, 0.95f, 0.5f, 0.1f, 0.2f)
-        drawMesh(meshes.limbCapsule, MaterialId.TACTICAL_FABRIC, x, y, z, 0f, yawDeg, 0f, 0.32f, 0.95f, 0.32f, 0.15f, 0.16f, 0.20f, 1f, 0.6f, 0.1f, 0f)
+        actorRenderer.renderArticulatedParachutist(
+            x = x,
+            y = y,
+            z = z,
+            yawDeg = yawDeg,
+            swayDeg = sin(frameTimeSec * 1.8f) * 6f,
+            scale = 0.92f
+        )
     }
 
     private fun drawMesh(
@@ -669,6 +663,66 @@ class Battle3DRenderer(
                     0.22f, 0.26f, 0.18f, 1.0f, 0.96f, 0.86f,
                     0.58f, 0.76f, 0.94f, sx, sy, sz, 0.60f, 1.0f
                 )
+            }
+        }
+    }
+
+    internal data class CameraFramingSpec(
+        val desiredFov: Float,
+        val camDist: Float,
+        val shoulderOffset: Float,
+        val camHeightOffset: Float,
+        val pivotHeightOffset: Float,
+        val usePlaneOrbit: Boolean
+    )
+
+    companion object {
+        internal fun computeCameraSpec(
+            phase: MatchPhase,
+            isAimingDownSights: Boolean,
+            isSprinting: Boolean,
+            inVehicle: Boolean,
+            stance: PlayerStance,
+            scopeMagnification: Float
+        ): CameraFramingSpec {
+            val desiredFov = when {
+                isAimingDownSights -> (50f / scopeMagnification.coerceIn(1.25f, 4.5f)).coerceIn(14f, 40f)
+                isSprinting -> 56f
+                phase == MatchPhase.SKYDIVING -> 62f
+                else -> 50f
+            }
+            return when (phase) {
+                MatchPhase.PLANE_FLIGHT -> CameraFramingSpec(
+                    desiredFov = desiredFov,
+                    camDist = 28f,
+                    shoulderOffset = 0f,
+                    camHeightOffset = 9f,
+                    pivotHeightOffset = 0f,
+                    usePlaneOrbit = true
+                )
+                MatchPhase.SKYDIVING -> CameraFramingSpec(
+                    desiredFov = desiredFov,
+                    camDist = 9.5f,
+                    shoulderOffset = 0.75f,
+                    camHeightOffset = 3.1f,
+                    pivotHeightOffset = 0f,
+                    usePlaneOrbit = false
+                )
+                else -> {
+                    val crouchDip = when (stance) {
+                        PlayerStance.CROUCH -> -0.36f
+                        PlayerStance.PRONE, PlayerStance.SWIMMING -> -0.82f
+                        else -> 0f
+                    }
+                    CameraFramingSpec(
+                        desiredFov = desiredFov,
+                        camDist = if (inVehicle) 8.6f else if (isAimingDownSights) 1.95f else 3.90f,
+                        shoulderOffset = if (inVehicle) 0.35f else if (isAimingDownSights) 0.42f else 0.50f,
+                        camHeightOffset = if (inVehicle) 2.8f else 0.38f,
+                        pivotHeightOffset = 1.18f + crouchDip,
+                        usePlaneOrbit = false
+                    )
+                }
             }
         }
     }

@@ -1637,7 +1637,9 @@ fun InMatchSettingsDialog(
     currentGraphics: String,
     onSelectGraphics: (String) -> Unit,
     onExitMatch: () -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    currentFps: Int = 60,
+    onSelectFps: (Int) -> Unit = {}
 ) {
     var camSens by remember { mutableFloatStateOf(engine.cameraSensitivity) }
     var adsSens by remember { mutableFloatStateOf(engine.adsSensitivity) }
@@ -1662,7 +1664,12 @@ fun InMatchSettingsDialog(
 
                 Text("3D GRAPHICS QUALITY", color = TextSecondary, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    listOf("Smooth", "Standard", "High", "Ultra").forEach { q ->
+                    listOf(
+                        "Smooth" to "Low",
+                        "Standard" to "Med",
+                        "High" to "High",
+                        "Ultra" to "Ultra"
+                    ).forEach { (q, label) ->
                         val active = currentGraphics.equals(q, ignoreCase = true) ||
                             (q == "Smooth" && currentGraphics.equals("Low", true)) ||
                             (q == "Standard" && (currentGraphics.equals("Medium", true) || currentGraphics.equals("Balanced", true))) ||
@@ -1675,7 +1682,24 @@ fun InMatchSettingsDialog(
                             contentPadding = PaddingValues(vertical = 4.dp),
                             modifier = Modifier.weight(1f)
                         ) {
-                            Text(q, color = if (active) Color.Black else TextPrimary, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                            Text(label, color = if (active) Color.Black else TextPrimary, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+
+                Text("TARGET FPS", color = TextSecondary, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    listOf(30, 60, 90, 120).forEach { fpsVal ->
+                        val active = currentFps == fpsVal
+                        Button(
+                            onClick = { onSelectFps(fpsVal) },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = if (active) CyberOrange else TacticalSurface
+                            ),
+                            contentPadding = PaddingValues(vertical = 4.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text("$fpsVal", color = if (active) Color.Black else TextPrimary, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                         }
                     }
                 }

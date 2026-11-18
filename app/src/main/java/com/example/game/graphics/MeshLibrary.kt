@@ -20,66 +20,81 @@ class GlMesh(
 )
 
 /**
- * Procedural 3D mesh library providing sculpted organic, anatomical, architectural,
- * military compound, firearm, aircraft, and heightfield geometry.
- * Zero raw cubic/voxel placeholders are exposed or used anywhere in the renderer.
+ * High-resolution procedural 3D mesh library providing smooth-normal anatomical human figures
+ * (detailed cranium, facial jaw/cheekbones, lips, nose, ears, eyeballs, eyebrows, layered hair &
+ * bangs, muscular torso, spherical-capped limbs, articulated palms, thumbs, and fingers, combat
+ * sneakers/boots), realistic vehicles, firearms, botanical foliage, and detailed architecture.
  */
 class MeshLibrary {
-    val skyDome: GlMesh = cachedStatic("skyDome") { buildSphere(stacks = 12, slices = 24, inward = true) }
-    val softShadowDisc: GlMesh = cachedStatic("softShadowDisc") { buildDisc(segments = 20) }
+    val skyDome: GlMesh = cachedStatic("skyDome_v2") { buildSphere(stacks = 14, slices = 28, inward = true) }
+    val softShadowDisc: GlMesh = cachedStatic("softShadowDisc_v2") { buildDisc(segments = 24) }
     val quadBillboard: GlMesh = cachedStatic("quadBillboard") { buildQuad() }
 
-    // Articulated human anatomical & facial meshes
-    val humanHead: GlMesh = cachedStatic("humanHead_v2") { buildSculptedHead() }
-    val humanEyeOrb: GlMesh = cachedStatic("humanEyeOrb") { buildSphere(stacks = 6, slices = 10, inward = false) }
-    val humanNose: GlMesh = cachedStatic("humanNose") { buildSculptedNose() }
-    val humanEar: GlMesh = cachedStatic("humanEar") { buildChamferedPrism(bevel = 0.24f, topScaleX = 0.85f, topScaleZ = 0.78f) }
-    val browRidge: GlMesh = cachedStatic("browRidge") { buildCurvedArc(slices = 6, arcAngle = PI * 0.45, thick = 0.22f) }
-    val facialMouth: GlMesh = cachedStatic("facialMouth") { buildChamferedPrism(bevel = 0.28f, topScaleX = 0.85f, topScaleZ = 0.85f) }
-    val humanHair: GlMesh = cachedStatic("humanHair_v2") { buildHairCrown() }
-    val hairPonytail: GlMesh = cachedStatic("hairPonytail") { buildCurvedPlume() }
-    val jacketCollar: GlMesh = cachedStatic("jacketCollar") { buildCollarWrap() }
-    val helmetShell: GlMesh = cachedStatic("helmetShell") { buildHemisphereShell(stacks = 8, slices = 16) }
-    val curvedVisor: GlMesh = cachedStatic("curvedVisor") { buildCurvedVisor() }
-    val chestTorso: GlMesh = cachedStatic("chestTorso") { buildAnatomicalTorso() }
-    val limbCapsule: GlMesh = cachedStatic("limbCapsule") { buildTaperedCapsule(slices = 12, topScale = 1.0f, botScale = 0.74f) }
-    val taperedBoot: GlMesh = cachedStatic("taperedBoot") { buildTaperedCapsule(slices = 10, topScale = 0.82f, botScale = 1.18f) }
-    val bevelPack: GlMesh = cachedStatic("bevelPack_v2") { buildChamferedPrism(bevel = 0.14f, topScaleX = 0.86f, topScaleZ = 0.84f) }
-    val kneePadShell: GlMesh = cachedStatic("kneePadShell") { buildChamferedPrism(bevel = 0.24f, topScaleX = 0.84f, topScaleZ = 0.84f) }
-    val humanHandGlove: GlMesh = cachedStatic("humanHandGlove") { buildChamferedPrism(bevel = 0.22f, topScaleX = 0.88f, topScaleZ = 0.86f) }
+    // Articulated human anatomical & facial meshes (all smooth vertex normals)
+    val humanHead: GlMesh = cachedStatic("humanHead_v3") { buildSculptedHead() }
+    val humanEyeOrb: GlMesh = cachedStatic("humanEyeOrb_v2") { buildSphere(stacks = 8, slices = 14, inward = false) }
+    val humanNose: GlMesh = cachedStatic("humanNose_v2") { buildSculptedNose() }
+    val humanEar: GlMesh = cachedStatic("humanEar_v2") { buildChamferedPrism(bevel = 0.28f, topScaleX = 0.85f, topScaleZ = 0.72f) }
+    val browRidge: GlMesh = cachedStatic("browRidge_v2") { buildCurvedArc(slices = 8, arcAngle = PI * 0.45, thick = 0.22f) }
+    val facialMouth: GlMesh = cachedStatic("facialMouth_v2") { buildSculptedLips() }
+    val humanHair: GlMesh = cachedStatic("humanHair_v3") { buildHairCrown() }
+    val hairBangs: GlMesh = cachedStatic("hairBangs_v1") { buildHairBangs() }
+    val hairPonytail: GlMesh = cachedStatic("hairPonytail_v2") { buildCurvedPlume() }
+    val jacketCollar: GlMesh = cachedStatic("jacketCollar_v2") { buildCollarWrap() }
+    val helmetShell: GlMesh = cachedStatic("helmetShell_v2") { buildHemisphereShell(stacks = 10, slices = 20) }
+    val curvedVisor: GlMesh = cachedStatic("curvedVisor_v2") { buildCurvedVisor() }
+    val chestTorso: GlMesh = cachedStatic("chestTorso_v4") { buildAnatomicalTorso() }
+    val pelvisHip: GlMesh = cachedStatic("pelvisHip_v1") { buildPelvisHip() }
+    val contouredVest: GlMesh = cachedStatic("contouredVest_v1") { buildContouredVest() }
+    val tacticalBackpack: GlMesh = cachedStatic("tacticalBackpack_v1") { buildTacticalBackpack() }
+    val contouredHalfMask: GlMesh = cachedStatic("contouredHalfMask_v1") { buildContouredHalfMask() }
+    val curvedBand: GlMesh = cachedStatic("curvedBand_v1") { buildCurvedBand() }
+    val crownDiadem: GlMesh = cachedStatic("crownDiadem_v1") { buildCrownDiadem() }
+    val tacticalCapBrim: GlMesh = cachedStatic("tacticalCapBrim_v1") { buildCurvedCapBrim() }
+    val limbCapsule: GlMesh = cachedStatic("limbCapsule_v3") { buildSmoothCapsule(slices = 16, stacks = 6, topScale = 1.0f, botScale = 0.78f) }
+    val taperedBoot: GlMesh = cachedStatic("taperedBoot_v3") { buildSculptedBoot() }
+    val contouredSole: GlMesh = cachedStatic("contouredSole_v1") { buildSculptedSole() }
+    val bevelPack: GlMesh = cachedStatic("bevelPack_v3") { buildChamferedPrism(bevel = 0.16f, topScaleX = 0.86f, topScaleZ = 0.84f) }
+    val kneePadShell: GlMesh = cachedStatic("kneePadShell_v2") { buildSmoothCapsule(slices = 12, stacks = 4, topScale = 0.92f, botScale = 0.88f) }
+    val humanHandGlove: GlMesh = cachedStatic("humanHandGlove_v2") { buildSculptedHandPalm() }
+    val sculptedFingers: GlMesh = cachedStatic("sculptedFingers_v1") { buildSculptedFingers() }
+    val sculptedThumb: GlMesh = cachedStatic("sculptedThumb_v1") { buildSmoothCapsule(slices = 10, stacks = 4, topScale = 0.9f, botScale = 0.72f) }
 
     // Vehicles
-    val wheelCylinder: GlMesh = cachedStatic("wheelCylinder") { buildCylinder(slices = 18, axis = 2, radiusTop = 1f, radiusBot = 1f) }
-    val chassisSlopeBody: GlMesh = cachedStatic("chassisSlopeBody_v2") { buildChamferedPrism(bevel = 0.10f, topScaleX = 0.88f, topScaleZ = 0.90f) }
-    val cabSlopedRoof: GlMesh = cachedStatic("cabSlopedRoof_v2") { buildChamferedPrism(bevel = 0.10f, topScaleX = 0.72f, topScaleZ = 0.82f) }
+    val wheelCylinder: GlMesh = cachedStatic("wheelCylinder_v2") { buildSmoothCylinder(slices = 22, axis = 2, radiusTop = 1f, radiusBot = 1f) }
+    val chassisSlopeBody: GlMesh = cachedStatic("chassisSlopeBody_v3") { buildChamferedPrism(bevel = 0.14f, topScaleX = 0.86f, topScaleZ = 0.88f) }
+    val cabSlopedRoof: GlMesh = cachedStatic("cabSlopedRoof_v3") { buildChamferedPrism(bevel = 0.14f, topScaleX = 0.70f, topScaleZ = 0.80f) }
 
     // Detailed multi-part Weapons
-    val rifleBarrel: GlMesh = cachedStatic("rifleBarrel_v2") { buildCylinder(slices = 10, axis = 0, radiusTop = 0.86f, radiusBot = 1.0f) }
-    val weaponReceiver: GlMesh = cachedStatic("weaponReceiver") { buildChamferedPrism(bevel = 0.18f, topScaleX = 0.94f, topScaleZ = 0.92f) }
-    val ergoGrip: GlMesh = cachedStatic("ergoGrip") { buildChamferedPrism(bevel = 0.16f, topScaleX = 0.86f, topScaleZ = 0.88f) }
+    val rifleBarrel: GlMesh = cachedStatic("rifleBarrel_v3") { buildSmoothCylinder(slices = 14, axis = 0, radiusTop = 0.88f, radiusBot = 1.0f) }
+    val weaponReceiver: GlMesh = cachedStatic("weaponReceiver_v2") { buildChamferedPrism(bevel = 0.20f, topScaleX = 0.94f, topScaleZ = 0.92f) }
+    val ergoGrip: GlMesh = cachedStatic("ergoGrip_v2") { buildChamferedPrism(bevel = 0.22f, topScaleX = 0.86f, topScaleZ = 0.88f) }
     val curvedMagazine: GlMesh = cachedStatic("curvedMagazine") { buildCurvedMagazine() }
     val tacticalStock: GlMesh = cachedStatic("tacticalStock") { buildTaperedStock() }
     val opticBody: GlMesh = cachedStatic("opticBody") { buildChamferedPrism(bevel = 0.20f, topScaleX = 0.88f, topScaleZ = 0.88f) }
     val katanaBlade: GlMesh = cachedStatic("katanaBlade") { buildKatanaBlade() }
     val crescentScythe: GlMesh = cachedStatic("crescentScythe") { buildCrescentScythe() }
     val butterflyWing: GlMesh = cachedStatic("butterflyWing") { buildButterflyWing() }
-    val kitsuneEar: GlMesh = cachedStatic("kitsuneEar") { buildCone(slices = 6, droopAmount = 0.05f) }
+    val kitsuneEar: GlMesh = cachedStatic("kitsuneEar") { buildCone(slices = 8, droopAmount = 0.05f) }
 
     // Environment organic, architectural, military & aircraft meshes
-    val treeTrunk: GlMesh = cachedStatic("treeTrunk") { buildCylinder(slices = 10, axis = 1, radiusTop = 0.58f, radiusBot = 1.28f) }
-    val columnBeam: GlMesh = cachedStatic("columnBeam") { buildCylinder(slices = 8, axis = 1, radiusTop = 0.96f, radiusBot = 1.0f) }
-    val foliageCone: GlMesh = cachedStatic("foliageCone") { buildCone(slices = 12, droopAmount = 0.16f) }
-    val boulderRock: GlMesh = cachedStatic("boulderRock") { buildDisplacedBoulder(stacks = 6, slices = 10) }
-    val bushCluster: GlMesh = cachedStatic("bushCluster") { buildDisplacedBoulder(stacks = 5, slices = 9) }
+    val treeTrunk: GlMesh = cachedStatic("treeTrunk_v2") { buildSmoothCylinder(slices = 14, axis = 1, radiusTop = 0.54f, radiusBot = 1.32f) }
+    val columnBeam: GlMesh = cachedStatic("columnBeam_v2") { buildSmoothCylinder(slices = 12, axis = 1, radiusTop = 0.96f, radiusBot = 1.0f) }
+    val foliageCone: GlMesh = cachedStatic("foliageCone_v2") { buildSmoothCone(slices = 14, droopAmount = 0.18f) }
+    val foliageCrown: GlMesh = cachedStatic("foliageCrown_v1") { buildOrganicCanopy(stacks = 8, slices = 14) }
+    val boulderRock: GlMesh = cachedStatic("boulderRock_v2") { buildDisplacedBoulder(stacks = 9, slices = 14) }
+    val bushCluster: GlMesh = cachedStatic("bushCluster_v2") { buildOrganicCanopy(stacks = 6, slices = 11) }
     val grassTuft: GlMesh = cachedStatic("grassTuft") { buildGrassCrossTuft() }
     val pitchedRoof: GlMesh = cachedStatic("pitchedRoof") { buildGableRoof() }
     val slopedAwningRoof: GlMesh = cachedStatic("slopedAwningRoof") { buildGableRoofWithEaves() }
+    val hippedShingleRoof: GlMesh = cachedStatic("hippedShingleRoof_v1") { buildHippedRoofWithEaves() }
+    val staircaseFlight: GlMesh = cachedStatic("staircaseFlight_v1") { buildStaircaseFlight(steps = 3) }
     val chamferedStructure: GlMesh = cachedStatic("chamferedStructure") { buildChamferedPrism(bevel = 0.06f, topScaleX = 0.98f, topScaleZ = 0.98f) }
     val corrugatedContainer: GlMesh = cachedStatic("corrugatedContainer") { buildCorrugatedContainer(ribs = 6) }
     val bridgeArchTruss: GlMesh = cachedStatic("bridgeArchTruss") { buildArchTruss(segments = 8) }
     val sandbagRow: GlMesh = cachedStatic("sandbagRow") { buildSandbagWall(bags = 4) }
     val militaryTent: GlMesh = cachedStatic("militaryTent") { buildMilitaryTent() }
-    val radomeSphere: GlMesh = cachedStatic("radomeSphere") { buildSphere(stacks = 8, slices = 14, inward = false) }
+    val radomeSphere: GlMesh = cachedStatic("radomeSphere_v2") { buildSphere(stacks = 10, slices = 16, inward = false) }
     val sweptAircraftWing: GlMesh = cachedStatic("sweptAircraftWing") { buildSweptWing() }
     val aircraftTailFin: GlMesh = cachedStatic("aircraftTailFin") { buildTailFin() }
     val curvedParachuteCanopy: GlMesh = cachedStatic("curvedParachuteCanopy") { buildRamAirCanopy(cells = 7) }
@@ -224,115 +239,159 @@ class MeshLibrary {
         return out.toMesh()
     }
 
+    /**
+     * Smooth-normal sculpted human cranium + cheekbones + orbital sockets + contoured jaw/chin.
+     */
     private fun buildSculptedHead(): GlMesh {
-        val stacks = 12
-        val slices = 18
-        val out = FloatArrayList(stacks * slices * 6 * 8)
-        fun headPt(phi: Double, th: Double): Triple<Float, Float, Float> {
+        val stacks = 18
+        val slices = 28
+        val grid = SmoothGridBuilder(stacks + 1, slices + 1)
+        for (i in 0..stacks) {
+            val phi = PI * i / stacks - PI * 0.5
             val cosP = cos(phi).toFloat()
             val sinP = sin(phi).toFloat()
-            val cosT = cos(th).toFloat()
-            val sinT = sin(th).toFloat()
-            var x = cosP * cosT * 0.47f
-            val y = sinP * 0.53f
-            var z = cosP * sinT * 0.43f
-            // Taper lower jaw & project strong chin
-            if (y < 0.02f) {
-                val jawT = (y + 0.53f) / 0.55f
-                val narrow = 0.72f + jawT * 0.28f
-                z *= narrow
-                x *= if (x > 0f) (0.86f + jawT * 0.14f) else (0.76f + jawT * 0.24f)
+            val v = i.toFloat() / stacks
+            for (j in 0..slices) {
+                val th = 2.0 * PI * (j % slices) / slices
+                val cosT = cos(th).toFloat()
+                val sinT = sin(th).toFloat()
+                val u = j.toFloat() / slices
+
+                var x = cosP * cosT * 0.46f
+                val y = sinP * 0.54f
+                var z = cosP * sinT * 0.42f
+
+                // Subtle cranial occiput back extension
+                if (x < -0.05f && y > -0.1f) {
+                    x -= 0.035f * ((y + 0.1f).coerceIn(0f, 0.5f))
+                }
+                // Tapered jawline + defined chin
+                if (y < 0.04f) {
+                    val jawT = ((y + 0.54f) / 0.58f).coerceIn(0f, 1f)
+                    val smoothJaw = jawT * jawT * (3f - 2f * jawT)
+                    z *= (0.64f + smoothJaw * 0.36f)
+                    x *= if (x > 0f) (0.82f + smoothJaw * 0.18f) else (0.72f + smoothJaw * 0.28f)
+                    if (x > 0.14f && abs(sinT) < 0.35f && y in -0.46f..-0.24f) {
+                        x += 0.026f
+                    }
+                }
+                // Cheekbone & orbital eye socket contouring
+                if (x > 0.12f) {
+                    val orbDistY = abs(y - 0.07f) / 0.11f
+                    val orbDistZ = (abs(abs(sinT) - 0.36f)) / 0.20f
+                    val orbMask = (1f - orbDistY * orbDistY).coerceAtLeast(0f) * (1f - orbDistZ * orbDistZ).coerceAtLeast(0f)
+                    x -= orbMask * 0.040f
+
+                    val cheekMask = (1f - abs(y + 0.08f) / 0.13f).coerceAtLeast(0f) * (1f - abs(abs(sinT) - 0.58f) / 0.28f).coerceAtLeast(0f)
+                    x += cheekMask * 0.022f
+
+                    val browMask = (1f - abs(y - 0.20f) / 0.08f).coerceAtLeast(0f) * (1f - abs(sinT) / 0.62f).coerceAtLeast(0f)
+                    x += browMask * 0.028f
+                }
+                grid.setVertex(i, j, x, y, z, u, v)
             }
-            // Cheekbone prominence + subtle orbital eye socket recess
-            if (x > 0.16f) {
-                val inOrbital = y in -0.02f..0.16f && abs(sinT) in 0.18f..0.52f
-                val brow = y in 0.16f..0.28f && abs(sinT) < 0.55f
-                if (inOrbital) x -= 0.032f
-                if (brow) x += 0.028f
-            }
-            return Triple(x, y, z)
         }
-        for (i in 0 until stacks) {
-            val phi0 = PI * i / stacks - PI * 0.5
-            val phi1 = PI * (i + 1) / stacks - PI * 0.5
-            for (j in 0 until slices) {
-                val th0 = 2.0 * PI * j / slices
-                val th1 = 2.0 * PI * (j + 1) / slices
-                val a = headPt(phi0, th0)
-                val b = headPt(phi1, th0)
-                val c = headPt(phi0, th1)
-                val d = headPt(phi1, th1)
-                out.addFacetTri(a, b, c)
-                out.addFacetTri(b, d, c)
-            }
-        }
-        return out.toMesh()
+        return grid.buildMesh(wrapU = true)
     }
 
     private fun buildSculptedNose(): GlMesh {
-        val out = FloatArrayList(18 * 8)
-        val top = Triple(-0.1f, 0.5f, 0f)
-        val bridge = Triple(0.32f, 0.12f, 0f)
-        val tip = Triple(0.55f, -0.35f, 0f)
-        val lBase = Triple(-0.22f, -0.45f, 0.46f)
-        val rBase = Triple(-0.22f, -0.45f, -0.46f)
+        val out = FloatArrayList(24 * 8)
+        val top = Triple(-0.08f, 0.48f, 0f)
+        val bridge = Triple(0.36f, 0.14f, 0f)
+        val tip = Triple(0.56f, -0.30f, 0f)
+        val sub = Triple(0.18f, -0.48f, 0f)
+        val lBase = Triple(-0.20f, -0.42f, 0.44f)
+        val rBase = Triple(-0.20f, -0.42f, -0.44f)
         out.addFacetTri(top, bridge, lBase)
         out.addFacetTri(top, rBase, bridge)
         out.addFacetTri(bridge, tip, lBase)
         out.addFacetTri(bridge, rBase, tip)
-        out.addFacetTri(lBase, tip, rBase)
+        out.addFacetTri(lBase, tip, sub)
+        out.addFacetTri(sub, tip, rBase)
         return out.toMesh()
+    }
+
+    private fun buildSculptedLips(): GlMesh {
+        val slices = 10
+        val stacks = 5
+        val grid = SmoothGridBuilder(stacks + 1, slices + 1)
+        for (i in 0..stacks) {
+            val v = i.toFloat() / stacks
+            val phi = -0.75 + v * 1.5
+            for (j in 0..slices) {
+                val u = j.toFloat() / slices
+                val th = -0.55 + u * 1.10
+                val x = (cos(phi) * cos(th) * 0.36).toFloat()
+                val cupidsBow = if (phi > 0.0) (1f - abs(sin(th * 2.5).toFloat()) * 0.15f) else 1f
+                val y = (sin(phi) * 0.42 * cupidsBow).toFloat()
+                val z = (sin(th) * 0.50).toFloat()
+                grid.setVertex(i, j, x, y, z, u, v)
+            }
+        }
+        return grid.buildMesh(wrapU = false)
     }
 
     private fun buildHairCrown(): GlMesh {
-        val stacks = 7
-        val slices = 16
-        val out = FloatArrayList(stacks * slices * 6 * 8)
-        fun hairPt(phi: Double, th: Double): Triple<Float, Float, Float> {
-            val lock = 1f + 0.13f * sin(th * 7.0 + phi * 3.5).toFloat().coerceAtLeast(0f)
-            val sweepBack = if (cos(th) < 0.1) 1.07f else 1.0f
-            val x = (cos(phi) * cos(th) * 0.50 * lock * sweepBack).toFloat()
-            val y = (sin(phi) * 0.49 * lock + 0.08).toFloat()
-            val z = (cos(phi) * sin(th) * 0.47 * lock).toFloat()
-            return Triple(x, y, z)
-        }
-        for (i in 0 until stacks) {
-            val phi0 = (PI * 0.56) * i / stacks - PI * 0.04
-            val phi1 = (PI * 0.56) * (i + 1) / stacks - PI * 0.04
-            for (j in 0 until slices) {
-                val th0 = 2.0 * PI * j / slices
-                val th1 = 2.0 * PI * (j + 1) / slices
-                val a = hairPt(phi0, th0)
-                val b = hairPt(phi1, th0)
-                val c = hairPt(phi0, th1)
-                val d = hairPt(phi1, th1)
-                out.addFacetTri(a, b, c)
-                out.addFacetTri(b, d, c)
+        val stacks = 10
+        val slices = 22
+        val grid = SmoothGridBuilder(stacks + 1, slices + 1)
+        for (i in 0..stacks) {
+            val v = i.toFloat() / stacks
+            val phi = (PI * 0.58) * v - PI * 0.06
+            for (j in 0..slices) {
+                val u = j.toFloat() / slices
+                val th = 2.0 * PI * (j % slices) / slices
+                val lock = 1f + 0.12f * sin(th * 7.0 + phi * 3.5).toFloat().coerceAtLeast(0f) +
+                    0.05f * cos(th * 13.0 - phi * 2.0).toFloat()
+                val sweepBack = if (cos(th) < 0.12) 1.09f else 1.0f
+                val x = (cos(phi) * cos(th) * 0.51 * lock * sweepBack).toFloat()
+                val y = (sin(phi) * 0.50 * lock + 0.06).toFloat()
+                val z = (cos(phi) * sin(th) * 0.48 * lock).toFloat()
+                grid.setVertex(i, j, x, y, z, u, v)
             }
         }
-        return out.toMesh()
+        return grid.buildMesh(wrapU = true)
+    }
+
+    private fun buildHairBangs(): GlMesh {
+        val stacks = 5
+        val slices = 12
+        val grid = SmoothGridBuilder(stacks + 1, slices + 1)
+        for (i in 0..stacks) {
+            val v = i.toFloat() / stacks
+            for (j in 0..slices) {
+                val u = j.toFloat() / slices
+                val th = -PI * 0.36 + u * PI * 0.72
+                val strand = abs(sin(th * 6.5)).toFloat()
+                val flare = 0.46f + v * 0.06f + strand * 0.04f
+                val droop = -v * (0.45f + strand * 0.25f)
+                val x = (cos(th) * flare).toFloat()
+                val y = 0.34f + droop
+                val z = (sin(th) * flare * 0.92f).toFloat()
+                grid.setVertex(i, j, x, y, z, u, v)
+            }
+        }
+        return grid.buildMesh(wrapU = false)
     }
 
     private fun buildCurvedPlume(): GlMesh {
-        val rings = 5
-        val slices = 8
-        val out = FloatArrayList(rings * slices * 6 * 8)
-        val radii = floatArrayOf(0.24f, 0.34f, 0.30f, 0.20f, 0.06f)
-        val ySteps = floatArrayOf(0.5f, 0.25f, 0.0f, -0.25f, -0.5f)
-        val xCurve = floatArrayOf(0.08f, -0.02f, -0.10f, -0.16f, -0.22f)
-        for (r in 0 until rings - 1) {
-            for (j in 0 until slices) {
-                val a0 = 2.0 * PI * j / slices
-                val a1 = 2.0 * PI * (j + 1) / slices
-                val p00 = Triple(xCurve[r] + (cos(a0) * radii[r]).toFloat(), ySteps[r], (sin(a0) * radii[r]).toFloat())
-                val p10 = Triple(xCurve[r + 1] + (cos(a0) * radii[r + 1]).toFloat(), ySteps[r + 1], (sin(a0) * radii[r + 1]).toFloat())
-                val p01 = Triple(xCurve[r] + (cos(a1) * radii[r]).toFloat(), ySteps[r], (sin(a1) * radii[r]).toFloat())
-                val p11 = Triple(xCurve[r + 1] + (cos(a1) * radii[r + 1]).toFloat(), ySteps[r + 1], (sin(a1) * radii[r + 1]).toFloat())
-                out.addFacetTri(p00, p10, p01)
-                out.addFacetTri(p10, p11, p01)
+        val rings = 8
+        val slices = 12
+        val grid = SmoothGridBuilder(rings, slices + 1)
+        for (r in 0 until rings) {
+            val t = r.toFloat() / (rings - 1)
+            val rad = (0.20f + sin(t * PI).toFloat() * 0.18f) * (1f - t * 0.68f).coerceAtLeast(0.14f)
+            val y = 0.5f - t
+            val xOff = 0.10f - t * t * 0.34f
+            for (j in 0..slices) {
+                val a = 2.0 * PI * (j % slices) / slices
+                val wave = 1f + 0.12f * sin(a * 4.0 + t * 5.0).toFloat()
+                val x = xOff + (cos(a) * rad * wave).toFloat()
+                val z = (sin(a) * rad * wave).toFloat()
+                grid.setVertex(r, j, x, y, z, j.toFloat() / slices, t)
             }
         }
-        return out.toMesh()
+        return grid.buildMesh(wrapU = true)
     }
 
     private fun buildCurvedArc(slices: Int, arcAngle: Double, thick: Float): GlMesh {
@@ -351,7 +410,7 @@ class MeshLibrary {
     }
 
     private fun buildCollarWrap(): GlMesh {
-        val slices = 12
+        val slices = 14
         val out = FloatArrayList(slices * 12 * 8)
         val aStart = -PI * 0.72
         val aEnd = PI * 0.72
@@ -371,78 +430,440 @@ class MeshLibrary {
     }
 
     private fun buildCurvedVisor(): GlMesh {
-        val slices = 8
-        val out = FloatArrayList(slices * 6 * 8)
+        val slices = 12
+        val stacks = 3
+        val grid = SmoothGridBuilder(stacks + 1, slices + 1)
         val aStart = -PI * 0.34
         val aEnd = PI * 0.34
-        for (j in 0 until slices) {
-            val t0 = aStart + (aEnd - aStart) * j / slices
-            val t1 = aStart + (aEnd - aStart) * (j + 1) / slices
-            val a = Triple((cos(t0) * 0.50).toFloat(), -0.14f, (sin(t0) * 0.48).toFloat())
-            val b = Triple((cos(t0) * 0.48).toFloat(), 0.14f, (sin(t0) * 0.46).toFloat())
-            val c = Triple((cos(t1) * 0.50).toFloat(), -0.14f, (sin(t1) * 0.48).toFloat())
-            val d = Triple((cos(t1) * 0.48).toFloat(), 0.14f, (sin(t1) * 0.46).toFloat())
-            out.addFacetTri(a, b, c)
-            out.addFacetTri(b, d, c)
+        for (i in 0..stacks) {
+            val v = i.toFloat() / stacks
+            val y = -0.15f + v * 0.30f
+            val tilt = 0.50f - v * 0.03f
+            for (j in 0..slices) {
+                val u = j.toFloat() / slices
+                val t = aStart + (aEnd - aStart) * u
+                grid.setVertex(i, j, (cos(t) * tilt).toFloat(), y, (sin(t) * (tilt - 0.02f)).toFloat(), u, v)
+            }
         }
-        return out.toMesh()
+        return grid.buildMesh(wrapU = false)
     }
 
+    /**
+     * Smooth-normal anatomical torso with realistic chest expansion, shoulder breadth, and waist taper.
+     */
     private fun buildAnatomicalTorso(): GlMesh {
+        val slices = 18
+        val rings = 7
+        val grid = SmoothGridBuilder(rings, slices + 1)
+        val yLevels = floatArrayOf(-0.50f, -0.32f, -0.12f, 0.12f, 0.32f, 0.44f, 0.50f)
+        val scaleX = floatArrayOf(0.36f, 0.39f, 0.42f, 0.48f, 0.52f, 0.44f, 0.28f)
+        val scaleZ = floatArrayOf(0.35f, 0.36f, 0.40f, 0.49f, 0.55f, 0.48f, 0.30f)
+        for (r in 0 until rings) {
+            val v = r.toFloat() / (rings - 1)
+            for (i in 0..slices) {
+                val u = i.toFloat() / slices
+                val a = 2.0 * PI * (i % slices) / slices
+                val cosA = cos(a).toFloat()
+                val sinA = sin(a).toFloat()
+                // Subtle pectoral/back anatomical sculpt
+                val pecBoost = if (cosA > 0f && r in 3..4) 1.07f else 1f
+                val x = cosA * scaleX[r] * pecBoost
+                val z = sinA * scaleZ[r]
+                grid.setVertex(r, i, x, yLevels[r], z, u, v)
+            }
+        }
+        return grid.buildMesh(wrapU = true)
+    }
+
+    /**
+     * Sculpted human pelvis/hip saddle joining torso waist smoothly to hip joints with zero gaps.
+     */
+    private fun buildPelvisHip(): GlMesh {
+        val slices = 18
+        val rings = 6
+        val grid = SmoothGridBuilder(rings, slices + 1)
+        val yLevels = floatArrayOf(-0.50f, -0.30f, -0.08f, 0.16f, 0.36f, 0.50f)
+        val scaleX = floatArrayOf(0.24f, 0.38f, 0.44f, 0.43f, 0.39f, 0.36f)
+        val scaleZ = floatArrayOf(0.34f, 0.46f, 0.48f, 0.45f, 0.40f, 0.36f)
+        for (r in 0 until rings) {
+            val v = r.toFloat() / (rings - 1)
+            for (i in 0..slices) {
+                val u = i.toFloat() / slices
+                val a = 2.0 * PI * (i % slices) / slices
+                val cosA = cos(a).toFloat()
+                val sinA = sin(a).toFloat()
+                val gluteBack = if (cosA < -0.1f && r in 1..2) 1.09f else 1f
+                grid.setVertex(r, i, cosA * scaleX[r] * gluteBack, yLevels[r], sinA * scaleZ[r], u, v)
+            }
+        }
+        return grid.buildMesh(wrapU = true)
+    }
+
+    /**
+     * Ergonomic contoured ballistic plate carrier shell curving cleanly around chest & back.
+     */
+    private fun buildContouredVest(): GlMesh {
+        val slices = 18
+        val rings = 6
+        val grid = SmoothGridBuilder(rings, slices + 1)
+        val yLevels = floatArrayOf(-0.50f, -0.34f, -0.06f, 0.22f, 0.40f, 0.50f)
+        val scaleX = floatArrayOf(0.41f, 0.48f, 0.50f, 0.49f, 0.43f, 0.32f)
+        val scaleZ = floatArrayOf(0.42f, 0.49f, 0.50f, 0.48f, 0.42f, 0.32f)
+        for (r in 0 until rings) {
+            val v = r.toFloat() / (rings - 1)
+            for (i in 0..slices) {
+                val u = i.toFloat() / slices
+                val a = 2.0 * PI * (i % slices) / slices
+                val cosA = cos(a).toFloat()
+                val sinA = sin(a).toFloat()
+                val plateBevel = if (abs(cosA) > 0.65f && r in 1..4) 1.05f else 0.96f
+                grid.setVertex(r, i, cosA * scaleX[r] * plateBevel, yLevels[r], sinA * scaleZ[r], u, v)
+            }
+        }
+        return grid.buildMesh(wrapU = true)
+    }
+
+    /**
+     * Rounded anatomical tactical rucksack with domed top lid and tapered side gussets.
+     */
+    private fun buildTacticalBackpack(): GlMesh {
+        val slices = 16
+        val rings = 7
+        val grid = SmoothGridBuilder(rings, slices + 1)
+        val yLevels = floatArrayOf(-0.50f, -0.38f, -0.12f, 0.14f, 0.34f, 0.45f, 0.50f)
+        val scaleX = floatArrayOf(0.28f, 0.46f, 0.50f, 0.48f, 0.42f, 0.32f, 0.14f)
+        val scaleZ = floatArrayOf(0.32f, 0.47f, 0.50f, 0.48f, 0.44f, 0.35f, 0.16f)
+        for (r in 0 until rings) {
+            val v = r.toFloat() / (rings - 1)
+            for (i in 0..slices) {
+                val u = i.toFloat() / slices
+                val a = 2.0 * PI * (i % slices) / slices
+                val cosA = cos(a).toFloat()
+                val sinA = sin(a).toFloat()
+                // Flat ergonomic spine contact on +X (front against soldier back), rounded outer pack on -X
+                val x = if (cosA > 0f) cosA * scaleX[r] * 0.68f else cosA * scaleX[r] * 1.12f
+                grid.setVertex(r, i, x, yLevels[r], sinA * scaleZ[r], u, v)
+            }
+        }
+        return grid.buildMesh(wrapU = true)
+    }
+
+    /**
+     * Curved lower-face tactical respirator / bandana half-mask wrapping cleanly over nose bridge & jaw.
+     */
+    private fun buildContouredHalfMask(): GlMesh {
+        val slices = 14
+        val rings = 5
+        val grid = SmoothGridBuilder(rings, slices + 1)
+        val aStart = -PI * 0.56
+        val aEnd = PI * 0.56
+        for (r in 0 until rings) {
+            val v = r.toFloat() / (rings - 1)
+            val y = -0.50f + v
+            val taper = if (r == 0) 0.78f else if (r == rings - 1) 0.92f else 1.0f
+            for (j in 0..slices) {
+                val u = j.toFloat() / slices
+                val t = aStart + (aEnd - aStart) * u
+                val noseBridge = if (r >= 3 && abs(t) < 0.35) 0.08f else 0f
+                val chinDrop = if (r <= 1 && abs(t) < 0.45) -0.05f else 0f
+                val x = (cos(t) * 0.50f * taper).toFloat() + noseBridge
+                val z = (sin(t) * 0.48f * taper).toFloat()
+                grid.setVertex(r, j, x, y + chinDrop, z, u, v)
+            }
+        }
+        return grid.buildMesh(wrapU = false)
+    }
+
+    /**
+     * Smooth contoured wrap band for tactical belt, thigh straps, sneaker cuffs, and face visor trim.
+     */
+    private fun buildCurvedBand(): GlMesh {
+        val slices = 18
+        val rings = 4
+        val grid = SmoothGridBuilder(rings, slices + 1)
+        val yLevels = floatArrayOf(-0.50f, -0.22f, 0.22f, 0.50f)
+        val radScale = floatArrayOf(0.46f, 0.50f, 0.50f, 0.46f)
+        for (r in 0 until rings) {
+            val v = r.toFloat() / (rings - 1)
+            for (j in 0..slices) {
+                val u = j.toFloat() / slices
+                val a = 2.0 * PI * (j % slices) / slices
+                grid.setVertex(r, j, (cos(a) * radScale[r]).toFloat(), yLevels[r], (sin(a) * radScale[r]).toFloat(), u, v)
+            }
+        }
+        return grid.buildMesh(wrapU = true)
+    }
+
+    /**
+     * Royal multi-peak circlet diadem for sovereign character heads.
+     */
+    private fun buildCrownDiadem(): GlMesh {
+        val slices = 20
+        val rings = 3
+        val grid = SmoothGridBuilder(rings, slices + 1)
+        for (r in 0 until rings) {
+            val v = r.toFloat() / (rings - 1)
+            for (j in 0..slices) {
+                val u = j.toFloat() / slices
+                val a = 2.0 * PI * (j % slices) / slices
+                val peak = if (r == 2) 0.28f * abs(cos(a * 2.5)).toFloat() else 0f
+                val flare = 0.46f + v * 0.06f
+                grid.setVertex(r, j, (cos(a) * flare).toFloat(), -0.50f + v * 0.72f + peak, (sin(a) * flare).toFloat(), u, v)
+            }
+        }
+        return grid.buildMesh(wrapU = true)
+    }
+
+    /**
+     * Smooth arched tactical cap brim curving cleanly forward from helmet/cap brow.
+     */
+    private fun buildCurvedCapBrim(): GlMesh {
         val slices = 12
         val rings = 4
-        val out = FloatArrayList(slices * rings * 6 * 8)
-        val yLevels = floatArrayOf(-0.5f, -0.15f, 0.25f, 0.5f)
-        val scaleX = floatArrayOf(0.40f, 0.47f, 0.54f, 0.45f)
-        val scaleZ = floatArrayOf(0.36f, 0.42f, 0.52f, 0.54f)
-        for (r in 0 until rings - 1) {
-            for (i in 0 until slices) {
-                val a0 = 2.0 * PI * i / slices
-                val a1 = 2.0 * PI * (i + 1) / slices
-                val p00 = Triple((cos(a0) * scaleX[r]).toFloat(), yLevels[r], (sin(a0) * scaleZ[r]).toFloat())
-                val p10 = Triple((cos(a0) * scaleX[r + 1]).toFloat(), yLevels[r + 1], (sin(a0) * scaleZ[r + 1]).toFloat())
-                val p01 = Triple((cos(a1) * scaleX[r]).toFloat(), yLevels[r], (sin(a1) * scaleZ[r]).toFloat())
-                val p11 = Triple((cos(a1) * scaleX[r + 1]).toFloat(), yLevels[r + 1], (sin(a1) * scaleZ[r + 1]).toFloat())
-                out.addFacetTri(p00, p10, p01)
-                out.addFacetTri(p10, p11, p01)
+        val grid = SmoothGridBuilder(rings, slices + 1)
+        for (r in 0 until rings) {
+            val v = r.toFloat() / (rings - 1)
+            for (j in 0..slices) {
+                val u = j.toFloat() / slices
+                val a = -PI * 0.36 + u * PI * 0.72
+                val rad = 0.24f + v * 0.28f
+                val droop = -v * 0.22f - (1f - cos(a).toFloat()) * 0.20f
+                grid.setVertex(r, j, (cos(a) * rad).toFloat(), droop, (sin(a) * rad * 0.94f).toFloat(), u, v)
+            }
+        }
+        return grid.buildMesh(wrapU = false)
+    }
+
+    /**
+     * True rounded-hemisphere smooth capsule with natural muscle contour along the shaft.
+     * Eliminates flat-capped sharp cylinder joints at elbows, shoulders, knees, and wrists.
+     */
+    private fun buildSmoothCapsule(slices: Int, stacks: Int, topScale: Float, botScale: Float): GlMesh {
+        val totalRings = stacks * 2 + 4
+        val grid = SmoothGridBuilder(totalRings, slices + 1)
+        var row = 0
+        // Bottom hemisphere cap
+        for (k in 0..stacks) {
+            val t = k.toFloat() / stacks
+            val ang = -PI * 0.5 + t * (PI * 0.5)
+            val y = -0.38f + sin(ang).toFloat() * 0.12f
+            val r = cos(ang).toFloat() * 0.5f * botScale
+            val v = row.toFloat() / (totalRings - 1)
+            writeCapsuleRing(grid, row++, slices, y, r, v)
+        }
+        // Muscular mid-shaft rings
+        val midY = floatArrayOf(-0.14f, 0.14f)
+        val midR = floatArrayOf(
+            0.5f * (botScale * 0.62f + topScale * 0.38f) * 1.04f,
+            0.5f * (botScale * 0.30f + topScale * 0.70f) * 1.06f
+        )
+        for (m in 0..1) {
+            val v = row.toFloat() / (totalRings - 1)
+            writeCapsuleRing(grid, row++, slices, midY[m], midR[m], v)
+        }
+        // Top hemisphere cap
+        for (k in 0..stacks) {
+            val t = k.toFloat() / stacks
+            val ang = t * (PI * 0.5)
+            val y = 0.38f + sin(ang).toFloat() * 0.12f
+            val r = cos(ang).toFloat() * 0.5f * topScale
+            val v = row.toFloat() / (totalRings - 1)
+            writeCapsuleRing(grid, row++, slices, y, r, v)
+        }
+        return grid.buildMesh(wrapU = true)
+    }
+
+    private fun writeCapsuleRing(grid: SmoothGridBuilder, row: Int, slices: Int, y: Float, r: Float, v: Float) {
+        for (j in 0..slices) {
+            val u = j.toFloat() / slices
+            val a = 2.0 * PI * (j % slices) / slices
+            grid.setVertex(row, j, (cos(a) * r).toFloat(), y, (sin(a) * r).toFloat(), u, v)
+        }
+    }
+
+    /**
+     * Sculpted athletic tactical sneaker/boot with curved toe box, mid arch, ankle collar, and heel.
+     */
+    private fun buildSculptedBoot(): GlMesh {
+        val rings = 6
+        val slices = 12
+        val grid = SmoothGridBuilder(rings, slices + 1)
+        val ySteps = floatArrayOf(-0.50f, -0.34f, -0.06f, 0.22f, 0.40f, 0.50f)
+        val xRadii = floatArrayOf(0.52f, 0.56f, 0.50f, 0.36f, 0.30f, 0.26f)
+        val xShifts = floatArrayOf(0.14f, 0.16f, 0.10f, -0.04f, -0.08f, -0.09f)
+        val zRadii = floatArrayOf(0.42f, 0.45f, 0.42f, 0.34f, 0.30f, 0.26f)
+        for (r in 0 until rings) {
+            val v = r.toFloat() / (rings - 1)
+            for (j in 0..slices) {
+                val u = j.toFloat() / slices
+                val a = 2.0 * PI * (j % slices) / slices
+                val x = xShifts[r] + (cos(a) * xRadii[r]).toFloat()
+                val z = (sin(a) * zRadii[r]).toFloat()
+                grid.setVertex(r, j, x, ySteps[r], z, u, v)
+            }
+        }
+        return grid.buildMesh(wrapU = true)
+    }
+
+    /**
+     * Rounded lugged sneaker/boot outsole matching buildSculptedBoot footprint with zero boxy edges.
+     */
+    private fun buildSculptedSole(): GlMesh {
+        val rings = 3
+        val slices = 14
+        val grid = SmoothGridBuilder(rings, slices + 1)
+        val ySteps = floatArrayOf(-0.50f, 0.0f, 0.50f)
+        val radScale = floatArrayOf(0.92f, 1.0f, 0.94f)
+        for (r in 0 until rings) {
+            val v = r.toFloat() / (rings - 1)
+            for (j in 0..slices) {
+                val u = j.toFloat() / slices
+                val a = 2.0 * PI * (j % slices) / slices
+                val x = 0.14f + (cos(a) * 0.55f * radScale[r]).toFloat()
+                val z = (sin(a) * 0.44f * radScale[r]).toFloat()
+                grid.setVertex(r, j, x, ySteps[r], z, u, v)
+            }
+        }
+        return grid.buildMesh(wrapU = true)
+    }
+
+    /**
+     * Sculpted human palm/metacarpal hand geometry with smooth wrist transition.
+     */
+    private fun buildSculptedHandPalm(): GlMesh {
+        val rings = 5
+        val slices = 12
+        val grid = SmoothGridBuilder(rings, slices + 1)
+        val ySteps = floatArrayOf(-0.48f, -0.22f, 0.08f, 0.34f, 0.48f)
+        val xScale = floatArrayOf(0.42f, 0.48f, 0.46f, 0.38f, 0.26f)
+        val zScale = floatArrayOf(0.32f, 0.34f, 0.30f, 0.26f, 0.20f)
+        for (r in 0 until rings) {
+            val v = r.toFloat() / (rings - 1)
+            for (j in 0..slices) {
+                val u = j.toFloat() / slices
+                val a = 2.0 * PI * (j % slices) / slices
+                grid.setVertex(r, j, (cos(a) * xScale[r]).toFloat(), ySteps[r], (sin(a) * zScale[r]).toFloat(), u, v)
+            }
+        }
+        return grid.buildMesh(wrapU = true)
+    }
+
+    /**
+     * Four sculpted slightly curled anatomical fingers (index, middle, ring, pinky) in a single crisp draw call.
+     */
+    private fun buildSculptedFingers(): GlMesh {
+        val out = FloatArrayList(4 * 36 * 8)
+        val fingerXOffsets = floatArrayOf(-0.33f, -0.11f, 0.11f, 0.33f)
+        val fingerLengths = floatArrayOf(0.84f, 0.96f, 0.88f, 0.72f)
+        for (f in 0 until 4) {
+            val fx = fingerXOffsets[f]
+            val len = fingerLengths[f]
+            val rBase = 0.088f
+            val rMid = 0.078f
+            val rTip = 0.058f
+            val segs = 3
+            val slices = 6
+            for (s in 0 until segs) {
+                val t0 = s.toFloat() / segs
+                val t1 = (s + 1).toFloat() / segs
+                val y0 = 0.5f - t0 * len
+                val y1 = 0.5f - t1 * len
+                val z0 = t0 * t0 * 0.24f
+                val z1 = t1 * t1 * 0.24f
+                val r0 = rBase * (1f - t0) + (if (s == 0) rMid else rTip) * t0
+                val r1 = rMid * (1f - t1) + rTip * t1
+                for (k in 0 until slices) {
+                    val a0 = 2.0 * PI * k / slices
+                    val a1 = 2.0 * PI * (k + 1) / slices
+                    val p00 = Triple(fx + (cos(a0) * r0).toFloat(), y0, z0 + (sin(a0) * r0).toFloat())
+                    val p01 = Triple(fx + (cos(a1) * r0).toFloat(), y0, z0 + (sin(a1) * r0).toFloat())
+                    val p10 = Triple(fx + (cos(a0) * r1).toFloat(), y1, z1 + (sin(a0) * r1).toFloat())
+                    val p11 = Triple(fx + (cos(a1) * r1).toFloat(), y1, z1 + (sin(a1) * r1).toFloat())
+                    out.addFacetQuad(p00, p01, p11, p10)
+                }
             }
         }
         return out.toMesh()
     }
 
-    private fun buildTaperedCapsule(slices: Int, topScale: Float, botScale: Float): GlMesh {
-        return buildCylinder(slices, axis = 1, radiusTop = topScale * 0.5f, radiusBot = botScale * 0.5f)
-    }
-
-    private fun buildCylinder(slices: Int, axis: Int, radiusTop: Float, radiusBot: Float): GlMesh {
+    private fun buildSmoothCylinder(slices: Int, axis: Int, radiusTop: Float, radiusBot: Float): GlMesh {
         val out = FloatArrayList(slices * 12 * 8)
         for (i in 0 until slices) {
             val a0 = 2.0 * PI * i / slices
             val a1 = 2.0 * PI * (i + 1) / slices
-            val c0 = cos(a0).toFloat()
-            val s0 = sin(a0).toFloat()
-            val c1 = cos(a1).toFloat()
-            val s1 = sin(a1).toFloat()
+            val c0 = cos(a0).toFloat(); val s0 = sin(a0).toFloat()
+            val c1 = cos(a1).toFloat(); val s1 = sin(a1).toFloat()
 
             fun pt(r: Float, c: Float, s: Float, h: Float): Triple<Float, Float, Float> = when (axis) {
                 0 -> Triple(h, r * c, r * s)
                 2 -> Triple(r * c, r * s, h)
                 else -> Triple(r * c, h, r * s)
             }
+            fun norm(c: Float, s: Float): Triple<Float, Float, Float> = when (axis) {
+                0 -> Triple(0f, c, s)
+                2 -> Triple(c, s, 0f)
+                else -> Triple(c, 0f, s)
+            }
 
             val b0 = pt(radiusBot * 0.5f, c0, s0, -0.5f)
             val b1 = pt(radiusBot * 0.5f, c1, s1, -0.5f)
             val t0 = pt(radiusTop * 0.5f, c0, s0, 0.5f)
             val t1 = pt(radiusTop * 0.5f, c1, s1, 0.5f)
+            val n0 = norm(c0, s0)
+            val n1 = norm(c1, s1)
+            val u0 = i.toFloat() / slices
+            val u1 = (i + 1).toFloat() / slices
+
+            out.addVertex(b0.first, b0.second, b0.third, n0.first, n0.second, n0.third, u0, 0f)
+            out.addVertex(t0.first, t0.second, t0.third, n0.first, n0.second, n0.third, u0, 1f)
+            out.addVertex(b1.first, b1.second, b1.third, n1.first, n1.second, n1.third, u1, 0f)
+
+            out.addVertex(t0.first, t0.second, t0.third, n0.first, n0.second, n0.third, u0, 1f)
+            out.addVertex(t1.first, t1.second, t1.third, n1.first, n1.second, n1.third, u1, 1f)
+            out.addVertex(b1.first, b1.second, b1.third, n1.first, n1.second, n1.third, u1, 0f)
+
             val centerTop = pt(0f, 0f, 0f, 0.5f)
             val centerBot = pt(0f, 0f, 0f, -0.5f)
-
-            out.addFacetTri(b0, t0, b1)
-            out.addFacetTri(t0, t1, b1)
             out.addFacetTri(centerTop, t1, t0)
             out.addFacetTri(centerBot, b0, b1)
         }
         return out.toMesh()
+    }
+
+    private fun buildSmoothCone(slices: Int, droopAmount: Float): GlMesh {
+        val rings = 5
+        val grid = SmoothGridBuilder(rings, slices + 1)
+        for (r in 0 until rings) {
+            val t = r.toFloat() / (rings - 1)
+            val y = -0.5f + t
+            val radScale = (1f - t).coerceAtLeast(0.02f)
+            for (i in 0..slices) {
+                val u = i.toFloat() / slices
+                val a = 2.0 * PI * (i % slices) / slices
+                val w = 0.5f * radScale * (1f + droopAmount * sin(a * 4.0 + t * 2.0).toFloat())
+                val droopY = y - (1f - t) * droopAmount * 0.25f * abs(sin(a * 4.0)).toFloat()
+                grid.setVertex(r, i, (cos(a) * w).toFloat(), droopY, (sin(a) * w).toFloat(), u, t)
+            }
+        }
+        return grid.buildMesh(wrapU = true)
+    }
+
+    private fun buildOrganicCanopy(stacks: Int, slices: Int): GlMesh {
+        val grid = SmoothGridBuilder(stacks + 1, slices + 1)
+        for (i in 0..stacks) {
+            val v = i.toFloat() / stacks
+            val phi = PI * v - PI * 0.5
+            for (j in 0..slices) {
+                val u = j.toFloat() / slices
+                val th = 2.0 * PI * (j % slices) / slices
+                val lobe = 0.44f + 0.09f * sin(phi * 3.5 + th * 3.0).toFloat() + 0.05f * cos(th * 5.0).toFloat()
+                val x = (cos(phi) * cos(th) * lobe).toFloat()
+                val y = (sin(phi) * lobe * 0.78f).toFloat()
+                val z = (cos(phi) * sin(th) * lobe).toFloat()
+                grid.setVertex(i, j, x, y, z, u, v)
+            }
+        }
+        return grid.buildMesh(wrapU = true)
     }
 
     private fun buildCone(slices: Int, droopAmount: Float): GlMesh {
@@ -463,30 +884,24 @@ class MeshLibrary {
     }
 
     private fun buildDisplacedBoulder(stacks: Int, slices: Int): GlMesh {
-        val out = FloatArrayList(stacks * slices * 6 * 8)
-        fun rockPt(phi: Double, th: Double): Triple<Float, Float, Float> {
-            val disp = 0.42f + 0.14f * sin(phi * 3.2 + th * 2.1).toFloat() * cos(th * 3.7).toFloat()
-            return Triple(
-                (cos(phi) * cos(th) * disp).toFloat(),
-                (sin(phi) * disp * 0.82f).toFloat(),
-                (cos(phi) * sin(th) * disp).toFloat()
-            )
-        }
-        for (i in 0 until stacks) {
-            val phi0 = PI * i / stacks - PI * 0.5
-            val phi1 = PI * (i + 1) / stacks - PI * 0.5
-            for (j in 0 until slices) {
-                val th0 = 2.0 * PI * j / slices
-                val th1 = 2.0 * PI * (j + 1) / slices
-                val a = rockPt(phi0, th0)
-                val b = rockPt(phi1, th0)
-                val c = rockPt(phi0, th1)
-                val d = rockPt(phi1, th1)
-                out.addFacetTri(a, b, c)
-                out.addFacetTri(b, d, c)
+        val grid = SmoothGridBuilder(stacks + 1, slices + 1)
+        for (i in 0..stacks) {
+            val v = i.toFloat() / stacks
+            val phi = PI * v - PI * 0.5
+            for (j in 0..slices) {
+                val u = j.toFloat() / slices
+                val th = 2.0 * PI * (j % slices) / slices
+                val disp = 0.42f + 0.12f * sin(phi * 3.2 + th * 2.1).toFloat() * cos(th * 3.7).toFloat()
+                grid.setVertex(
+                    i, j,
+                    (cos(phi) * cos(th) * disp).toFloat(),
+                    (sin(phi) * disp * 0.80f).toFloat(),
+                    (cos(phi) * sin(th) * disp).toFloat(),
+                    u, v
+                )
             }
         }
-        return out.toMesh()
+        return grid.buildMesh(wrapU = true)
     }
 
     private fun buildGrassCrossTuft(): GlMesh {
@@ -508,10 +923,6 @@ class MeshLibrary {
         return out.toMesh()
     }
 
-    /**
-     * Beveled chamfered prism: replaces all raw cubes with sculpted angled edge bevels
-     * so specular highlights catch every corner naturally without 90-degree blocky edges.
-     */
     private fun buildChamferedPrism(bevel: Float, topScaleX: Float, topScaleZ: Float): GlMesh {
         val out = FloatArrayList(96 * 8)
         val b = bevel.coerceIn(0.04f, 0.30f)
@@ -541,7 +952,6 @@ class MeshLibrary {
                 out.addFacetQuad(ringPts[l][k], ringPts[l][nk], ringPts[l + 1][nk], ringPts[l + 1][k])
             }
         }
-        // Top & bottom caps
         val topCenter = Triple(0f, 0.5f, 0f)
         val botCenter = Triple(0f, -0.5f, 0f)
         for (k in 0 until 8) {
@@ -563,23 +973,19 @@ class MeshLibrary {
             val x1 = -halfX + (i + 1).toFloat() / slices
             val r0 = if (i % 2 == 0) 0f else 0.032f
             val r1 = if ((i + 1) % 2 == 0) 0f else 0.032f
-            // Front wall ribs (+Z)
             out.addFacetQuad(
                 Triple(x0, -halfY, halfZ + r0), Triple(x1, -halfY, halfZ + r1),
                 Triple(x1, halfY, halfZ + r1), Triple(x0, halfY, halfZ + r0)
             )
-            // Back wall ribs (-Z)
             out.addFacetQuad(
                 Triple(x1, -halfY, -halfZ - r1), Triple(x0, -halfY, -halfZ - r0),
                 Triple(x0, halfY, -halfZ - r0), Triple(x1, halfY, -halfZ - r1)
             )
-            // Roof ribs (+Y)
             out.addFacetQuad(
                 Triple(x0, halfY + r0, halfZ), Triple(x1, halfY + r1, halfZ),
                 Triple(x1, halfY + r1, -halfZ), Triple(x0, halfY + r0, -halfZ)
             )
         }
-        // End doors (+X, -X) & floor
         val e00 = Triple(-halfX, -halfY, halfZ); val e10 = Triple(halfX, -halfY, halfZ)
         val e11 = Triple(halfX, halfY, halfZ); val e01 = Triple(-halfX, halfY, halfZ)
         val f00 = Triple(-halfX, -halfY, -halfZ); val f10 = Triple(halfX, -halfY, -halfZ)
@@ -649,13 +1055,51 @@ class MeshLibrary {
         val p0 = Triple(-ov, -0.5f, ov); val p1 = Triple(ov, -0.5f, ov)
         val p2 = Triple(ov, -0.5f, -ov); val p3 = Triple(-ov, -0.5f, -ov)
         val rF = Triple(0f, 0.52f, ov); val rB = Triple(0f, 0.52f, -ov)
-        // Upper roof slopes
         out.addFacetQuad(p1, p2, rB, rF)
         out.addFacetQuad(p3, p0, rF, rB)
         out.addFacetTri(p0, p1, rF)
         out.addFacetTri(p2, p3, rB)
-        // Soffit underside
         out.addFacetQuad(p3, p2, p1, p0)
+        return out.toMesh()
+    }
+
+    private fun buildHippedRoofWithEaves(): GlMesh {
+        val out = FloatArrayList(30 * 8)
+        val ov = 0.57f
+        val p0 = Triple(-ov, -0.5f, ov); val p1 = Triple(ov, -0.5f, ov)
+        val p2 = Triple(ov, -0.5f, -ov); val p3 = Triple(-ov, -0.5f, -ov)
+        val rF = Triple(0f, 0.52f, 0.24f); val rB = Triple(0f, 0.52f, -0.24f)
+        out.addFacetQuad(p1, p2, rB, rF)
+        out.addFacetQuad(p3, p0, rF, rB)
+        out.addFacetTri(p0, p1, rF)
+        out.addFacetTri(p2, p3, rB)
+        out.addFacetQuad(p3, p2, p1, p0)
+        return out.toMesh()
+    }
+
+    private fun buildStaircaseFlight(steps: Int): GlMesh {
+        val out = FloatArrayList(steps * 18 * 8)
+        for (i in 0 until steps) {
+            val t0 = i.toFloat() / steps
+            val t1 = (i + 1).toFloat() / steps
+            val yTop = -0.5f + t1
+            val zFront = 0.5f - t0
+            val zBack = 0.5f - t1
+            // Step riser
+            out.addFacetQuad(
+                Triple(-0.5f, -0.5f + t0, zFront),
+                Triple(0.5f, -0.5f + t0, zFront),
+                Triple(0.5f, yTop, zFront),
+                Triple(-0.5f, yTop, zFront)
+            )
+            // Step tread
+            out.addFacetQuad(
+                Triple(-0.5f, yTop, zFront),
+                Triple(0.5f, yTop, zFront),
+                Triple(0.5f, yTop, zBack),
+                Triple(-0.5f, yTop, zBack)
+            )
+        }
         return out.toMesh()
     }
 
@@ -731,7 +1175,6 @@ class MeshLibrary {
         val leadR = Triple(-0.46f, 0.02f, 0f)
         val leadL = Triple(-0.08f, 0.04f, 0.5f)
         val leadRight = Triple(-0.08f, 0.04f, -0.5f)
-        // Left & right wing upper/lower foils
         out.addFacetQuad(leadR, leadL, lTipL, rL)
         out.addFacetQuad(leadRight, leadR, rL, rTipL)
         out.addFacetQuad(leadL, leadR, rT, lTipT)
@@ -789,13 +1232,13 @@ class MeshLibrary {
     }
 
     private fun buildWavedCloth(): GlMesh {
-        val segs = 4
+        val segs = 6
         val out = FloatArrayList(segs * 12 * 8)
         for (i in 0 until segs) {
             val x0 = -0.5f + i.toFloat() / segs
             val x1 = -0.5f + (i + 1).toFloat() / segs
-            val z0 = sin(i * 1.4f) * 0.16f
-            val z1 = sin((i + 1) * 1.4f) * 0.16f
+            val z0 = sin(i * 1.1f) * 0.14f
+            val z1 = sin((i + 1) * 1.1f) * 0.14f
             val p0 = Triple(x0, -0.5f, z0); val p1 = Triple(x1, -0.5f, z1)
             val p2 = Triple(x1, 0.5f, z1); val p3 = Triple(x0, 0.5f, z0)
             out.addFacetQuad(p0, p1, p2, p3)
@@ -803,9 +1246,6 @@ class MeshLibrary {
         }
         return out.toMesh()
     }
-
-    private fun buildTaperedPrism(topScaleX: Float, topScaleZ: Float): GlMesh =
-        buildChamferedPrism(bevel = 0.08f, topScaleX = topScaleX, topScaleZ = topScaleZ)
 
     private fun buildKatanaBlade(): GlMesh {
         val segs = 6
@@ -881,6 +1321,84 @@ class MeshLibrary {
                 position(0)
             }
         return GlMesh(fb, data.size / 8)
+    }
+
+    /**
+     * Indexed grid builder that accumulates area-weighted vertex normals across shared triangles
+     * so organic anatomy, hair, clothing, foliage, and terrain curves shade smoothly with zero facets.
+     */
+    private class SmoothGridBuilder(private val rows: Int, private val cols: Int) {
+        private val count = rows * cols
+        private val px = FloatArray(count)
+        private val py = FloatArray(count)
+        private val pz = FloatArray(count)
+        private val pu = FloatArray(count)
+        private val pv = FloatArray(count)
+        private val nx = FloatArray(count)
+        private val ny = FloatArray(count)
+        private val nz = FloatArray(count)
+
+        fun setVertex(r: Int, c: Int, x: Float, y: Float, z: Float, u: Float, v: Float) {
+            val idx = r * cols + c
+            px[idx] = x; py[idx] = y; pz[idx] = z
+            pu[idx] = u; pv[idx] = v
+        }
+
+        private fun accumTri(i0: Int, i1: Int, i2: Int) {
+            val ux = px[i1] - px[i0]; val uy = py[i1] - py[i0]; val uz = pz[i1] - pz[i0]
+            val vx = px[i2] - px[i0]; val vy = py[i2] - py[i0]; val vz = pz[i2] - pz[i0]
+            val fnx = uy * vz - uz * vy
+            val fny = uz * vx - ux * vz
+            val fnz = ux * vy - uy * vx
+            nx[i0] += fnx; ny[i0] += fny; nz[i0] += fnz
+            nx[i1] += fnx; ny[i1] += fny; nz[i1] += fnz
+            nx[i2] += fnx; ny[i2] += fny; nz[i2] += fnz
+        }
+
+        fun buildMesh(wrapU: Boolean): GlMesh {
+            for (r in 0 until rows - 1) {
+                for (c in 0 until cols - 1) {
+                    val i00 = r * cols + c
+                    val i10 = (r + 1) * cols + c
+                    val i01 = r * cols + (c + 1)
+                    val i11 = (r + 1) * cols + (c + 1)
+                    accumTri(i00, i10, i01)
+                    accumTri(i10, i11, i01)
+                }
+            }
+            if (wrapU) {
+                for (r in 0 until rows) {
+                    val iStart = r * cols
+                    val iEnd = r * cols + (cols - 1)
+                    val sx = nx[iStart] + nx[iEnd]
+                    val sy = ny[iStart] + ny[iEnd]
+                    val sz = nz[iStart] + nz[iEnd]
+                    nx[iStart] = sx; ny[iStart] = sy; nz[iStart] = sz
+                    nx[iEnd] = sx; ny[iEnd] = sy; nz[iEnd] = sz
+                }
+            }
+            for (k in 0 until count) {
+                val len = sqrt(nx[k] * nx[k] + ny[k] * ny[k] + nz[k] * nz[k]).coerceAtLeast(0.0001f)
+                nx[k] /= len; ny[k] /= len; nz[k] /= len
+            }
+
+            val out = FloatArrayList((rows - 1) * (cols - 1) * 6 * 8)
+            for (r in 0 until rows - 1) {
+                for (c in 0 until cols - 1) {
+                    val i00 = r * cols + c
+                    val i10 = (r + 1) * cols + c
+                    val i01 = r * cols + (c + 1)
+                    val i11 = (r + 1) * cols + (c + 1)
+                    emit(out, i00); emit(out, i10); emit(out, i01)
+                    emit(out, i10); emit(out, i11); emit(out, i01)
+                }
+            }
+            return out.toMesh()
+        }
+
+        private fun emit(out: FloatArrayList, i: Int) {
+            out.addVertex(px[i], py[i], pz[i], nx[i], ny[i], nz[i], pu[i], pv[i])
+        }
     }
 
     private class FloatArrayList(initialCap: Int) {
